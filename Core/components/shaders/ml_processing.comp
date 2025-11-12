@@ -1,0 +1,186 @@
+#version 450
+
+layout(local_size_x = 256) in;
+
+// Input data
+layout(binding = 0) buffer InputBuffer {
+    float data[];
+} input_data;
+
+// Output data
+layout(binding = 1) buffer OutputBuffer {
+    float data[];
+} output_data;
+
+// Weights data
+layout(binding = 2) buffer WeightsBuffer {
+    float weights[];
+} weights_data;
+
+// Uniform parameters
+layout(binding = 3) uniform MLParams {
+    uint input_size;
+    uint hidden_size;
+    uint output_size;
+    uint layer_type;
+    float learning_rate;
+} params;
+
+// Shared memory for local computations
+shared float shared_data[256];
+
+void main() {
+    uint global_id = gl_GlobalInvocationID.x;
+    uint local_id = gl_LocalInvocationID.x;
+    
+    // MLP Forward Pass
+    if (params.layer_type == 0) {
+        // Input to hidden layer
+        if (global_id < params.hidden_size) {
+            float sum = 0.0;
+            
+            // Compute weighted sum
+            for (uint i = 0; i < params.input_size; i++) {
+                uint weight_index = global_id * params.input_size + i;
+                sum += input_data.data[i] * weights_data.weights[weight_index];
+            }
+            
+            // Apply activation function (ReLU)
+            float activation = max(sum, 0.0);
+            output_data.data[global_id] = activation;
+        }
+        
+    } else if (params.layer_type == 1) {
+        // Hidden to output layer
+        if (global_id < params.output_size) {
+            float sum = 0.0;
+            
+            // Compute weighted sum
+            for (uint i = 0; i < params.hidden_size; i++) {
+                uint weight_index = global_id * params.hidden_size + i;
+                sum += input_data.data[i] * weights_data.weights[weight_index];
+            }
+            
+            // Apply activation function (sigmoid)
+            float activation = 1.0 / (1.0 + exp(-sum));
+            output_data.data[global_id] = activation;
+        }
+        
+    } else if (params.layer_type == 2) {
+        // Convolutional layer
+        uint kernel_size = 3;
+        uint stride = 1;
+        uint padding = 1;
+        
+        if (global_id < params.output_size) {
+            float sum = 0.0;
+            
+            // Simple 1D convolution
+            for (uint k = 0; k < kernel_size; k++) {
+                uint input_index = global_id * stride + k - padding;
+                if (input_index < params.input_size) {
+                    uint weight_index = k;
+                    sum += input_data.data[input_index] * weights_data.weights[weight_index];
+                }
+            }
+            
+            // Apply ReLU activation
+            output_data.data[global_id] = max(sum, 0.0);
+        }
+        
+    } else if (params.layer_type == 3) {
+        // Pooling layer (max pooling)
+        uint pool_size = 2;
+        
+        if (global_id < params.output_size) {
+            float max_val = -999999.0;
+            
+            for (uint p = 0; p < pool_size; p++) {
+                uint input_index = global_id * pool_size + p;
+                if (input_index < params.input_size) {
+                    max_val = max(max_val, input_data.data[input_index]);
+                }
+            }
+            
+            output_data.data[global_id] = max_val;
+        }
+        
+    } else if (params.layer_type == 4) {
+        // Attention mechanism
+        uint seq_length = params.input_size / 3; // Assuming input is [query, key, value]
+        
+        if (global_id < seq_length) {
+            float attention_score = 0.0;
+            
+            // Compute attention scores
+            for (uint j = 0; j < seq_length; j++) {
+                uint query_index = global_id;
+                uint key_index = seq_length + j;
+                
+                float query = input_data.data[query_index];
+                float key = input_data.data[key_index];
+                
+                attention_score += query * key;
+            }
+            
+            // Apply softmax (simplified)
+            attention_score = exp(attention_score);
+            
+            // Compute weighted sum
+            float weighted_sum = 0.0;
+            for (uint j = 0; j < seq_length; j++) {
+                uint value_index = 2 * seq_length + j;
+                weighted_sum += input_data.data[value_index] * attention_score;
+            }
+            
+            output_data.data[global_id] = weighted_sum;
+        }
+        
+    } else if (params.layer_type == 5) {
+        // Backpropagation (gradient computation)
+        if (global_id < params.input_size) {
+            float gradient = 0.0;
+            
+            // Compute gradients for weights
+            for (uint j = 0; j < params.output_size; j++) {
+                uint weight_index = j * params.input_size + global_id;
+                gradient += output_data.data[j] * weights_data.weights[weight_index];
+            }
+            
+            // Store gradient in output buffer
+            output_data.data[global_id] = gradient;
+        }
+    }
+    
+    // Synchronize threads for shared memory operations
+    barrier();
+    
+    // Optional: Batch normalization
+    if (params.layer_type == 6) {
+        if (global_id < params.output_size) {
+            // Compute mean and variance in shared memory
+            shared_data[local_id] = output_data.data[global_id];
+            barrier();
+            
+            // Compute mean
+            float sum = 0.0;
+            for (uint i = 0; i < 256 && i < params.output_size; i++) {
+                sum += shared_data[i];
+            }
+            float mean = sum / min(256u, params.output_size);
+            
+            // Compute variance
+            sum = 0.0;
+            for (uint i = 0; i < 256 && i < params.output_size; i++) {
+                float diff = shared_data[i] - mean;
+                sum += diff * diff;
+            }
+            float variance = sum / min(256u, params.output_size);
+            
+            // Normalize
+            if (variance > 0.0) {
+                output_data.data[global_id] = (output_data.data[global_id] - mean) / sqrt(variance + 1e-8);
+            }
+        }
+    }
+} 

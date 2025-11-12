@@ -1,0 +1,123 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+// Input screen data
+layout(binding = 0) buffer ScreenBuffer {
+    vec4 pixels[];
+} screen_data;
+
+// Output processed data
+layout(binding = 1) buffer ProcessedBuffer {
+    vec4 processed[];
+} output_data;
+
+// Uniform parameters
+layout(binding = 2) uniform ProcessingParams {
+    uint screen_width;
+    uint screen_height;
+    float threshold;
+    uint processing_mode;
+} params;
+
+// Shared memory for local processing
+shared vec4 local_pixels[256];
+
+void main() {
+    uvec2 pixel_coord = gl_GlobalInvocationID.xy;
+    
+    // Check bounds
+    if (pixel_coord.x >= params.screen_width || pixel_coord.y >= params.screen_height) {
+        return;
+    }
+    
+    uint pixel_index = pixel_coord.y * params.screen_width + pixel_coord.x;
+    uint local_index = gl_LocalInvocationID.y * 16 + gl_LocalInvocationID.x;
+    
+    // Load pixel data
+    vec4 pixel = screen_data.pixels[pixel_index];
+    local_pixels[local_index] = pixel;
+    
+    // Synchronize threads
+    barrier();
+    
+    // Process based on mode
+    vec4 processed_pixel = pixel;
+    
+    if (params.processing_mode == 0) {
+        // Edge detection
+        vec4 edges = vec4(0.0);
+        
+        // Sobel edge detection
+        if (pixel_coord.x > 0 && pixel_coord.x < params.screen_width - 1 &&
+            pixel_coord.y > 0 && pixel_coord.y < params.screen_height - 1) {
+            
+            // Get neighboring pixels
+            vec4 left = screen_data.pixels[pixel_index - 1];
+            vec4 right = screen_data.pixels[pixel_index + 1];
+            vec4 top = screen_data.pixels[pixel_index - params.screen_width];
+            vec4 bottom = screen_data.pixels[pixel_index + params.screen_width];
+            
+            // Sobel operators
+            vec4 sobel_x = right - left;
+            vec4 sobel_y = bottom - top;
+            
+            // Calculate edge magnitude
+            edges = sqrt(sobel_x * sobel_x + sobel_y * sobel_y);
+        }
+        
+        processed_pixel = edges;
+        
+    } else if (params.processing_mode == 1) {
+        // Color clustering (K-means approximation)
+        vec3 color = pixel.rgb;
+        
+        // Simple color quantization
+        vec3 quantized = floor(color * 8.0) / 8.0;
+        processed_pixel = vec4(quantized, pixel.a);
+        
+    } else if (params.processing_mode == 2) {
+        // Change detection
+        // This would compare with previous frame (stored in uniform buffer)
+        float brightness = dot(pixel.rgb, vec3(0.299, 0.587, 0.114));
+        
+        if (brightness > params.threshold) {
+            processed_pixel = vec4(1.0, 0.0, 0.0, 1.0); // Red for changes
+        } else {
+            processed_pixel = vec4(0.0, 0.0, 0.0, 1.0); // Black for no change
+        }
+        
+    } else if (params.processing_mode == 3) {
+        // UI element detection
+        vec3 color = pixel.rgb;
+        float brightness = dot(color, vec3(0.299, 0.587, 0.114));
+        
+        // Detect potential UI elements based on color patterns
+        bool is_ui_element = false;
+        
+        // Check for common UI colors (buttons, text, etc.)
+        if (brightness > 0.8 || brightness < 0.2) {
+            is_ui_element = true;
+        }
+        
+        // Check for high contrast edges
+        if (pixel_coord.x > 0 && pixel_coord.x < params.screen_width - 1) {
+            vec4 left = screen_data.pixels[pixel_index - 1];
+            vec4 right = screen_data.pixels[pixel_index + 1];
+            float contrast = length(pixel.rgb - left.rgb) + length(pixel.rgb - right.rgb);
+            
+            if (contrast > 0.5) {
+                is_ui_element = true;
+            }
+        }
+        
+        if (is_ui_element) {
+            processed_pixel = vec4(0.0, 1.0, 0.0, 1.0); // Green for UI elements
+        } else {
+            processed_pixel = vec4(0.0, 0.0, 0.0, 1.0); // Black for background
+        }
+    }
+    
+    // Write processed pixel
+    output_data.processed[pixel_index] = processed_pixel;
+} 

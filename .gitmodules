@@ -1,0 +1,3 @@
+[submodule "Core/components/extern/fastgltf"]
+    path = Core/components/extern/fastgltf
+    url = https://github.com/spnda/fastgltf.git

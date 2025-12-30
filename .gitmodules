@@ -1,0 +1,6 @@
+[submodule "Core/external/tinyobj"]
+	path = Core/external/tinyobj
+	url = git@github.com:tinyobjloader/tinyobjloader.git
+[submodule "Core/components/extern/fastgltf"]
+	path = Core/components/extern/fastgltf
+	url = git@github.com:BigStickStudio/fastgltf.git

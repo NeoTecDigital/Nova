@@ -359,15 +359,18 @@ inline VkCommandBufferAllocateInfo NovaCore::createCommandBuffersInfo(VkCommandP
             };
     }
 
-void NovaCore::createCommandBuffers() 
+void NovaCore::createCommandBuffers()
     {
         report(LOGGER::VLINE, "\t .. Creating Command Buffers ..");
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            char name[32];
-            sprintf(name, "Graphics %d", i);
-            VkCommandBufferAllocateInfo _gfx_cmd_buf_alloc_info = createCommandBuffersInfo(frames[i].cmd.pool, name);
-            VK_TRY(vkAllocateCommandBuffers(logical_device, &_gfx_cmd_buf_alloc_info, &frames[i].cmd.buffer));
+        // Only create graphics frame command buffers in graphics mode
+        if (!compute_only) {
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                char name[32];
+                sprintf(name, "Graphics %d", i);
+                VkCommandBufferAllocateInfo _gfx_cmd_buf_alloc_info = createCommandBuffersInfo(frames[i].cmd.pool, name);
+                VK_TRY(vkAllocateCommandBuffers(logical_device, &_gfx_cmd_buf_alloc_info, &frames[i].cmd.buffer));
+            }
         }
 
         {
@@ -495,9 +498,60 @@ static VkFenceCreateInfo createFenceInfo()
         };
     }
 
+void NovaCore::createImmediateContext()
+{
+    report(LOGGER::VLINE, "\t .. Creating Immediate Context ..");
+
+    // Create command pool for immediate submissions
+    VkCommandPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = queues.indices.transfer_family.value()
+    };
+
+    VkCommandPool immediate_pool;
+    VK_TRY(vkCreateCommandPool(logical_device, &pool_info, nullptr, &immediate_pool));
+
+    // Allocate command buffer
+    VkCommandBufferAllocateInfo cmd_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = immediate_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1
+    };
+
+    VK_TRY(vkAllocateCommandBuffers(logical_device, &cmd_info, &queues.immediate.cmd));
+
+    // Create fence
+    VkFenceCreateInfo fence_info = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT
+    };
+
+    VK_TRY(vkCreateFence(logical_device, &fence_info, nullptr, &queues.immediate.fence));
+
+    // Register for cleanup
+    resource_registry.register_resource("immediate_context", [this, immediate_pool]() {
+        if (queues.immediate.fence != VK_NULL_HANDLE) {
+            vkDestroyFence(logical_device, queues.immediate.fence, nullptr);
+            queues.immediate.fence = VK_NULL_HANDLE;
+        }
+        if (immediate_pool != VK_NULL_HANDLE) {
+            vkDestroyCommandPool(logical_device, immediate_pool, nullptr);
+        }
+    });
+}
+
 void NovaCore::createSyncObjects()
     {
         report(LOGGER::VLINE, "\t .. Creating Sync Objects ..");
+
+        if (compute_only) {
+            // Compute mode: No frame-based sync needed
+            // immediateSubmit() uses queues.immediate.fence (created in createImmediateContext)
+            report(LOGGER::INFO, "Compute-only mode: skipping frame sync objects");
+            return;
+        }
 
         // Get the number of swapchain images
         uint32_t swapchain_image_count = swapchain.images.size();

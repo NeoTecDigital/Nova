@@ -310,5 +310,8 @@ void NovaCore::createLogicalDevice()
             }
         });
 
+        // Create immediate context for immediateSubmit() operations
+        createImmediateContext();
+
         //log();
     }

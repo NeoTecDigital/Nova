@@ -46,6 +46,7 @@ class NovaCore {
         void constructDescriptorPool();
         void createDescriptorSets();
         void createCommandBuffers();
+        void createImmediateContext();
         void createSyncObjects();
         void constructGraphicsPipeline(const std::string& vert_shader = "", const std::string& frag_shader = "");
         void constructComputePipeline();

@@ -5,7 +5,8 @@ VK_EXP_PATH = /etc/vulkan/explicit_layer.d
 
 CFLAGS = -std=c++20 -I $(VULKAN_SDK_PATH) -I $(STB_PATH) -I $(TINYOBJ_PATH)
 LDFLAGS = -L $(VULKAN_SDK_PATH) -lSDL2 -lvulkan -ldl -pthread
-NOVA_SOURCES = ./Nova.cpp ./Core/core.cpp ./Core/components/genesis.cpp ./Core/components/logger.cpp \
+NOVA_SOURCES = ./Nova.cpp ./Core/core.cpp ./Core/core_base.cpp ./Core/nova_compute.cpp ./Core/nova_graphics.cpp \
+               ./Core/components/genesis.cpp ./Core/components/logger.cpp \
                ./Core/modules/device.cpp ./Core/modules/management.cpp ./Core/modules/presentation.cpp \
                ./Core/modules/render.cpp ./Core/modules/atomic/atomic.cpp \
                ./Core/modules/camera/camera.cpp ./Core/modules/camera/perspective.cpp \

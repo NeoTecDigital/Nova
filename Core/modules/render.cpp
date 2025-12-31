@@ -26,7 +26,7 @@ static inline VkRect2D getScissor(VkExtent2D extent)
         };
     }
 
-void NovaCore::recordCommandBuffers(VkCommandBuffer& command_buffer, uint32_t i) 
+void NovaCoreLegacy::recordCommandBuffers(VkCommandBuffer& command_buffer, uint32_t i) 
     {
         //report(LOGGER::VLINE, "\t .. Recording Command Buffer %d ..", i);
 
@@ -59,7 +59,7 @@ void NovaCore::recordCommandBuffers(VkCommandBuffer& command_buffer, uint32_t i)
         return;
     }
 
-void NovaCore::resetCommandBuffers() 
+void NovaCoreLegacy::resetCommandBuffers() 
     {
         report(LOGGER::VLINE, "\t .. Resetting Command Buffers ..");
 
@@ -132,7 +132,7 @@ static inline VkSubmitInfo getSubmitInfo(VkCommandBuffer* command_buffer, VkSema
     // ACTUAL DRAW //
     /////////////////
 
-void NovaCore::drawFrame()
+void NovaCoreLegacy::drawFrame()
     {
         //report(LOGGER::VLINE, "\t .. Drawing Frame %d ..", _frame_ct);
 
@@ -209,6 +209,6 @@ void NovaCore::drawFrame()
     // TRANSITION IMAGE //
     //////////////////////
 
-void NovaCore::transitionImage() {
+void NovaCoreLegacy::transitionImage() {
     
 }

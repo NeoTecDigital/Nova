@@ -1,7 +1,13 @@
 #pragma once
-#include "./Core/core.h"
+// Use new modular architecture (core_base, nova_compute, nova_graphics)
+#include "./Core/core_base.h"
+#include "./Core/nova_compute.h"
+#include "./Core/nova_graphics.h"
 #include "./Core/config.h"
 
+// Backward compatibility: still include old core.h for legacy code
+// TODO: Remove this once all code migrated to new architecture
+#include "./Core/core.h"
 
 #include <string>
 #include <future>
@@ -22,17 +28,32 @@ class Nova {
         Nova(NovaConfig);
         ~Nova();
 
-        // TODO: Determine Default Initializers 
-        
+        // TODO: Determine Default Initializers
 
         void illuminate();
         //void illuminate(fnManifest);
+
+        // Mode detection
+        enum class Mode { Compute, Graphics };
+        Mode getMode() const { return _mode; }
+
+        // Get appropriate interface
+        NovaCore* getCore();  // Base interface (compute or graphics)
+        NovaCompute* getCompute();  // Compute-only interface (nullptr if graphics mode)
+        NovaGraphics* getGraphics();  // Graphics interface (nullptr if compute mode)
 
     private:
         NovaConfig _config;
         bool _suspended = false;
         struct SDL_Window* _window = nullptr;
-        NovaCore* _architect;
+
+        // Mode-specific instances
+        Mode _mode;
+        NovaCompute* _architect_compute = nullptr;
+        NovaGraphics* _architect_graphics = nullptr;
+
+        // Legacy compatibility
+        NovaCore* _architect = nullptr;  // Points to either _architect_compute or _architect_graphics
 
         VkDebugUtilsMessengerEXT _debug_messenger;
 
@@ -42,4 +63,5 @@ class Nova {
         void _initBuffers();
         void _initSyncStructures();
         void _resizeWindow();
+        void _initGraphicsPipeline();
 };

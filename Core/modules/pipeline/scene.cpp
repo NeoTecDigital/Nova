@@ -27,7 +27,7 @@ static const VkImageLayout _IMAGE_LAYOUT_UNDEFINED = VK_IMAGE_LAYOUT_UNDEFINED;
 static const VkImageLayout _IMAGE_LAYOUT_READ_ONLY = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         
 
-void NovaCore::constructVertexBuffer() 
+void NovaCoreLegacy::constructVertexBuffer() 
     {
         report(LOGGER::VLINE, "\t .. Creating Vertex Buffer ..");
 
@@ -51,7 +51,7 @@ void NovaCore::constructVertexBuffer()
         return;
     }
 
-void NovaCore::constructIndexBuffer() 
+void NovaCoreLegacy::constructIndexBuffer() 
     {
         report(LOGGER::VLINE, "\t .. Creating Index Buffer ..");
 
@@ -74,10 +74,10 @@ void NovaCore::constructIndexBuffer()
         return;
     }
 
-void NovaCore::destroyVertexContext() 
+void NovaCoreLegacy::destroyVertexContext() 
     { report(LOGGER::VERBOSE, "Scene - Destroying Vertex Context .."); destroyBuffer(&vertex); return; }
 
-void NovaCore::destroyIndexContext() 
+void NovaCoreLegacy::destroyIndexContext() 
     { report(LOGGER::VERBOSE, "Scene - Destroying Vertex Context .."); destroyBuffer(&index); return; }
 
     /////////////////////////////
@@ -87,7 +87,7 @@ void NovaCore::destroyIndexContext()
 static const VkBufferUsageFlags _uniform_usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 static const VkMemoryPropertyFlags _uniform_properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
-void NovaCore::constructUniformBuffer() 
+void NovaCoreLegacy::constructUniformBuffer() 
     {
         report(LOGGER::VLINE, "\t .. Creating Uniform Buffer ..");
 
@@ -104,7 +104,7 @@ void NovaCore::constructUniformBuffer()
             }
     }
 
-void NovaCore::updateUniformBuffer(uint32_t current_frame)
+void NovaCoreLegacy::updateUniformBuffer(uint32_t current_frame)
     {
         player_camera.update();
 
@@ -124,7 +124,7 @@ void NovaCore::updateUniformBuffer(uint32_t current_frame)
         memcpy(uniform_data[current_frame], &_mvp, sizeof(MVP));
     }
 
-void NovaCore::destroyUniformContext()
+void NovaCoreLegacy::destroyUniformContext()
     {
         report(LOGGER::VERBOSE, "Scene - Destroying Uniform Context ..");
 
@@ -179,7 +179,7 @@ static inline VkImageMemoryBarrier getMemoryBarrier(VkImage& image, VkImageLayou
         };
     }
 
-inline void NovaCore::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout) 
+inline void NovaCoreLegacy::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout) 
     {
         report(LOGGER::VLINE, "\t .. Transitioning Image Layout ..");
         VkCommandBuffer _ephemeral_cmd = createEphemeralCommand(queues.xfr.pool);
@@ -234,7 +234,7 @@ static inline VkBufferImageCopy getImageCopyRegion(uint32_t width, uint32_t heig
         };
     }
 
-inline void NovaCore::copyBufferToImage(VkBuffer& buffer, VkImage& image, uint32_t width, uint32_t height) 
+inline void NovaCoreLegacy::copyBufferToImage(VkBuffer& buffer, VkImage& image, uint32_t width, uint32_t height) 
     {
         report(LOGGER::VLINE, "\t .. Copying Buffer to Image ..");
 
@@ -249,7 +249,7 @@ inline void NovaCore::copyBufferToImage(VkBuffer& buffer, VkImage& image, uint32
         return;
     }
 
-void NovaCore::createTextureImage()
+void NovaCoreLegacy::createTextureImage()
     {
         report(LOGGER::VLINE, "\t .. Creating Texture Buffer ..");
 

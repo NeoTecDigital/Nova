@@ -3,13 +3,13 @@
 #include <SDL2/SDL_vulkan.h>
 
     // Get Current Frame
-FrameData& NovaCore::current_frame() { { return frames[_frame_ct % MAX_FRAMES_IN_FLIGHT]; } }
+FrameData& NovaCoreLegacy::current_frame() { { return frames[_frame_ct % MAX_FRAMES_IN_FLIGHT]; } }
 
     ////////////////////////
     //  INSTANCE CREATION //
     ////////////////////////
 
-NovaCore::NovaCore(VkExtent2D extent, std::string& level, bool compute_only_mode)
+NovaCoreLegacy::NovaCoreLegacy(VkExtent2D extent, std::string& level, bool compute_only_mode)
     {
         compute_only = compute_only_mode;
         _blankContext();
@@ -37,12 +37,12 @@ NovaCore::NovaCore(VkExtent2D extent, std::string& level, bool compute_only_mode
         // setWindowExtent(extent);
     }
 
-NovaCore::~NovaCore()
+NovaCoreLegacy::~NovaCoreLegacy()
     {
-        printf("[DEBUG NovaCore destructor] Entry - using ResourceRegistry for cleanup\n");
+        printf("[DEBUG NovaCoreLegacy destructor] Entry - using ResourceRegistry for cleanup\n");
         fflush(stdout);
 
-        report(LOGGER::INFO, "NovaCore - Destroying Context ..");
+        report(LOGGER::INFO, "NovaCoreLegacy - Destroying Context ..");
 
         // First, flush the old deletion queue for any legacy registrations
         printf("[DEBUG NovaCore destructor] Flushing legacy deletion queue\n");
@@ -50,20 +50,20 @@ NovaCore::~NovaCore()
         queues.deletion.flush();
 
         // Then use the new resource registry which cleans up in proper reverse order
-        printf("[DEBUG NovaCore destructor] Cleaning up %zu registered resources\n", resource_registry.count());
+        printf("[DEBUG NovaCoreLegacy destructor] Cleaning up %zu registered resources\n", resource_registry.count());
         fflush(stdout);
 
         // Resource registry destructor will be called automatically here,
         // cleaning up all registered resources in reverse order (LIFO)
         // This happens when the NovaCore object is destroyed
 
-        printf("[DEBUG NovaCore destructor] Blanking context\n");
+        printf("[DEBUG NovaCoreLegacy destructor] Blanking context\n");
         fflush(stdout);
         _blankContext();
 
-        printf("[DEBUG NovaCore destructor] Complete\n");
+        printf("[DEBUG NovaCoreLegacy destructor] Complete\n");
         fflush(stdout);
-        report(LOGGER::INFO, "NovaCore - Context destroyed successfully");
+        report(LOGGER::INFO, "NovaCoreLegacy - Context destroyed successfully");
     }
 
 
@@ -72,7 +72,7 @@ NovaCore::~NovaCore()
     // VULKAN INSTANCE //
     /////////////////////
 
-void NovaCore::createVulkanInstance() 
+void NovaCoreLegacy::createVulkanInstance() 
     {
         report(LOGGER::VLINE, "\t .. Instantiating Engine ..");
         VkApplicationInfo app_info = {
@@ -226,7 +226,7 @@ static SwapChainContext initSwapchain() {
 }
 
 
-void NovaCore::_blankContext()
+void NovaCoreLegacy::_blankContext()
     {
         report(LOGGER::INFO, "NovaCore - No Context ..");
 
@@ -248,7 +248,7 @@ void NovaCore::_blankContext()
     }
 
 // This should not be done like this
-void NovaCore::setWindowExtent(VkExtent2D extent) 
+void NovaCoreLegacy::setWindowExtent(VkExtent2D extent) 
     {
         swapchain.extent = extent;
         //swapchain.details.extent = extent;
@@ -260,7 +260,7 @@ void NovaCore::setWindowExtent(VkExtent2D extent)
     // LOGGING //
     /////////////
 
-void NovaCore::logQueues() 
+void NovaCoreLegacy::logQueues() 
     {
         report(LOGGER::DEBUG, "\t .. Logging Queues ..");
         report(LOGGER::DLINE, "\t\tFamilies: %d", queues.families.size());
@@ -284,7 +284,7 @@ void NovaCore::logQueues()
         report(LOGGER::DLINE, "\t\tPriorities: %d", queues.priorities.size());
     }
 
-void NovaCore::logFrameData()
+void NovaCoreLegacy::logFrameData()
     {
         report(LOGGER::DEBUG, "\t .. Logging Frame Data ..");
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) 
@@ -299,7 +299,7 @@ void NovaCore::logFrameData()
     
     }
 
-void NovaCore::logSwapChain() 
+void NovaCoreLegacy::logSwapChain() 
     {
         report(LOGGER::DEBUG, "\t .. Logging SwapChain ..");
         report(LOGGER::DLINE, "\t\tSwapchain: %p", swapchain.instance);
@@ -314,7 +314,7 @@ void NovaCore::logSwapChain()
         report(LOGGER::DLINE, "\t\tExtent: %d x %d", swapchain.extent.width, swapchain.extent.height);
     }
 
-void NovaCore::log() 
+void NovaCoreLegacy::log() 
     {
         report(LOGGER::DEBUG, "\t .. Logging Context ..");
         report(LOGGER::DLINE, "\t\tInstance: %p", instance);

@@ -6,7 +6,7 @@
     // PIPELINE CONSTRUCTION //
     ///////////////////////////
 
-void NovaCore::destroyPipeline(Pipeline* pipeline)
+void NovaCoreLegacy::destroyPipeline(Pipeline* pipeline)
     {
         report(LOGGER::DEBUG, "Management - Destroying Pipeline ..");
         if (pipeline) {
@@ -21,7 +21,7 @@ void NovaCore::destroyPipeline(Pipeline* pipeline)
         return;
     }
 
-void NovaCore::constructGraphicsPipeline(const std::string& vert_shader, const std::string& frag_shader)
+void NovaCoreLegacy::constructGraphicsPipeline(const std::string& vert_shader, const std::string& frag_shader)
     {
         report(LOGGER::DEBUG, "Management - Constructing Graphics Pipeline ..");
 
@@ -42,7 +42,7 @@ void NovaCore::constructGraphicsPipeline(const std::string& vert_shader, const s
         return;
     }
     
-void NovaCore::constructComputePipeline()
+void NovaCoreLegacy::constructComputePipeline()
     {
         report(LOGGER::DEBUG, "Management - Constructing Compute Pipeline ..");
 
@@ -59,7 +59,7 @@ void NovaCore::constructComputePipeline()
     // RENDER PASS CREATION //
     //////////////////////////
 
-VkAttachmentDescription NovaCore::colorAttachment()
+VkAttachmentDescription NovaCoreLegacy::colorAttachment()
     {
         report(LOGGER::VLINE, "\t\t .. Creating Color Attachment ..");
 
@@ -112,7 +112,7 @@ static VkRenderPassCreateInfo renderPassInfo(VkAttachmentDescription* color_atta
         };
     }
 
-void NovaCore::createRenderPass()
+void NovaCoreLegacy::createRenderPass()
     {
         report(LOGGER::VLINE, "\t .. Creating Render Pass ..");
 
@@ -128,7 +128,7 @@ void NovaCore::createRenderPass()
     }
 
 
-VkRenderPassBeginInfo NovaCore::getRenderPassInfo(size_t i)
+VkRenderPassBeginInfo NovaCoreLegacy::getRenderPassInfo(size_t i)
     {
         return {
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -168,7 +168,7 @@ static inline VkDescriptorSetLayoutCreateInfo _getLayoutInfo(VkDescriptorSetLayo
             };
     }
 
-void NovaCore::createDescriptorSetLayout() 
+void NovaCoreLegacy::createDescriptorSetLayout() 
     {
         report(LOGGER::VLINE, "\t .. Creating Descriptor Set Layout ..");
 
@@ -204,7 +204,7 @@ static inline VkDescriptorPoolCreateInfo getPoolInfo(uint32_t ct, VkDescriptorPo
         };
     }
 
-void NovaCore::constructDescriptorPool() 
+void NovaCoreLegacy::constructDescriptorPool() 
     {
         report(LOGGER::VLINE, "\t .. Constructing Descriptor Pool ..");
 
@@ -258,7 +258,7 @@ static inline VkWriteDescriptorSet getDescriptorWrite(VkDescriptorSet* set, VkDe
         };
     }
 
-void NovaCore::createDescriptorSets() 
+void NovaCoreLegacy::createDescriptorSets() 
     {
         report(LOGGER::VLINE, "\t .. Creating Descriptor Sets ..");
 
@@ -293,7 +293,7 @@ static inline VkCommandPoolCreateInfo createCommandPoolInfo(unsigned int queue_f
             };
     }
     
-void NovaCore::createCommandPool()
+void NovaCoreLegacy::createCommandPool()
     {
         report(LOGGER::VLINE, "\t .. Creating Command Pool ..");
 
@@ -346,7 +346,7 @@ void NovaCore::createCommandPool()
         return;
     }
 
-inline VkCommandBufferAllocateInfo NovaCore::createCommandBuffersInfo(VkCommandPool& cmd_pool, char* name)
+inline VkCommandBufferAllocateInfo NovaCoreLegacy::createCommandBuffersInfo(VkCommandPool& cmd_pool, char* name)
     {
         report(LOGGER::VLINE, "\t\t .. Creating %s Command Buffer Info  ..", name);
 
@@ -359,7 +359,7 @@ inline VkCommandBufferAllocateInfo NovaCore::createCommandBuffersInfo(VkCommandP
             };
     }
 
-void NovaCore::createCommandBuffers()
+void NovaCoreLegacy::createCommandBuffers()
     {
         report(LOGGER::VLINE, "\t .. Creating Command Buffers ..");
 
@@ -389,7 +389,7 @@ void NovaCore::createCommandBuffers()
     }
 
 
-VkCommandBuffer NovaCore::createEphemeralCommand(VkCommandPool& pool) 
+VkCommandBuffer NovaCoreLegacy::createEphemeralCommand(VkCommandPool& pool) 
     {
         report(LOGGER::VLINE, "\t .. Creating Ephemeral Command Buffer ..");
 
@@ -423,7 +423,7 @@ static inline VkSubmitInfo createSubmitInfo(VkCommandBuffer* cmd)
         };
     }
 
-void NovaCore::flushCommandBuffer(VkCommandBuffer& buf, char* name) 
+void NovaCoreLegacy::flushCommandBuffer(VkCommandBuffer& buf, char* name) 
     {
         report(LOGGER::VLINE, "\t .. Ending %s Command Buffer ..", name);
 
@@ -440,7 +440,7 @@ void NovaCore::flushCommandBuffer(VkCommandBuffer& buf, char* name)
         return;
     }
 
-void NovaCore::destroyCommandContext()
+void NovaCoreLegacy::destroyCommandContext()
     {
         report(LOGGER::VERBOSE, "Management - Destroying Semaphores, Fences and Command Pools ..");
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -498,7 +498,7 @@ static VkFenceCreateInfo createFenceInfo()
         };
     }
 
-void NovaCore::createImmediateContext()
+void NovaCoreLegacy::createImmediateContext()
 {
     report(LOGGER::VLINE, "\t .. Creating Immediate Context ..");
 
@@ -542,7 +542,7 @@ void NovaCore::createImmediateContext()
     });
 }
 
-void NovaCore::createSyncObjects()
+void NovaCoreLegacy::createSyncObjects()
     {
         report(LOGGER::VLINE, "\t .. Creating Sync Objects ..");
 
@@ -607,7 +607,7 @@ static inline VmaAllocationCreateInfo getVMAAllocationInfo(VmaMemoryUsage mem_us
         };
     }
 
-Buffer_T NovaCore::createEphemeralBuffer(size_t size, VkBufferUsageFlags flags, VmaMemoryUsage mem_usage)
+Buffer_T NovaCoreLegacy::createEphemeralBuffer(size_t size, VkBufferUsageFlags flags, VmaMemoryUsage mem_usage)
     {
         report(LOGGER::VLINE, "\t .. Creating Ephemeral Buffer ..");
 
@@ -649,7 +649,7 @@ static inline VkSubmitInfo2 getSubmitInfo2(VkCommandBufferSubmitInfo* cmd)
         };
     }
 
-void NovaCore::immediateSubmit(std::function<void(VkCommandBuffer)>&& func)
+void NovaCoreLegacy::immediateSubmit(std::function<void(VkCommandBuffer)>&& func)
     {
         VK_TRY(vkResetFences(logical_device, 1, &queues.immediate.fence));
         VK_TRY(vkResetCommandBuffer(queues.immediate.cmd, 0));
@@ -672,7 +672,7 @@ void NovaCore::immediateSubmit(std::function<void(VkCommandBuffer)>&& func)
         VK_TRY(vkWaitForFences(logical_device, 1, &queues.immediate.fence, VK_TRUE, UINT64_MAX));
     }
 
-MeshBuffer NovaCore::createMeshBuffer(std::span<uint32_t> idx, std::span<Vertex_T> vtx)
+MeshBuffer NovaCoreLegacy::createMeshBuffer(std::span<uint32_t> idx, std::span<Vertex_T> vtx)
     {
         const size_t VERTEX_BUFFER_SIZE = vtx.size() * sizeof(Vertex_T);
         const size_t INDEX_BUFFER_SIZE = idx.size() * sizeof(uint32_t);

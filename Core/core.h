@@ -5,8 +5,10 @@
 #include "./components/resource_registry.h"
 #include <span>
 
-
-class NovaCore {
+// DEPRECATED: This is the old monolithic NovaCore class
+// Use NovaCompute or NovaGraphics instead
+// Renamed to NovaCoreLegacy to avoid conflicts with new architecture
+class NovaCoreLegacy {
     public:
         VkInstance instance;
         VkPhysicalDevice physical_device;
@@ -22,8 +24,8 @@ class NovaCore {
         // Resource registry for proper cleanup injection
         NovaRAII::ResourceRegistry resource_registry;
 
-        NovaCore(VkExtent2D, std::string&, bool compute_only = false);
-        ~NovaCore();
+        NovaCoreLegacy(VkExtent2D, std::string&, bool compute_only = false);
+        ~NovaCoreLegacy();
 
         void log();
 

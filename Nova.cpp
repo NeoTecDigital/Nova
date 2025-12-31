@@ -18,8 +18,20 @@ Nova::Nova(NovaConfig config)
         setLogLevel(config.debug_level.c_str());
         _config = config;  // Store config for later use
 
-        // Only create window for graphics mode
-        if (!config.compute) {
+        if (config.compute) {
+            // Compute-only mode
+            _mode = Mode::Compute;
+            _window = nullptr;
+            report(LOGGER::INFO, "Nova - Compute mode: creating NovaCompute instance ..");
+
+            _architect_compute = new NovaCompute(config.debug_level);
+            _architect = _architect_compute;  // Legacy compatibility
+
+            report(LOGGER::INFO, "Nova - Compute mode initialized");
+        } else {
+            // Graphics mode
+            _mode = Mode::Graphics;
+
             // Initialize SDL and create a window
             SDL_Init(SDL_INIT_VIDEO);
             SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
@@ -33,84 +45,93 @@ Nova::Nova(NovaConfig config)
                 window_flags
             );
 
-            if (_window == nullptr)
-                {
-                    report(LOGGER::ERROR, "Nova - Failed to create SDL window ..");
-                    return;
-                }
-        } else {
-            _window = nullptr;
-            report(LOGGER::INFO, "Nova - Compute-only mode: skipping window creation ..");
-        }
+            if (_window == nullptr) {
+                report(LOGGER::ERROR, "Nova - Failed to create SDL window ..");
+                return;
+            }
 
+            // Create Vulkan surface from SDL window
+            VkSurfaceKHR surface;
+            if (!SDL_Vulkan_CreateSurface(_window, VK_NULL_HANDLE, &surface)) {
+                report(LOGGER::ERROR, "Nova - Failed to create Vulkan surface");
+                SDL_DestroyWindow(_window);
+                SDL_Quit();
+                return;
+            }
 
-        // TODO: Wrap all of this into a subset of init functions
-        //       that use proper fences and semaphores with the following order:
-        // Device()
-        // Presentation()
-        // Management()
-        // Scene()
-        // Render()
+            report(LOGGER::INFO, "Nova - Graphics mode: creating NovaGraphics instance ..");
+            _architect_graphics = new NovaGraphics(config.screen, config.debug_level, surface);
+            _architect = _architect_graphics;  // Legacy compatibility
 
-        _architect = new NovaCore(config.screen, config.debug_level, config.compute);
-        _initFramework(); // Do we want to handle this in the Nova?
+            // Initialize graphics pipeline
+            _initGraphicsPipeline();
 
-        // Skip graphics pipeline initialization if compute-only mode
-        if (!config.compute) {
-            _architect->swapchain.support = _architect->querySwapChainSupport(_architect->physical_device);
-            _architect->querySwapChainDetails();
-
-            // Now we can construct the Swapchain
-            std::promise<void> waitForSwapchain;
-            std::future<void> waitingForFrameBuffer = waitForSwapchain.get_future();
-            std::promise<void> startPipeline;
-            std::future<void> startingPipeline = startPipeline.get_future();
-            std::promise<void> waitForPipeline;
-            std::future<void> waitingForPipeline = waitForPipeline.get_future();
-
-            std::thread _swapchain_thread(&Nova::_initSwapChain, this, std::ref(startPipeline), std::ref(waitingForPipeline), std::ref(waitForSwapchain));
-            std::thread _pipeline_thread(&Nova::_initPipeline, this, std::ref(startingPipeline), std::ref(waitForPipeline));
-
-            _pipeline_thread.join();
-            _swapchain_thread.join();
-            waitingForFrameBuffer.wait();
-
-            // Now we can construct the Command Buffers
-            _initBuffers();
-            _initSyncStructures();
-        } else {
-            report(LOGGER::INFO, "Nova - Compute-only mode: skipping graphics pipeline ..");
+            report(LOGGER::INFO, "Nova - Graphics mode initialized");
         }
 
         initialized = true;
         report(LOGGER::INFO, "Nova - Initialized ..");
     }
 
-Nova::~Nova() 
+Nova::~Nova()
     {
         report(LOGGER::INFO, "Nova - Deconstructing ..");
-        vkDeviceWaitIdle(_architect->logical_device);
 
-        if (USE_VALIDATION_LAYERS) 
-            { 
+        if (initialized) {
+            if (_architect_compute) {
+                vkDeviceWaitIdle(_architect_compute->getDevice());
+            } else if (_architect_graphics) {
+                vkDeviceWaitIdle(_architect_graphics->getDevice());
+            }
+
+            if (USE_VALIDATION_LAYERS) {
                 report(LOGGER::VLINE, "\t .. Destroying Debug Messenger ..");
-                destroyDebugUtilsMessengerEXT(_architect->instance, _debug_messenger, nullptr); 
+                VkInstance instance = _architect_compute ? _architect_compute->getInstance() : _architect_graphics->getInstance();
+                destroyDebugUtilsMessengerEXT(instance, _debug_messenger, nullptr);
             }
 
-        if (initialized)
-            {
-                report(LOGGER::VLINE, "\t .. Destroying Nova ..");
-                delete _architect;
-
-                report(LOGGER::VLINE, "\t .. Destroying Window ..");
-                if (_window != nullptr) {
-                    SDL_DestroyWindow(_window);
-                    SDL_Quit();
-                }
+            report(LOGGER::VLINE, "\t .. Destroying Nova architect ..");
+            if (_architect_compute) {
+                delete _architect_compute;
+                _architect_compute = nullptr;
             }
+            if (_architect_graphics) {
+                delete _architect_graphics;
+                _architect_graphics = nullptr;
+            }
+            _architect = nullptr;
+
+            report(LOGGER::VLINE, "\t .. Destroying Window ..");
+            if (_window != nullptr) {
+                SDL_DestroyWindow(_window);
+                SDL_Quit();
+            }
+        }
 
         report(LOGGER::INFO, "Nova - Destroyed ..");
     }
+
+// Mode getters
+NovaCore* Nova::getCore() {
+    if (_mode == Mode::Compute) return _architect_compute;
+    else return _architect_graphics;
+}
+
+NovaCompute* Nova::getCompute() {
+    if (_mode != Mode::Compute) {
+        report(LOGGER::ERROR, "Attempted to get compute interface in non-compute mode");
+        return nullptr;
+    }
+    return _architect_compute;
+}
+
+NovaGraphics* Nova::getGraphics() {
+    if (_mode != Mode::Graphics) {
+        report(LOGGER::ERROR, "Attempted to get graphics interface in non-graphics mode");
+        return nullptr;
+    }
+    return _architect_graphics;
+}
 
 
     /////////////////////////
@@ -143,16 +164,22 @@ void Nova::illuminate()
                                 }
                         }
 
-                    _architect->player_camera.processEvents(_e);
+                    if (_architect_graphics) {
+                        _architect_graphics->player_camera.processEvents(_e);
+                    }
                 }
             
-            if (_suspended) 
+            if (_suspended)
                 {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     continue;
                 }
-            else 
-                { _architect->drawFrame(); }
+            else
+                {
+                    if (_architect_graphics) {
+                        _architect_graphics->drawFrame();
+                    }
+                }
 
             //fnManifest();
         }
@@ -165,87 +192,46 @@ void Nova::illuminate()
     // INITIALIZERS //
     //////////////////
 
-void Nova::_initFramework()
+void Nova::_initGraphicsPipeline()
     {
-        report(LOGGER::INFO, "Nova - Initializing Frameworks ..");
+        report(LOGGER::INFO, "Nova - Initializing Graphics Pipeline ..");
 
-        // Only create surface for graphics mode
-        if (!_config.compute && _window != nullptr) {
-            SDL_Vulkan_CreateSurface(_window, _architect->instance, &_architect->surface);
+        // NovaGraphics already initialized swapchain, render pass, etc.
+        // This is for any additional graphics setup if needed
 
-            // Register surface for cleanup (graphics mode only)
-            _architect->resource_registry.register_resource("vulkan_surface", [this]() {
-                if (_architect->surface != VK_NULL_HANDLE) {
-                    report(LOGGER::INFO, "Destroying Vulkan surface");
-                    vkDestroySurfaceKHR(_architect->instance, _architect->surface, nullptr);
-                    _architect->surface = VK_NULL_HANDLE;
-                }
-            });
-        } else {
-            _architect->surface = VK_NULL_HANDLE;
-            report(LOGGER::INFO, "Nova - Compute-only mode: skipping surface creation ..");
-        }
+        // TODO: Move any remaining graphics initialization here
+        // For now, NovaGraphics constructor handles everything
 
-        createDebugMessenger(&_architect->instance, &_debug_messenger);
-        _architect->createPhysicalDevice();
-        _architect->createLogicalDevice();
-
-        return;
+        report(LOGGER::INFO, "Nova - Graphics pipeline ready");
     }
 
-void Nova::_initSwapChain(std::promise<void>& startPipeline, std::future<void>& waitingForPipeline, std::promise<void>& waitForFrameBuffer) 
+// DEPRECATED: These methods are no longer needed
+// NovaGraphics handles all initialization in its constructor
+void Nova::_initSwapChain(std::promise<void>& startPipeline, std::future<void>& waitingForPipeline, std::promise<void>& waitForFrameBuffer)
     {
-        report(LOGGER::INFO, "Nova - Initializing SwapChain Buffers ..");
-
-        _architect->constructSwapChain();
-        _architect->constructImageViews();
-        startPipeline.set_value();
-        waitingForPipeline.wait();
-        _architect->createFrameBuffers();
-        waitForFrameBuffer.set_value();
-     
+        report(LOGGER::INFO, "Nova - _initSwapChain deprecated (handled by NovaGraphics) ..");
+        // Deprecated - NovaGraphics constructor handles this
         return;
     }
 
 void Nova::_initPipeline(std::future<void>& startingPipeline, std::promise<void>& waitForPipeline)
     {
-        report(LOGGER::INFO, "Nova - Initializing Graphics Pipeline ..");
-
-        // abstract both of these as part of the Nova and rename _architect to Nova
-
-        startingPipeline.wait();
-        _architect->createRenderPass();
-        _architect->createDescriptorSetLayout();
-        _architect->constructGraphicsPipeline(_config.vert_shader_path, _config.frag_shader_path);
-        //_architect->constructComputePipeline();
-        waitForPipeline.set_value();
-     
+        report(LOGGER::INFO, "Nova - _initPipeline deprecated (handled by NovaGraphics) ..");
+        // Deprecated - NovaGraphics constructor handles this
         return;
     }
 
-void Nova::_initBuffers() 
+void Nova::_initBuffers()
     {
-        report(LOGGER::INFO, "Nova - Initializing Command Operator ..");
-
-        _architect->createCommandPool(); 
-        _architect->createTextureImage(); 
-        _architect->constructVertexBuffer();
-        _architect->constructIndexBuffer(); 
-        _architect->constructUniformBuffer(); 
-        // TODO: multithread Command Buffer to init as part of the Management Phase
-        _architect->constructDescriptorPool();
-        _architect->createDescriptorSets();
-        _architect->createCommandBuffers();
-     
+        report(LOGGER::INFO, "Nova - _initBuffers deprecated (handled by NovaGraphics) ..");
+        // Deprecated - NovaGraphics constructor handles this
         return;
     }
 
 void Nova::_initSyncStructures()
     {
-        report(LOGGER::INFO, "Nova - Initializing Synchronization Structures ..");
-
-        _architect->createSyncObjects();
-
+        report(LOGGER::INFO, "Nova - _initSyncStructures deprecated (handled by NovaGraphics) ..");
+        // Deprecated - NovaGraphics constructor handles this
         return;
     }
 
@@ -260,12 +246,14 @@ inline void Nova::_resizeWindow()
 
         int w, h;
         SDL_Vulkan_GetDrawableSize(_window, &w, &h);
-        
+
         _config.screen.width = w;
         _config.screen.height = h;
 
-        _architect->setWindowExtent(_config.screen);
-        _architect->framebuffer_resized = true;
+        if (_architect_graphics) {
+            _architect_graphics->setWindowExtent(_config.screen);
+            _architect_graphics->framebuffer_resized = true;
+        }
         return;
     }   
 

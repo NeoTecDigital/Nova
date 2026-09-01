@@ -28,10 +28,14 @@ void SpatialNode::relinkChildren() {
 
 void SpatialNode::removeChild(std::shared_ptr<SpatialNode> child) {
     auto it = std::remove(children.begin(), children.end(), child);
-    if (it != children.end()) {
-        (*it)->parent.reset();
-        children.erase(it, children.end());
-    }
+    if (it == children.end()) return;
+
+    // The parent link is cleared through `child`, never through *it: everything
+    // from `it` to end() is moved-from after std::remove, so *it is a null
+    // shared_ptr whenever the removed node was not the last one - which is
+    // every removal from a node with more than one child.
+    if (child) child->parent.reset();
+    children.erase(it, children.end());
 }
 
 NovaMath::QuatTransform SpatialNode::getWorldTransform() const {

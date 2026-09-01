@@ -1,9 +1,40 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "../../include/Clouds/SpatialCompositor.h"
 #include "../../Core/components/logger.h"
+#include <algorithm>
 #include <cstdlib>
 
 namespace Clouds {
+
+namespace {
+
+// Spacing between a parent quad and the subsurfaces stacked in front of it.
+// Smaller than the popup bias so a menu opened over a subsurface still wins.
+constexpr float kSubsurfaceDepthBias = 0.0008f;
+
+// Extent of a subsurface whose parent has not committed a buffer yet. Replaced
+// by real pixel dimensions on the first commit that carries any.
+constexpr float kSubsurfaceFallbackExtent = 0.3f;
+
+// Paint order within the parent's committed stack. wlroots keeps the protocol's
+// two lists - below the parent and above it - in paint order and reorders them
+// in place, so reading them here is what makes restacking take effect.
+int subsurfacePaintIndex(struct wlr_surface* parent, const struct wlr_subsurface* target) {
+    int index = 0;
+    struct wl_list* stacks[] = { &parent->current.subsurfaces_below,
+                                 &parent->current.subsurfaces_above };
+    for (struct wl_list* stack : stacks) {
+        struct wlr_subsurface_parent_state* state = nullptr;
+        wl_list_for_each(state, stack, link) {
+            struct wlr_subsurface* sibling = wl_container_of(state, sibling, current);
+            if (sibling == target) return index;
+            ++index;
+        }
+    }
+    return index;
+}
+
+} // namespace
 
 SpatialCompositor::SpatialCompositor(NovaCore* core,
                                      NovaSpatial::TextureBridge* texture_bridge,
@@ -81,6 +112,15 @@ bool SpatialCompositor::initProtocols() {
         return false;
     }
 
+    // Advertised because a client that finds no decoration manager assumes it
+    // must draw its own frame, and this session draws one for it.
+    xdg_decoration_manager_ = wlr_xdg_decoration_manager_v1_create(wl_display_);
+    primary_selection_manager_ = wlr_primary_selection_v1_device_manager_create(wl_display_);
+    if (!xdg_decoration_manager_ || !primary_selection_manager_) {
+        report(LOGGER::ERROR, "SpatialCompositor - Failed to create the decoration or primary-selection manager");
+        return false;
+    }
+
     xdg_shell_ = wlr_xdg_shell_create(wl_display_, 3);
     if (!xdg_shell_) {
         report(LOGGER::ERROR, "SpatialCompositor - Failed to create wlr_xdg_shell");
@@ -91,6 +131,8 @@ bool SpatialCompositor::initProtocols() {
     new_xdg_popup_listener_.bind(this, &SpatialCompositor::onNewXdgPopup, &xdg_shell_->events.new_popup);
     new_output_listener_.bind(this, &SpatialCompositor::onNewOutput, &backend_->events.new_output);
     new_input_listener_.bind(this, &SpatialCompositor::onNewInput, &backend_->events.new_input);
+    new_toplevel_decoration_listener_.bind(this, &SpatialCompositor::onNewToplevelDecoration,
+                                           &xdg_decoration_manager_->events.new_toplevel_decoration);
     return true;
 }
 
@@ -126,6 +168,15 @@ bool SpatialCompositor::initInput() {
         report(LOGGER::ERROR, "SpatialCompositor - Failed to create wlr_seat");
         return false;
     }
+
+    // Selection and cursor policy are seat decisions the clients ask for; the
+    // answers live with the rest of the seat (SpatialSeatInput.cpp).
+    request_set_selection_listener_.bind(this, &SpatialCompositor::onRequestSetSelection,
+                                         &seat_->events.request_set_selection);
+    request_set_primary_selection_listener_.bind(this, &SpatialCompositor::onRequestSetPrimarySelection,
+                                                 &seat_->events.request_set_primary_selection);
+    request_set_cursor_listener_.bind(this, &SpatialCompositor::onRequestSetCursor,
+                                      &seat_->events.request_set_cursor);
 
     // The fallback keyboard is best effort: physical keyboards arriving on
     // new_input supersede it, and capabilities are recomputed either way.
@@ -226,6 +277,9 @@ void SpatialCompositor::iterateEventLoop(int timeout_ms) {
         wl_display_flush_clients(wl_display_);
     }
     // Strictly after dispatch returns, never from inside a listener callback.
+    // Children before their parents: a subsurface's node hangs off the popup or
+    // toplevel node released next.
+    drainDestroyedSubsurfaces();
     drainDestroyedPopups();
     drainDestroyedWindows();
     drainRemovedInputDevices();
@@ -244,6 +298,7 @@ void SpatialCompositor::iterateEventLoop(int timeout_ms) {
 void SpatialCompositor::stop() {
     // Every wl_listener is detached while the object owning its wl_signal is
     // still alive; wl_list_remove writes through link->prev and link->next.
+    releaseSubsurfaces();
     releasePopups();
     releaseWindows();
     releaseOutputs();
@@ -261,6 +316,10 @@ void SpatialCompositor::stop() {
     new_input_listener_.unbind();         // owned by backend_->events.new_input
     session_active_listener_.unbind();    // owned by session_->events.active
     session_destroy_listener_.unbind();   // owned by session_->events.destroy
+    new_toplevel_decoration_listener_.unbind();       // owned by xdg_decoration_manager_
+    request_set_selection_listener_.unbind();         // owned by seat_->events
+    request_set_primary_selection_listener_.unbind(); // owned by seat_->events
+    request_set_cursor_listener_.unbind();            // owned by seat_->events
 
     releaseBackendStack();
 
@@ -276,9 +335,114 @@ void SpatialCompositor::stop() {
     compositor_ = nullptr;
     xdg_shell_ = nullptr;
     seat_ = nullptr;
+    xdg_decoration_manager_ = nullptr;
+    primary_selection_manager_ = nullptr;
     session_ = nullptr;
     session_active_ = true;
     virtual_output_host_ = nullptr;
+}
+
+// --- SpatialCompositor - subsurface hosting ---
+//
+// Creation and placement live here, next to the loop that drains the kill list;
+// the SpatialSubsurface lifetime object and the attach/detach it shares with
+// popups live in SpatialPopupHost.cpp. Split only because both files are at the
+// 500-line cap - the whole of it belongs in one TU, and the next hand on this
+// code should make that src/Clouds/SpatialSubsurfaceHost.cpp.
+
+void SpatialCompositor::onNewSubsurface(struct wlr_surface* parent_surface, void* data) {
+    auto subsurface = static_cast<struct wlr_subsurface*>(data);
+    if (!subsurface || !subsurface->surface || !parent_surface) {
+        report(LOGGER::ERROR, "SpatialCompositor - new_subsurface signal delivered no backing surface");
+        return;
+    }
+
+    auto hosted = std::make_shared<SpatialSubsurface>();
+    hosted->compositor = this;
+    hosted->handle = next_window_handle_++;
+    hosted->subsurface = subsurface;
+    hosted->surface = subsurface->surface;
+    hosted->parent_surface = parent_surface;
+
+    std::shared_ptr<NovaSpatial::TextureHandle> fallback_texture;
+    if (texture_bridge_) fallback_texture = texture_bridge_->getFallbackTexture();
+
+    // Its own pixels and its own input, exactly like a popup: a subsurface is
+    // a second buffer the client draws, not chrome this compositor owns.
+    hosted->surface_host = std::make_shared<SpatialSurfaceHost>(
+        glm::vec2(kSubsurfaceFallbackExtent, kSubsurfaceFallbackExtent), fallback_texture);
+    hosted->surface_host->name = "Subsurface";
+    hosted->surface_host->claims_pointer_input = true;
+
+    SpatialSubsurface* child = hosted.get();
+    struct wlr_surface* surface = hosted->surface;
+    child->commit_listener.bind(child, &SpatialSubsurface::onCommit, &surface->events.commit);
+    child->map_listener.bind(child, &SpatialSubsurface::onMap, &surface->events.map);
+    child->unmap_listener.bind(child, &SpatialSubsurface::onUnmap, &surface->events.unmap);
+    child->surface_destroy_listener.bind(child, &SpatialSubsurface::onSurfaceDestroy, &surface->events.destroy);
+    child->destroy_listener.bind(child, &SpatialSubsurface::onDestroy, &subsurface->events.destroy);
+    child->new_subsurface_listener.bind(child, &SpatialSubsurface::onNewSubsurface,
+                                        &surface->events.new_subsurface);
+    bindChildSurfaceInput(hosted->surface_host, surface);
+
+    report(LOGGER::INFO, "SpatialCompositor - New subsurface %u on parent surface %p",
+           child->handle, static_cast<const void*>(parent_surface));
+    subsurfaces_.push_back(std::move(hosted));
+
+    // new_subsurface fires when the subsurface enters the parent's CURRENT
+    // state (wlr_compositor.h:226), which for a client that committed the child
+    // first is after that child has already mapped. Waiting for a map signal
+    // that has been and gone would leave the node out of the scene forever, so
+    // the current state is read once instead of assumed pristine.
+    if (surface->mapped) {
+        child->onMap(nullptr);
+        child->onCommit(nullptr);
+    }
+}
+
+void SpatialCompositor::placeSubsurfaceOnParent(SpatialSubsurface& sub) {
+    std::shared_ptr<SpatialSurfaceHost> anchor = hostNodeForSurface(sub.parent_surface);
+    if (!anchor || !sub.surface_host || !sub.subsurface || !sub.surface || !sub.parent_surface) return;
+
+    // Offset is parent-relative surface-local pixels, applied by the parent's
+    // commit; extent is the child's own committed size. The popup path's change
+    // of basis carries both because they are in the same pixel space.
+    const struct wlr_box box = { sub.subsurface->current.x, sub.subsurface->current.y,
+                                 sub.surface->current.width, sub.surface->current.height };
+
+    // Paint order, biased in front of the parent quad. wl_subsurface.place_below
+    // can put a sibling behind its parent, which two coplanar quads cannot
+    // express, so every subsurface is drawn in front and only the relative order
+    // is honoured - below-parent siblings sitting closest to it. Stated rather
+    // than hidden: it is the one place this departs from the protocol.
+    const int paint_index = subsurfacePaintIndex(sub.parent_surface, sub.subsurface);
+    placeChildOnParentQuad(*sub.surface_host, *anchor, *sub.parent_surface, box,
+                           kSubsurfaceDepthBias * static_cast<float>(1 + paint_index));
+}
+
+void SpatialCompositor::importSubsurfaceBuffer(SpatialSubsurface& sub) {
+    importSurfaceContent(sub.surface, sub.surface_host, sub.client_texture,
+                         sub.unsupported_format, sub.handle);
+}
+
+// --- SpatialCompositor - decoration negotiation ---
+
+void SpatialCompositor::onNewToplevelDecoration(void* data) {
+    auto decoration = static_cast<struct wlr_xdg_toplevel_decoration_v1*>(data);
+    if (!decoration || !decoration->toplevel) {
+        report(LOGGER::ERROR, "SpatialCompositor - new_toplevel_decoration delivered no toplevel");
+        return;
+    }
+
+    // The decoration belongs to exactly one toplevel and dies with it, so the
+    // window that already owns that toplevel's listeners owns this one too.
+    for (const auto& win : windows_) {
+        if (win && win->toplevel == decoration->toplevel) {
+            win->adoptDecoration(decoration);
+            return;
+        }
+    }
+    report(LOGGER::ERROR, "SpatialCompositor - Decoration arrived for a toplevel this session does not host");
 }
 
 void SpatialCompositor::releaseInput() {

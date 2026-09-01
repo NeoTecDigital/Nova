@@ -16,6 +16,9 @@ extern "C" {
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_primary_selection.h>
+#include <wlr/types/wlr_primary_selection_v1.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_output.h>
@@ -115,6 +118,10 @@ public:
     size_t popupCount() const { return popups_.size(); }
     size_t mappedPopupCount() const;
 
+    // Subsurfaces this session hosts, and the subset currently in the scene.
+    size_t subsurfaceCount() const { return subsurfaces_.size(); }
+    size_t mappedSubsurfaceCount() const;
+
     /**
      * Release the frame callbacks every mapped client is blocked on.
      *
@@ -156,6 +163,24 @@ public:
     void onNewXdgPopup(void* data);
     void onNewOutput(void* data);
     void onNewInput(void* data);
+    void onNewToplevelDecoration(void* data);
+
+    /**
+     * Selection (clipboard) routing. Handing the source straight to
+     * wlr_seat_set_selection is the whole policy: wlroots then offers it to
+     * whichever client holds keyboard focus, which is the rule every desktop
+     * already runs on. Drag and drop (request_start_drag) is NOT implemented
+     * here - a drag is a spatial gesture in this session, and inventing its
+     * geometry at the transport layer would be inventing policy.
+     */
+    void onRequestSetSelection(void* data);
+    void onRequestSetPrimarySelection(void* data);
+
+    // wl_pointer.set_cursor. Accepted and deliberately not drawn: the 3D
+    // reticle IS the pointer here and there is no 2D cursor plane to composite
+    // a client's image on. Bound so the policy is stated where the request
+    // arrives rather than being an unbound signal nobody can find.
+    void onRequestSetCursor(void* data);
     void onFallbackModifiers(void* data);
     void onSessionActive(void* data);
     void onSessionDestroy(void* data);
@@ -179,6 +204,24 @@ public:
     void placePopupOnParent(SpatialXdgPopup& popup);
     void importPopupBuffer(SpatialXdgPopup& popup);
     void removePopup(WindowHandle handle);
+
+    // Dismiss every grabbing popup the pointer is not inside. xdg-shell breaks
+    // an explicit grab on input outside the popup; wlroots covers half of it -
+    // its grab ends when a button arrives with no focused client, so a click on
+    // empty space works while a click on the grabbing client's own toplevel
+    // does not. That second case is the one a menu has to survive, and only the
+    // scene knows which node the ray hit.
+    void dismissPopupsOutsidePointer();
+
+    // Subsurface counterparts of the popup paths above: no configure of its
+    // own, same shape otherwise.
+    void onNewSubsurface(struct wlr_surface* parent_surface, void* data);
+    void attachSubsurfaceToParent(SpatialSubsurface& sub);
+    void detachSubsurfaceFromParent(SpatialSubsurface& sub);
+    void placeSubsurfaceOnParent(SpatialSubsurface& sub);
+    void importSubsurfaceBuffer(SpatialSubsurface& sub);
+    void removeSubsurface(WindowHandle handle);
+
 
     // Hand an input device to the kill list. Safe from inside a dispatch.
     void removeInputDevice(struct wlr_input_device* device);
@@ -249,6 +292,7 @@ private:
     bool initSocket(const std::string& socket_name);
     void releaseWindows();
     void releasePopups();
+    void releaseSubsurfaces();
     void releaseInput();
     void releaseBackendStack();
 
@@ -293,8 +337,23 @@ private:
     // wl_listener callback.
     void drainDestroyedWindows();
     void drainDestroyedPopups();
+    void drainDestroyedSubsurfaces();
     void drainRemovedInputDevices();
     void drainRemovedOutputs();
+
+    // Release the scene-side half of a hosted surface: out of the tree, out of
+    // every focus and grab that names it, texture returned to the bridge.
+    void releaseChildHost(const std::shared_ptr<SpatialSurfaceHost>& host,
+                          std::shared_ptr<NovaSpatial::TextureHandle>& texture);
+
+    // Place a hosted child quad on its parent's quad from surface-local pixels.
+    // The parent's quad spans its local [-w/2, w/2] x [-h/2, h/2] and maps onto
+    // the parent surface's pixels, y down; this is that one change of basis.
+    void placeChildOnParentQuad(SpatialSurfaceHost& child,
+                                const SpatialSurfaceHost& anchor,
+                                const struct wlr_surface& parent_surface,
+                                const struct wlr_box& child_box,
+                                float depth_bias);
 
     // Pick the mode to commit on an arriving output, and adopt the committed
     // size as the pointer clamp box.
@@ -311,9 +370,22 @@ private:
     void closePointerGroup();
 
     void buildWindowNodes(SpatialXdgWindow& win, struct wlr_xdg_toplevel* toplevel);
-    void bindWindowInput(SpatialXdgWindow& win, struct wlr_surface* surface);
+    void bindWindowListeners(SpatialXdgWindow& window, struct wlr_xdg_toplevel* toplevel,
+                             struct wlr_surface* surface);
     void bindPopupListeners(SpatialXdgPopup& popup, struct wlr_surface* surface);
-    void bindPopupInput(SpatialXdgPopup& popup, struct wlr_surface* surface);
+
+    // Input routing for a hosted child surface: popups and subsurfaces route
+    // identically, so the wiring is written once.
+    void bindChildSurfaceInput(const std::shared_ptr<SpatialSurfaceHost>& host,
+                               struct wlr_surface* surface);
+
+    // Popups and subsurfaces are one hosted-child lifetime with two placement
+    // rules, so draining and release are written once over the element type.
+    template <typename Child>
+    void drainHostedChildren(std::vector<std::shared_ptr<Child>>& pending);
+    template <typename Child>
+    void releaseHostedChildren(std::vector<std::shared_ptr<Child>>& live,
+                               std::vector<std::shared_ptr<Child>>& pending);
 
     NovaCore* core_ = nullptr;
     NovaSpatial::TextureBridge* texture_bridge_ = nullptr;
@@ -330,6 +402,8 @@ private:
     struct wlr_compositor* compositor_ = nullptr;
     struct wlr_xdg_shell* xdg_shell_ = nullptr;
     struct wlr_seat* seat_ = nullptr;
+    struct wlr_xdg_decoration_manager_v1* xdg_decoration_manager_ = nullptr;
+    struct wlr_primary_selection_v1_device_manager* primary_selection_manager_ = nullptr;
 
     // Populated by wlr_backend_autocreate on bare metal; null when nested or
     // headless, which is also what makes the virtual output necessary.
@@ -370,12 +444,19 @@ private:
     WaylandListener<SpatialCompositor> fallback_modifiers_listener_;
     WaylandListener<SpatialCompositor> session_active_listener_;
     WaylandListener<SpatialCompositor> session_destroy_listener_;
+    WaylandListener<SpatialCompositor> new_toplevel_decoration_listener_;
+    WaylandListener<SpatialCompositor> request_set_selection_listener_;
+    WaylandListener<SpatialCompositor> request_set_primary_selection_listener_;
+    WaylandListener<SpatialCompositor> request_set_cursor_listener_;
 
     std::vector<std::shared_ptr<SpatialXdgWindow>> windows_;
     std::vector<std::shared_ptr<SpatialXdgWindow>> pending_destroy_;
 
     std::vector<std::shared_ptr<SpatialXdgPopup>> popups_;
     std::vector<std::shared_ptr<SpatialXdgPopup>> pending_destroy_popups_;
+
+    std::vector<std::shared_ptr<SpatialSubsurface>> subsurfaces_;
+    std::vector<std::shared_ptr<SpatialSubsurface>> pending_destroy_subsurfaces_;
 
     std::vector<std::shared_ptr<SpatialSeatDevice>> input_devices_;
     std::vector<std::shared_ptr<SpatialSeatDevice>> pending_destroy_devices_;

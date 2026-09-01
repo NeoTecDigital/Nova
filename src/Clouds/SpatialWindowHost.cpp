@@ -27,6 +27,16 @@ bool drmFormatToPixelLayout(uint32_t drm_format, NovaSpatial::PixelLayout& out) 
     }
 }
 
+// What the frame's label says: title, else app_id, else a name honest about
+// knowing neither. Shared by node construction and by the live
+// set_title/set_app_id path so the label cannot drift from the client.
+std::string resolveWindowTitle(const struct wlr_xdg_toplevel* toplevel) {
+    if (!toplevel) return "Wayland Window";
+    if (toplevel->title && toplevel->title[0]) return toplevel->title;
+    if (toplevel->app_id && toplevel->app_id[0]) return toplevel->app_id;
+    return "Wayland Window";
+}
+
 } // namespace
 
 // --- SpatialXdgWindow ---
@@ -59,8 +69,12 @@ void SpatialXdgWindow::onCommit(void*) {
         // The client is blocked until it receives a configure, and by protocol
         // its initial commit carries no buffer. A 0x0 size means "you choose",
         // which is the right answer while placement policy lives elsewhere; the
-        // load-bearing part is that a configure is sent at all.
-        uint32_t serial = wlr_xdg_toplevel_set_size(toplevel, 0, 0);
+        // load-bearing part is that a configure is sent at all. It goes through
+        // answerStateRequest() so state asked for before the first commit -
+        // toolkits set_maximized and then commit - rides this very configure,
+        // there being nothing to schedule one on until the surface is live.
+        uint32_t serial = answerStateRequest();
+        if (decoration_answer_pending) answerDecorationMode();
         report(LOGGER::INFO, "SpatialCompositor - Window %u initial configure serial=%u",
                handle, serial);
         return;
@@ -91,7 +105,7 @@ void SpatialXdgWindow::applySurfaceGeometry(int width, int height) {
 void SpatialXdgWindow::onMap(void*) {
     if (mapped) return;
     mapped = true;
-    if (compositor) {
+    if (compositor && !minimized) {
         compositor->attachWindowToPortal(*this);
     }
 }
@@ -104,6 +118,81 @@ void SpatialXdgWindow::onUnmap(void*) {
     if (compositor) {
         compositor->detachWindowFromPortal(*this);
     }
+}
+
+uint32_t SpatialXdgWindow::answerStateRequest() {
+    if (!toplevel || !toplevel->base || !toplevel->base->initialized) return 0;
+
+    // A spatial window manager has no screen rectangle to fill: a window is a
+    // quad in a 3D scene and "maximized" has no extent to mean here. So the
+    // request is answered the only honest way the protocol allows - asked state
+    // acked, size echoed back unchanged - and nothing pretends a monitor was
+    // involved. What maximize and fullscreen should *do* spatially (fill the
+    // Portal's frame, take the Precipitation surface) is a Desktop/Portal
+    // decision. One configure carries all three: schedule_configure coalesces
+    // within an event-loop iteration, so the client sees one atomic state.
+    const int32_t width = surface ? surface->current.width : 0;
+    const int32_t height = surface ? surface->current.height : 0;
+    wlr_xdg_toplevel_set_size(toplevel, width, height);
+    wlr_xdg_toplevel_set_maximized(toplevel, toplevel->requested.maximized);
+    return wlr_xdg_toplevel_set_fullscreen(toplevel, toplevel->requested.fullscreen);
+}
+
+void SpatialXdgWindow::onRequestMinimize(void*) {
+    if (!toplevel) return;
+    const bool wanted = toplevel->requested.minimized;
+    if (wanted == minimized) return;
+    minimized = wanted;
+
+    report(LOGGER::INFO, "SpatialCompositor - Window %u minimize request: minimized=%d",
+           handle, static_cast<int>(minimized));
+
+    // xdg-shell defines no configure and no state for minimisation, so the
+    // answer is entirely what the compositor does with the node: out of the
+    // scene and off the frame-callback list, which is as close to unmapped as a
+    // still-mapped surface gets. Buffer, texture and listeners stay.
+    if (!mapped || !compositor) return;
+    if (minimized) {
+        compositor->detachWindowFromPortal(*this);
+    } else {
+        compositor->attachWindowToPortal(*this);
+    }
+}
+
+void SpatialXdgWindow::adoptDecoration(struct wlr_xdg_toplevel_decoration_v1* dec) {
+    if (!dec) return;
+    decoration = dec;
+    decoration_mode_listener.bind(this, &SpatialXdgWindow::onDecorationMode, &dec->events.request_mode);
+    decoration_destroy_listener.bind(this, &SpatialXdgWindow::onDecorationDestroy, &dec->events.destroy);
+    answerDecorationMode();
+}
+
+void SpatialXdgWindow::answerDecorationMode() {
+    if (!decoration || !toplevel || !toplevel->base) return;
+    if (!toplevel->base->initialized) { decoration_answer_pending = true; return; }
+    decoration_answer_pending = false;
+
+    // Server-side unless the client insists. This compositor already draws a
+    // frame panel around every hosted surface and two frames on one window is
+    // worse than either; a client that asks for CLIENT_SIDE gets it, because
+    // the protocol lets it ask. NOT yet honoured visually - the frame panel is
+    // drawn either way, so a client-side window is double-framed until the
+    // Portal owns chrome policy. Named rather than hidden behind the mode.
+    const enum wlr_xdg_toplevel_decoration_v1_mode mode =
+        decoration->requested_mode == WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE
+            ? WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE
+            : WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+    report(LOGGER::INFO, "SpatialCompositor - Window %u decoration mode=%d serial=%u", handle,
+           static_cast<int>(mode), wlr_xdg_toplevel_decoration_v1_set_mode(decoration, mode));
+}
+
+void SpatialXdgWindow::applyTitle() {
+    if (!title_label) return;
+    title_label->setText(resolveWindowTitle(toplevel));
+}
+
+void SpatialXdgWindow::onNewSubsurface(void* data) {
+    if (compositor) compositor->onNewSubsurface(surface, data);
 }
 
 void SpatialXdgWindow::onSurfaceDestroy(void*) {
@@ -138,19 +227,46 @@ void SpatialCompositor::onNewXdgToplevel(void* data) {
     win->surface = surface;
 
     buildWindowNodes(*win, toplevel);
-    bindWindowInput(*win, surface);
-
-    // The surface destroy listener exists because a wlr_surface may outlive, or
-    // be torn down ahead of, its xdg_surface. Either signal detaches both.
-    win->commit_listener.bind(win.get(), &SpatialXdgWindow::onCommit, &surface->events.commit);
-    win->map_listener.bind(win.get(), &SpatialXdgWindow::onMap, &surface->events.map);
-    win->unmap_listener.bind(win.get(), &SpatialXdgWindow::onUnmap, &surface->events.unmap);
-    win->surface_destroy_listener.bind(win.get(), &SpatialXdgWindow::onSurfaceDestroy, &surface->events.destroy);
-    win->destroy_listener.bind(win.get(), &SpatialXdgWindow::onDestroy, &toplevel->base->events.destroy);
+    // The same routing a popup or a subsurface gets: the client's surface is
+    // its own input target whatever role it plays.
+    bindChildSurfaceInput(win->surface_host, surface);
+    bindWindowListeners(*win, toplevel, surface);
 
     // Scene insertion happens on map, not here: a toplevel exists long before it
     // has a buffer, and a window with nothing to show does not belong in a scene.
     windows_.push_back(win);
+}
+
+void SpatialCompositor::bindWindowListeners(SpatialXdgWindow& window,
+                                            struct wlr_xdg_toplevel* toplevel,
+                                            struct wlr_surface* surface) {
+    SpatialXdgWindow* win = &window;
+
+    // The surface destroy listener exists because a wlr_surface may outlive, or
+    // be torn down ahead of, its xdg_surface. Either signal detaches both.
+    win->commit_listener.bind(win, &SpatialXdgWindow::onCommit, &surface->events.commit);
+    win->map_listener.bind(win, &SpatialXdgWindow::onMap, &surface->events.map);
+    win->unmap_listener.bind(win, &SpatialXdgWindow::onUnmap, &surface->events.unmap);
+    win->surface_destroy_listener.bind(win, &SpatialXdgWindow::onSurfaceDestroy, &surface->events.destroy);
+    // The ROLE object's destroy, not the xdg_surface's: wlroots tears the
+    // toplevel down first and asserts that its own request_* signals have no
+    // listeners left by the time it does (wlr_xdg_toplevel.c:530). A listener
+    // on the surface's destroy is one step too late to satisfy that.
+    win->destroy_listener.bind(win, &SpatialXdgWindow::onDestroy, &toplevel->events.destroy);
+    win->new_subsurface_listener.bind(win, &SpatialXdgWindow::onNewSubsurface,
+                                      &surface->events.new_subsurface);
+
+    // Mandatory, not decorative: the protocol requires a configure in answer to
+    // the state requests, and set_title/set_app_id are the only notice that the
+    // label already drawn has gone stale.
+    win->request_maximize_listener.bind(win, &SpatialXdgWindow::onRequestMaximize,
+                                        &toplevel->events.request_maximize);
+    win->request_fullscreen_listener.bind(win, &SpatialXdgWindow::onRequestFullscreen,
+                                          &toplevel->events.request_fullscreen);
+    win->request_minimize_listener.bind(win, &SpatialXdgWindow::onRequestMinimize,
+                                        &toplevel->events.request_minimize);
+    win->set_title_listener.bind(win, &SpatialXdgWindow::onSetTitle, &toplevel->events.set_title);
+    win->set_app_id_listener.bind(win, &SpatialXdgWindow::onSetAppId, &toplevel->events.set_app_id);
 }
 
 void SpatialCompositor::attachWindowToPortal(SpatialXdgWindow& win) {
@@ -209,46 +325,11 @@ void SpatialCompositor::buildWindowNodes(SpatialXdgWindow& win, struct wlr_xdg_t
         return;
     }
 
-    std::string title = toplevel->title ? toplevel->title : (toplevel->app_id ? toplevel->app_id : "Wayland Window");
-    win.title_label = std::make_shared<SpatialLabel>(title, scene_->font, 0.0011f, glm::vec4(0.85f, 0.92f, 1.0f, 1.0f));
+    win.title_label = std::make_shared<SpatialLabel>(resolveWindowTitle(toplevel), scene_->font,
+                                                     0.0011f, glm::vec4(0.85f, 0.92f, 1.0f, 1.0f));
     win.title_label->transform.position = glm::vec3(0.0f, 0.42f, 0.003f);
     win.title_label->claims_pointer_input = false;   // text is not a grab handle
     win.frame_panel->addChild(win.title_label);
-}
-
-void SpatialCompositor::bindWindowInput(SpatialXdgWindow& win, struct wlr_surface* surface) {
-    if (!win.surface_host) return;
-
-    // The captured raw pointers are cleared by clearInputRouting() the moment
-    // either destroy signal fires, so they cannot outlive the seat or surface.
-    SpatialCompositor* comp = this;
-
-    win.surface_host->on_surface_pointer_enter = [comp, surface](float u, float v) {
-        if (!surface) return;
-        comp->notifySeatPointerEnter(surface, u * surface->current.width,
-                                     v * surface->current.height);
-    };
-
-    win.surface_host->on_surface_pointer_motion = [comp, surface](float u, float v) {
-        if (!surface) return;
-        comp->notifySeatPointerMotion(surface, u * surface->current.width,
-                                      v * surface->current.height);
-    };
-
-    win.surface_host->on_surface_pointer_leave = [comp]() {
-        comp->notifySeatPointerLeave();
-    };
-
-    win.surface_host->on_surface_button = [comp, surface](uint32_t button, bool down) {
-        if (down) {
-            comp->focusSurface(surface);
-        }
-        comp->notifySeatPointerButton(sceneButtonToEvdev(button), down);
-    };
-
-    win.surface_host->on_surface_key = [comp](uint32_t key, bool pressed) {
-        comp->notifySeatSurfaceKey(key, pressed);
-    };
 }
 
 // --- SpatialCompositor - client buffer import (SHM only this phase) ---
@@ -326,8 +407,17 @@ void SpatialCompositor::onFramePresented(const struct timespec& when) {
     // they requested. Releasing it here, once per presented frame, is what turns
     // a single static buffer into a live surface.
     for (auto& win : windows_) {
-        if (win && win->mapped && win->surface) {
+        // A minimised window is out of the scene: a frame callback would be
+        // telling a client to draw what nobody is going to look at.
+        if (win && win->mapped && !win->minimized && win->surface) {
             wlr_surface_send_frame_done(win->surface, &when);
+        }
+    }
+    // Subsurfaces carry their own frame callbacks: the parent's does not reach
+    // them, and a video pane that never gets one renders exactly one frame.
+    for (auto& sub : subsurfaces_) {
+        if (sub && sub->mapped && sub->surface) {
+            wlr_surface_send_frame_done(sub->surface, &when);
         }
     }
     // Popups throttle on frame callbacks exactly as toplevels do; a menu that
@@ -373,16 +463,11 @@ void SpatialCompositor::drainDestroyedWindows() {
             portalRoot()->removeChild(win->frame_panel);
         }
         // Out of the scene first, texture second: releaseTexture waits for the
-        // device to idle, so nothing can still be sampling it by then.
-        if (win->surface_host) {
-            // Removal from the tree is not enough: focus and the implicit grab
-            // are strong references held outside it.
-            if (scene_) scene_->releaseNode(win->surface_host);
-            win->surface_host->setTexture(nullptr);
-        }
-        if (texture_bridge_ && win->client_texture) {
-            texture_bridge_->releaseTexture(win->client_texture);
-        }
+        // device to idle, so nothing can still be sampling it by then. Removal
+        // from the tree is not enough - focus and the implicit grab are strong
+        // references held outside it, and the frame panel can hold both.
+        if (scene_) scene_->releaseNode(win->frame_panel);
+        releaseChildHost(win->surface_host, win->client_texture);
     }
 }
 

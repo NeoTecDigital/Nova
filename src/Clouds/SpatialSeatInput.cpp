@@ -82,11 +82,15 @@ void SpatialSeatDevice::beginDestruction() {
     if (destroy_scheduled) return;
     destroy_scheduled = true;
 
+    // Nulled AFTER removal, not before: removeInputDevice finds the entry by
+    // this very pointer, so clearing it first left the dead device in the list
+    // and its removal unlogged. The device is still alive for the duration of
+    // its own destroy signal, which is the only thing the search needs.
     struct wlr_input_device* dying = device;
-    device = nullptr;
     if (compositor) {
         compositor->removeInputDevice(dying);
     }
+    device = nullptr;
 }
 
 void SpatialSeatDevice::onKey(void* data) {
@@ -148,11 +152,13 @@ void SpatialOutput::beginDestruction() {
     if (destroy_scheduled) return;
     destroy_scheduled = true;
 
+    // Same ordering as SpatialSeatDevice: removeOutput finds the entry by this
+    // pointer, and the wlr_output is alive for its own destroy signal.
     struct wlr_output* dying = output;
-    output = nullptr;
     if (compositor) {
         compositor->removeOutput(dying);
     }
+    output = nullptr;
 }
 
 void SpatialOutput::onDestroy(void*) {
@@ -409,6 +415,43 @@ void SpatialCompositor::notifySeatPointerFrame() {
     closePointerGroup();
 }
 
+// --- SpatialCompositor - selection and cursor policy ---
+
+void SpatialCompositor::onRequestSetSelection(void* data) {
+    auto event = static_cast<struct wlr_seat_request_set_selection_event*>(data);
+    if (!seat_ || !event) return;
+
+    // wlroots asks before it acts because only the compositor knows whether the
+    // client may own the clipboard. The rule here is the one every desktop runs
+    // on - the client that asked owns it - and from that point wlroots offers
+    // the source to whichever client holds keyboard focus, which is why nothing
+    // below has to know anything about clients or offers.
+    wlr_seat_set_selection(seat_, event->source, event->serial);
+}
+
+void SpatialCompositor::onRequestSetPrimarySelection(void* data) {
+    auto event = static_cast<struct wlr_seat_request_set_primary_selection_event*>(data);
+    if (!seat_ || !event) return;
+    wlr_seat_set_primary_selection(seat_, event->source, event->serial);
+}
+
+void SpatialCompositor::onRequestSetCursor(void* data) {
+    auto event = static_cast<struct wlr_seat_pointer_request_set_cursor_event*>(data);
+    if (!event) return;
+
+    // Accepted and deliberately not drawn. The pointer in this session is the
+    // 3D reticle the scene's raycast places; there is no 2D cursor plane to
+    // composite a client's cursor image onto, and lifting one into world space
+    // would be inventing an appearance nobody asked for. The cursor surface
+    // itself is safe by construction: it carries the cursor role, never an xdg
+    // one, so it is never hosted, its commits reach no listener this compositor
+    // bound, and it cannot enter the toplevel path. Refusing instead would be
+    // worse - the protocol offers no refusal, and a client whose set_cursor is
+    // a protocol error is a client that dies on hover.
+    report(LOGGER::DEBUG, "SpatialCompositor - Client set a cursor surface (%p); the reticle is the pointer",
+           static_cast<const void*>(event->surface));
+}
+
 // --- SpatialCompositor - pointer position ---
 
 void SpatialCompositor::processPointerMotionAbsolute(double x_px, double y_px) {
@@ -432,6 +475,12 @@ void SpatialCompositor::processPointerMotionRelative(double dx_px, double dy_px)
 
 void SpatialCompositor::processPointerButton(uint32_t evdev_button, bool pressed) {
     if (!scene_) return;
+
+    // A press outside a grabbing popup takes the menu down before the click is
+    // routed, which is the order xdg-shell describes: the input breaks the
+    // grab, and the surface it landed on still receives it.
+    if (pressed) dismissPopupsOutsidePointer();
+
     scene_->processPointerButton(evdevToSceneButton(evdev_button), pressed);
 }
 

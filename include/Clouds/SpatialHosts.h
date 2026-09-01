@@ -19,6 +19,8 @@ extern "C" {
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #ifdef __cplusplus
 }
@@ -81,6 +83,34 @@ struct SpatialXdgWindow {
     WaylandListener<SpatialXdgWindow> unmap_listener;
     WaylandListener<SpatialXdgWindow> surface_destroy_listener;
     WaylandListener<SpatialXdgWindow> destroy_listener;
+    WaylandListener<SpatialXdgWindow> new_subsurface_listener;
+
+    /**
+     * zxdg_toplevel_decoration_v1 for this toplevel, when the client asked who
+     * draws the frame. Held here rather than in a lifetime object of its own
+     * because that is what it is: a property of one toplevel, created after it
+     * and destroyed with it. Null until the client asks, and again if it drops
+     * the decoration while keeping the window.
+     */
+    struct wlr_xdg_toplevel_decoration_v1* decoration = nullptr;
+    WaylandListener<SpatialXdgWindow> decoration_mode_listener;
+    WaylandListener<SpatialXdgWindow> decoration_destroy_listener;
+
+    // A mode requested before the xdg_surface was initialised cannot be
+    // answered yet - scheduling a configure on one is a wlroots assertion, and
+    // toolkits routinely ask before their first commit - so the initial commit
+    // flushes it.
+    bool decoration_answer_pending = false;
+
+    // xdg_toplevel state requests. Bound because the protocol requires every
+    // one of them to be answered with a configure - even when the answer is
+    // "nothing changed" - and because a title that is only read once at
+    // creation is a label that lies for the rest of the window's life.
+    WaylandListener<SpatialXdgWindow> request_maximize_listener;
+    WaylandListener<SpatialXdgWindow> request_fullscreen_listener;
+    WaylandListener<SpatialXdgWindow> request_minimize_listener;
+    WaylandListener<SpatialXdgWindow> set_title_listener;
+    WaylandListener<SpatialXdgWindow> set_app_id_listener;
 
     // True between wlr_surface.events.map and .unmap. Only mapped windows are in
     // the scene and only mapped windows are sent frame callbacks.
@@ -94,6 +124,12 @@ struct SpatialXdgWindow {
     // xdg-surface and wlr_surface destroy paths cannot schedule it twice.
     bool destroy_scheduled = false;
 
+    // Honoured xdg_toplevel.set_minimized. The window stays mapped in the
+    // protocol sense - the client keeps its buffer and its surface - but its
+    // node is out of the scene and it is paced no frames, which is the closest
+    // honest analogue of a minimised window a portal-less session has.
+    bool minimized = false;
+
     // Detaches before any member is torn down, so the listeners are off the
     // wl_signal lists by the time the scene-node shared_ptrs are released.
     ~SpatialXdgWindow() { detachListeners(); clearInputRouting(); }
@@ -104,6 +140,33 @@ struct SpatialXdgWindow {
     void onUnmap(void* data);
     void onSurfaceDestroy(void* data);
     void onDestroy(void* data);
+    void onNewSubsurface(void* data);
+
+    // Answer a maximize/fullscreen request with a configure. Both land in the
+    // same place because both are answered the same way and the difference is
+    // one field of the same scheduled state. Returns the configure serial, or
+    // zero when the surface cannot take a configure yet.
+    void onRequestMaximize(void*) { answerStateRequest(); }
+    void onRequestFullscreen(void*) { answerStateRequest(); }
+    uint32_t answerStateRequest();
+    void onRequestMinimize(void* data);
+
+    // Adopt a decoration object and answer it. Both are the compositor's call:
+    // it is what knows the frame is drawn server-side.
+    void adoptDecoration(struct wlr_xdg_toplevel_decoration_v1* decoration);
+    void answerDecorationMode();
+    void onDecorationMode(void*) { answerDecorationMode(); }
+    void onDecorationDestroy(void*) {
+        decoration_mode_listener.unbind();
+        decoration_destroy_listener.unbind();
+        decoration = nullptr;
+        decoration_answer_pending = false;
+    }
+
+    // Re-read the toplevel's title/app_id onto the label the frame draws.
+    void onSetTitle(void*) { applyTitle(); }
+    void onSetAppId(void*) { applyTitle(); }
+    void applyTitle();
 
     // Detach every wl_listener this window owns. Idempotent. Must run while the
     // wlr_surface / wlr_xdg_surface that own the signals are still alive.
@@ -113,6 +176,14 @@ struct SpatialXdgWindow {
         unmap_listener.unbind();
         surface_destroy_listener.unbind();
         destroy_listener.unbind();
+        new_subsurface_listener.unbind();
+        request_maximize_listener.unbind();
+        request_fullscreen_listener.unbind();
+        request_minimize_listener.unbind();
+        set_title_listener.unbind();
+        set_app_id_listener.unbind();
+        decoration_mode_listener.unbind();
+        decoration_destroy_listener.unbind();
     }
 
     // Drop the raw wlr_seat / wlr_surface pointers handed to the scene graph.
@@ -155,6 +226,8 @@ struct SpatialXdgPopup {
     WaylandListener<SpatialXdgPopup> unmap_listener;
     WaylandListener<SpatialXdgPopup> surface_destroy_listener;
     WaylandListener<SpatialXdgPopup> destroy_listener;
+    WaylandListener<SpatialXdgPopup> reposition_listener;
+    WaylandListener<SpatialXdgPopup> new_subsurface_listener;
 
     bool mapped = false;
     uint32_t unsupported_format = 0;
@@ -167,6 +240,25 @@ struct SpatialXdgPopup {
     void onUnmap(void* data);
     void onSurfaceDestroy(void* data);
     void onDestroy(void* data);
+    void onReposition(void* data);
+    void onNewSubsurface(void* data);
+
+    /**
+     * Whether this popup took an explicit grab (xdg_popup.grab).
+     *
+     * wlroots 0.19 exposes no grab signal, so the state is read off the object:
+     * wlr_xdg_popup.seat (wlr_xdg_shell.h:101) is null until a grab request
+     * names a seat, and nothing else writes it. grab_link is NOT usable for
+     * this - it is only initialised when the popup is linked into a grab, so
+     * wl_list_empty() on an ungrabbed popup reads uninitialised memory and
+     * answers "grabbed" (measured: every popup looked grabbed, and ungrabbed
+     * menus were dismissed by clicks that should not have touched them).
+     *
+     * Only a grabbing popup is dismissed by a click outside it. A popup that
+     * never grabbed is the client's business, and taking it down would be the
+     * compositor deciding something no one asked it to decide.
+     */
+    bool grabbed() const { return popup && popup->seat != nullptr; }
 
     void detachListeners() {
         commit_listener.unbind();
@@ -174,6 +266,64 @@ struct SpatialXdgPopup {
         unmap_listener.unbind();
         surface_destroy_listener.unbind();
         destroy_listener.unbind();
+        reposition_listener.unbind();
+        new_subsurface_listener.unbind();
+    }
+
+    void beginDestruction();
+};
+
+/**
+ * One wl_subsurface hosted as a child node of its parent surface's node.
+ *
+ * A subsurface is a second buffer the client positions in its parent's own
+ * coordinates - a video pane inside a player, a GL canvas inside a toolkit
+ * window. It has no role object of its own to configure and no say in its own
+ * lifetime: it maps and unmaps with its parent, and the parent's commit is
+ * what applies its position. So the discipline is the popup's, minus the
+ * configure, and the placement is the popup's change of basis, minus the
+ * positioner.
+ */
+struct SpatialSubsurface {
+    SpatialCompositor* compositor = nullptr;
+    WindowHandle handle = INVALID_WINDOW_HANDLE;
+    struct wlr_subsurface* subsurface = nullptr;
+    struct wlr_surface* surface = nullptr;
+
+    // The surface this subsurface is positioned in. Always a surface this
+    // session hosts - a toplevel, a popup, or another subsurface.
+    struct wlr_surface* parent_surface = nullptr;
+
+    std::shared_ptr<SpatialSurfaceHost> surface_host;
+    std::shared_ptr<NovaSpatial::TextureHandle> client_texture;
+
+    WaylandListener<SpatialSubsurface> commit_listener;
+    WaylandListener<SpatialSubsurface> map_listener;
+    WaylandListener<SpatialSubsurface> unmap_listener;
+    WaylandListener<SpatialSubsurface> surface_destroy_listener;
+    WaylandListener<SpatialSubsurface> destroy_listener;
+    WaylandListener<SpatialSubsurface> new_subsurface_listener;
+
+    bool mapped = false;
+    uint32_t unsupported_format = 0;
+    bool destroy_scheduled = false;
+
+    ~SpatialSubsurface() { detachListeners(); }
+
+    void onCommit(void* data);
+    void onMap(void* data);
+    void onUnmap(void* data);
+    void onSurfaceDestroy(void* data);
+    void onDestroy(void* data);
+    void onNewSubsurface(void* data);
+
+    void detachListeners() {
+        commit_listener.unbind();
+        map_listener.unbind();
+        unmap_listener.unbind();
+        surface_destroy_listener.unbind();
+        destroy_listener.unbind();
+        new_subsurface_listener.unbind();
     }
 
     void beginDestruction();

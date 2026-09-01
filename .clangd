@@ -1,0 +1,78 @@
+# Written by Richard Christopher, Copyright 2026 NeoTec Digital
+#
+# clangd configuration for the Clouds/Nova tree.
+#
+# WHY AN EXPLICIT FLAG LIST AND NOT A COMPILATION DATABASE
+# CMAKE_EXPORT_COMPILE_COMMANDS is off in this project (verified: the cache
+# variable is empty and no build/compile_commands.json exists), so clangd falls
+# back to guessing a command from the file's extension and finds none of the
+# dependency headers. Every one of the four recurring false alarms came from
+# that fallback rather than from the code:
+#
+#   1. "wlr/backend.h file not found"        - wlroots lives in a versioned
+#                                              include dir, not /usr/include.
+#   2. "ft2build.h file not found"           - freetype2 is likewise versioned.
+#   3. "incomplete type 'struct wlr_...'"    - the wlroots headers refuse to
+#                                              define anything without
+#                                              WLR_USE_UNSTABLE, so every type
+#                                              is a forward declaration.
+#   4. "no member named ... in struct wlr_*" - same cause as 3, one step later.
+#
+# If CMAKE_EXPORT_COMPILE_COMMANDS is ever turned on, replace this whole file
+# with the two lines under CompilationDatabase below: a real database is always
+# more accurate than a hand-kept list, because it carries the per-target
+# definitions and standard level that this file can only approximate.
+#
+#   CompilationDatabase: build
+#
+# Paths are absolute because clangd resolves a relative -I against the compile
+# command's working directory, which for a fallback command is the directory of
+# the file being edited - i.e. a different place for every file in the tree.
+
+CompileFlags:
+  Add:
+    # Matches CMAKE_CXX_STANDARD 20 in CMakeLists.txt.
+    - -std=c++20
+
+    # wlroots headers are #error guards until this is defined; without it every
+    # wlr_* type is incomplete and every member access is an error.
+    - -DWLR_USE_UNSTABLE
+    # Set on the Nova target for the whole tree; Core/nova_compute.h keys on it.
+    - -DNOVA_COMPUTE_ENABLED
+
+    # First-party roots, mirroring target_include_directories for Clouds.
+    - -I/home/persist/neotec/vazio
+    - -I/home/persist/neotec/vazio/include
+    - -I/home/persist/neotec/vazio/Core
+
+    # Dear ImGui, vendored as a submodule and included unqualified.
+    - -I/home/persist/neotec/vazio/extern/imgui
+    - -I/home/persist/neotec/vazio/extern/imgui/backends
+    # OATS-rs FFI header, generated into the vendored crate's include dir.
+    - -I/home/persist/neotec/vazio/extern/OATS-ffi/include
+
+    # wayland-scanner output. wlr/types/wlr_xdg_shell.h includes
+    # "xdg-shell-protocol.h" by name, and the only copy is the generated one in
+    # the build tree - so this line is what keeps xdg_shell.h resolvable.
+    # A build tree must exist for it; configure once with:
+    #   cmake -S . -B build
+    - -I/home/persist/neotec/vazio/build/protocol
+
+    # System dependencies, exactly as pkg-config reports them:
+    #   wlroots-0.19 -> wlroots-0.19, pixman-1, libdrm
+    #   freetype2    -> freetype2, libpng16
+    #   sdl2         -> SDL2
+    # (xkbcommon and wayland-server report no -I: they live in /usr/include.)
+    - -I/usr/include/wlroots-0.19
+    - -I/usr/include/pixman-1
+    - -I/usr/include/libdrm
+    - -I/usr/include/freetype2
+    - -I/usr/include/libpng16
+    - -isystem/usr/include/SDL2
+
+Diagnostics:
+  # Vendored amalgamations (VulkanMemoryAllocator, fastgltf, imgui) are built
+  # with -w in CMake; suppressing clang-tidy on them here keeps the editor's
+  # diagnostics matched to what the build actually enforces.
+  Suppress:
+    - unused-includes

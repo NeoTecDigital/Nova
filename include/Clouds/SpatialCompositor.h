@@ -1,0 +1,391 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
+#pragma once
+
+#ifndef WLR_USE_UNSTABLE
+#define WLR_USE_UNSTABLE
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include <wayland-server-core.h>
+#include <wlr/backend.h>
+#include <wlr/render/wlr_renderer.h>
+#include <wlr/render/allocator.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/backend/headless.h>
+#include <wlr/backend/multi.h>
+#include <wlr/backend/session.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_pointer.h>
+#include <wlr/util/box.h>
+#include <wlr/util/log.h>
+#include <xkbcommon/xkbcommon.h>
+#ifdef __cplusplus
+}
+#endif
+
+#include "./SpatialHosts.h"
+#include "./SpatialScene.h"
+#include "./Primitives.h"
+#include <cstddef>
+#include <cstdint>
+#include <ctime>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <vector>
+
+namespace Clouds {
+
+class SpatialCompositor {
+public:
+    /**
+     * @param portal_root Scene node mapped client surfaces are inserted under.
+     *        Injected rather than assumed so a Desktop/Portal can be introduced
+     *        later without rewiring a single listener. Falls back to the scene
+     *        root when null, which is what a single-Desktop session wants.
+     */
+    SpatialCompositor(NovaCore* core,
+                      NovaSpatial::TextureBridge* texture_bridge,
+                      std::shared_ptr<SpatialScene> scene,
+                      std::shared_ptr<SpatialNode> portal_root = nullptr,
+                      SpatialCompositorConfig config = {});
+    ~SpatialCompositor();
+
+    SpatialCompositor(const SpatialCompositor&) = delete;
+    SpatialCompositor& operator=(const SpatialCompositor&) = delete;
+
+    // Initialize wlroots Wayland server and protocols
+    bool startServer(const std::string& socket_name = "wayland-clouds-0");
+
+    // Process Wayland event loop iteration
+    void iterateEventLoop(int timeout_ms = 0);
+
+    // Stop and cleanup. Idempotent: every resource is released and nulled.
+    void stop();
+
+    struct wl_display* getDisplay() const { return wl_display_; }
+    const std::string& getSocketName() const { return socket_name_; }
+
+    /**
+     * Whether this session currently owns the seat's devices and outputs.
+     *
+     * False only between a VT switch away and the switch back: wlr_session
+     * revokes the DRM master and the input fds for the duration, so committing
+     * an output would fail and rendering into one would be wasted work. True
+     * whenever there is no session at all - nested and headless backends are
+     * never suspended, and a caller that gates rendering on this must not stall
+     * because no one is managing VTs.
+     */
+    bool isSessionActive() const { return session_active_; }
+
+    // Non-null only when the backend acquired a libseat session, i.e. on DRM.
+    struct wlr_session* getSession() const { return session_; }
+
+    // Extent of the output pointer positions are clamped to. Falls back to the
+    // configured virtual extent until an output has committed a mode.
+    const struct wlr_box& outputBox() const { return output_box_; }
+
+    // Current pointer position in output pixels, after clamping. The reticle is
+    // drawn from the raycast this feeds, not from here; this is the state a
+    // Portal or a test needs to ask about without replaying the input.
+    glm::vec2 pointerPosition() const {
+        return glm::vec2(static_cast<float>(pointer_x_), static_cast<float>(pointer_y_));
+    }
+
+    // Outputs this session has enabled and committed.
+    size_t outputCount() const { return outputs_seen_; }
+
+    // Windows this session hosts, and the subset currently in the scene. The two
+    // differ for every toplevel that exists but has not committed a buffer yet.
+    size_t windowCount() const { return windows_.size(); }
+    size_t mappedWindowCount() const;
+
+    // Popups this session hosts, and the subset currently in the scene.
+    size_t popupCount() const { return popups_.size(); }
+    size_t mappedPopupCount() const;
+
+    /**
+     * Release the frame callbacks every mapped client is blocked on.
+     *
+     * Must be called once per presented frame and never from inside the commit
+     * handler: a client that gets frame_done during its own commit is being told
+     * to draw a frame the compositor has not shown yet.
+     *
+     * @param when Presentation time on CLOCK_MONOTONIC. The caller supplies it
+     *        because the authoritative source moves from "just after the render
+     *        submission returned" to the output present event under the DRM
+     *        backend, and only the call site should have to change.
+     */
+    void onFramePresented(const struct timespec& when);
+
+    // Input routing
+    void processKey(uint32_t keycode, bool pressed, uint32_t time_ms = 0);
+    void focusSurface(struct wlr_surface* surface);
+
+    /**
+     * The one pointer-position entry point, in output pixels.
+     *
+     * Two producers reach it: the interim SDL window, which already knows an
+     * absolute position, and libinput pointers, which only ever report deltas.
+     * Keeping the absolute position here rather than in either producer is what
+     * lets the SDL half be deleted at Phase 3 without the DRM half noticing.
+     */
+    void processPointerMotionAbsolute(double x_px, double y_px);
+
+    // Accumulate a relative delta onto the pointer position, clamped to the
+    // output box. This is the only form libinput devices deliver.
+    void processPointerMotionRelative(double dx_px, double dy_px);
+
+    // Pointer buttons in evdev codes (BTN_LEFT and friends) - the currency the
+    // seat and the clients both speak.
+    void processPointerButton(uint32_t evdev_button, bool pressed);
+
+    // Internal signal handlers
+    void onNewXdgToplevel(void* data);
+    void onNewXdgPopup(void* data);
+    void onNewOutput(void* data);
+    void onNewInput(void* data);
+    void onFallbackModifiers(void* data);
+    void onSessionActive(void* data);
+    void onSessionDestroy(void* data);
+
+    // Hand a window to the kill list. Safe to call from inside a wl_listener
+    // dispatch: the window is only released by drainDestroyedWindows().
+    void removeWindow(WindowHandle handle);
+
+    // Scene insertion / removal driven by wlr_surface map and unmap. Unmapping
+    // takes the window out of the scene; it does not destroy it.
+    void attachWindowToPortal(SpatialXdgWindow& win);
+    void detachWindowFromPortal(SpatialXdgWindow& win);
+
+    // Import the currently committed client buffer into the window's texture.
+    void importSurfaceBuffer(SpatialXdgWindow& win);
+
+    // Popup counterparts of the window paths above. Popups anchor to the node
+    // their parent surface is drawn on rather than to the portal root.
+    void attachPopupToParent(SpatialXdgPopup& popup);
+    void detachPopupFromParent(SpatialXdgPopup& popup);
+    void placePopupOnParent(SpatialXdgPopup& popup);
+    void importPopupBuffer(SpatialXdgPopup& popup);
+    void removePopup(WindowHandle handle);
+
+    // Hand an input device to the kill list. Safe from inside a dispatch.
+    void removeInputDevice(struct wlr_input_device* device);
+
+    // Hand an output to the kill list. Safe from inside a dispatch.
+    void removeOutput(struct wlr_output* output);
+
+    // Forward a key and the modifier state that goes with it. Both halves are
+    // required: a client that gets keys without modifiers never sees Shift.
+    void notifySeatKey(const struct wlr_keyboard_key_event& event, struct wlr_keyboard* source);
+    void notifySeatModifiers(struct wlr_keyboard* source);
+
+    // Forward a key the scene routed to a focused surface. Separate from
+    // notifySeatKey because that one carries a physical device's own event and
+    // its keymap; this one carries a keycode the scene resolved and stamps the
+    // time itself. Both speak raw evdev - the only keycode space a client
+    // understands - and neither invents one.
+    void notifySeatSurfaceKey(uint32_t evdev_keycode, bool pressed);
+
+    /**
+     * --- wl_pointer event groups ---
+     *
+     * GROUPING RULE: one wl_pointer.frame closes exactly one logical group,
+     * and one logical group is one scene-level input sample. Every entry point
+     * below emits the events of a single sample - a ray enter, a ray move, a
+     * button transition, a ray leave - and terminates it with one frame. Never
+     * one frame per event, never one frame per rendered frame.
+     *
+     * This is not optional bookkeeping: wl_pointer >= v5 defines frame as the
+     * end of a group, this seat advertises v9, and every real toolkit buffers
+     * enter/motion/button until the frame arrives. Without it clients receive
+     * the events and act on none of them.
+     *
+     * Every group is closed from here unconditionally, including the two cases
+     * where the frame is redundant or discarded - both measured against
+     * wlroots 0.19.3 rather than assumed:
+     *   - a pointer focus change is framed by wlroots itself, so the enter's
+     *     own frame arrives before ours and ours closes an empty group;
+     *   - after clear_focus there is no focused client left, and
+     *     wlr_seat_pointer_notify_frame drops the frame entirely.
+     * An empty group is a no-op every client already tolerates. Suppressing
+     * these would make correctness depend on wlroots internals no header
+     * documents, and a frame we failed to send is a class of bug this seat is
+     * not going to have twice. The frames that carry the whole weight are the
+     * motion and button groups - the ones a drag is made of.
+     */
+    void notifySeatPointerEnter(struct wlr_surface* surface, double sx, double sy);
+    void notifySeatPointerMotion(struct wlr_surface* surface, double sx, double sy);
+    void notifySeatPointerButton(uint32_t evdev_button, bool pressed);
+    void notifySeatPointerLeave();
+
+    // Close whatever group is still open, if any. Bound to a physical pointer's
+    // events.frame: hardware reports its own group boundaries, and a producer
+    // that emits seat pointer events without closing them is terminated here.
+    // A no-op when the group was already closed, so no empty frame is ever sent.
+    void notifySeatPointerFrame();
+
+    // Node mapped surfaces are parented to. Never null once a scene exists.
+    const std::shared_ptr<SpatialNode>& portalRoot() const;
+
+private:
+    bool initBackendStack();
+    bool createBackend();
+    bool initProtocols();
+    bool ensureVirtualOutput();
+    bool initInput();
+    bool initKeyboard();
+    bool initSocket(const std::string& socket_name);
+    void releaseWindows();
+    void releasePopups();
+    void releaseInput();
+    void releaseBackendStack();
+
+    // The headless backend hosting the virtual output, or null when real
+    // connectors supply the outputs. Either the whole backend (explicit
+    // headless), a child autocreate already built (WLR_BACKENDS=headless), or a
+    // companion added to the multi-backend for the nested case.
+    struct wlr_backend* resolveVirtualOutputHost();
+
+    // Adopt one arriving device onto the seat. Split by type because the two
+    // halves share nothing but the device list they land in.
+    void attachKeyboardDevice(SpatialSeatDevice& seat_device);
+    void attachPointerDevice(SpatialSeatDevice& seat_device);
+
+    // Recompute WL_SEAT_CAPABILITY_* from the devices actually present.
+    void refreshSeatCapabilities();
+
+    // Re-point the seat at a live keyboard after the one it held went away.
+    void restoreSeatKeyboard();
+    bool hasAttachedKeyboard() const;
+
+    // Copy one SHM client buffer into the window texture. Split out so the
+    // pointer-access window stays as narrow as the wlroots contract requires.
+    bool uploadClientPixels(struct wlr_buffer* source,
+                            std::shared_ptr<NovaSpatial::TextureHandle>& texture,
+                            uint32_t& unsupported_format,
+                            WindowHandle handle);
+
+    // Import the committed buffer of any hosted surface into its host node.
+    // Toplevels and popups differ in placement, never in how pixels arrive.
+    void importSurfaceContent(struct wlr_surface* surface,
+                              const std::shared_ptr<SpatialSurfaceHost>& host,
+                              std::shared_ptr<NovaSpatial::TextureHandle>& texture,
+                              uint32_t& unsupported_format,
+                              WindowHandle handle);
+
+    // The scene node a hosted surface is drawn on, or null when the surface is
+    // not one this session hosts. Popups anchor to the node this returns.
+    std::shared_ptr<SpatialSurfaceHost> hostNodeForSurface(struct wlr_surface* surface) const;
+
+    // Release everything on the kill lists. Must never be called from inside a
+    // wl_listener callback.
+    void drainDestroyedWindows();
+    void drainDestroyedPopups();
+    void drainRemovedInputDevices();
+    void drainRemovedOutputs();
+
+    // Pick the mode to commit on an arriving output, and adopt the committed
+    // size as the pointer clamp box.
+    void selectOutputMode(struct wlr_output* output, struct wlr_output_state& state);
+    void adoptOutputBox(struct wlr_output* output);
+
+    // Advertise a committed output as a wl_output global and start tracking it.
+    void publishOutput(struct wlr_output* output);
+    void releaseOutputs();
+
+    // Send wl_pointer.frame and close the open group. Every notifySeatPointer*
+    // entry point ends here, which is what makes the grouping rule one line
+    // rather than a convention four call sites have to remember.
+    void closePointerGroup();
+
+    void buildWindowNodes(SpatialXdgWindow& win, struct wlr_xdg_toplevel* toplevel);
+    void bindWindowInput(SpatialXdgWindow& win, struct wlr_surface* surface);
+    void bindPopupListeners(SpatialXdgPopup& popup, struct wlr_surface* surface);
+    void bindPopupInput(SpatialXdgPopup& popup, struct wlr_surface* surface);
+
+    NovaCore* core_ = nullptr;
+    NovaSpatial::TextureBridge* texture_bridge_ = nullptr;
+    std::shared_ptr<SpatialScene> scene_;
+    std::shared_ptr<SpatialNode> portal_root_;
+    SpatialCompositorConfig config_;
+
+    std::string socket_name_;
+    struct wl_display* wl_display_ = nullptr;
+    struct wl_event_loop* event_loop_ = nullptr;
+    struct wlr_backend* backend_ = nullptr;
+    struct wlr_renderer* renderer_ = nullptr;
+    struct wlr_allocator* allocator_ = nullptr;
+    struct wlr_compositor* compositor_ = nullptr;
+    struct wlr_xdg_shell* xdg_shell_ = nullptr;
+    struct wlr_seat* seat_ = nullptr;
+
+    // Populated by wlr_backend_autocreate on bare metal; null when nested or
+    // headless, which is also what makes the virtual output necessary.
+    struct wlr_session* session_ = nullptr;
+    bool session_active_ = true;
+
+    // The headless backend the virtual output lives on, if any. Never owned
+    // separately: it is either backend_ itself or a child of the multi-backend,
+    // and both are released by wlr_backend_destroy(backend_).
+    struct wlr_backend* virtual_output_host_ = nullptr;
+
+    // Fallback keyboard, kept for the headless case where no device ever
+    // arrives. A real keyboard supersedes it on the seat but does not free it.
+    struct wlr_keyboard* keyboard_ = nullptr;
+    struct xkb_context* xkb_context_ = nullptr;
+    struct xkb_keymap* xkb_keymap_ = nullptr;
+
+    // True between the first wl_pointer event of a group and the frame that
+    // closes it. Never observed outside a single call chain - the seat is only
+    // ever driven from the event loop thread - so a plain bool is the whole of
+    // the state the grouping rule needs.
+    bool pointer_group_open_ = false;
+
+    // Absolute pointer position in output pixels, shared by every producer.
+    double pointer_x_ = 0.0;
+    double pointer_y_ = 0.0;
+    struct wlr_box output_box_ = {0, 0, 0, 0};
+    bool output_box_adopted_ = false;
+
+    // Outputs this session has successfully committed. Zero after the backend
+    // has started is what the virtual-output bridge keys on.
+    size_t outputs_seen_ = 0;
+
+    WaylandListener<SpatialCompositor> new_xdg_toplevel_listener_;
+    WaylandListener<SpatialCompositor> new_xdg_popup_listener_;
+    WaylandListener<SpatialCompositor> new_output_listener_;
+    WaylandListener<SpatialCompositor> new_input_listener_;
+    WaylandListener<SpatialCompositor> fallback_modifiers_listener_;
+    WaylandListener<SpatialCompositor> session_active_listener_;
+    WaylandListener<SpatialCompositor> session_destroy_listener_;
+
+    std::vector<std::shared_ptr<SpatialXdgWindow>> windows_;
+    std::vector<std::shared_ptr<SpatialXdgWindow>> pending_destroy_;
+
+    std::vector<std::shared_ptr<SpatialXdgPopup>> popups_;
+    std::vector<std::shared_ptr<SpatialXdgPopup>> pending_destroy_popups_;
+
+    std::vector<std::shared_ptr<SpatialSeatDevice>> input_devices_;
+    std::vector<std::shared_ptr<SpatialSeatDevice>> pending_destroy_devices_;
+
+    std::vector<std::shared_ptr<SpatialOutput>> outputs_;
+    std::vector<std::shared_ptr<SpatialOutput>> pending_destroy_outputs_;
+
+    // Monotonic per-session counter. Zero is reserved as the invalid handle, so
+    // a default-constructed handle never names a live window.
+    WindowHandle next_window_handle_ = 1;
+};
+
+} // namespace Clouds

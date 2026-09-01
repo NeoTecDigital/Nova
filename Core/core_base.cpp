@@ -127,71 +127,6 @@ bool NovaCore::checkValidationLayerSupport()
     return false;
 }
 
-// Queue family property setting
-void NovaCore::setQueueFamilyProperties(unsigned int i, VkSurfaceKHR surface, bool need_presentation)
-{
-    VkQueueFamilyProperties* queue_family = &queues.families[i];
-    std::string queue_name = "";
-
-    if (queue_family->queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-        queue_name += "{ Graphics } ";
-        queues.indices.graphics_family = i;
-        queues.priorities.push_back(std::vector<float>(queue_family->queueCount, 1.0f));
-        report(LOGGER::VLINE, "\t\tGraphics Family Set.");
-    }
-
-    if (queue_family->queueFlags & VK_QUEUE_COMPUTE_BIT) {
-        queue_name += "{ Compute } ";
-        // A disengaged graphics index compares unequal, so an unseen graphics
-        // family also counts as "dedicated".
-        if (queues.indices.graphics_family != i) {
-            queues.indices.compute_family = i;
-            queues.priorities.push_back(std::vector<float>(queue_family->queueCount, 1.0f));
-            report(LOGGER::VLINE, "\t\tCompute Family Set.");
-        }
-    }
-
-    if (queue_family->queueFlags & VK_QUEUE_TRANSFER_BIT) {
-        queue_name += "{ Transfer } ";
-        if (queues.indices.graphics_family != i) {
-            queues.indices.transfer_family = i;
-            queues.priorities.push_back(std::vector<float>(queue_family->queueCount, 1.0f));
-            report(LOGGER::VLINE, "\t\tTransfer Family Set.");
-        }
-    }
-
-    if (queue_family->queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
-        queue_name += "{ Sparse Binding } ";
-    }
-
-    if (queue_name.empty()) {
-        queue_name = "~ Unknown ~";
-    }
-
-    report(LOGGER::VLINE, "\t\t\tQueue Count: %d", queue_family->queueCount);
-    report(LOGGER::VLINE, "\t\t\t %s", queue_name.c_str());
-}
-
-// Vulkan guarantees a graphics family also supports compute and transfer, so it backs
-// any family that has no dedicated candidate; a compute family backs transfer.
-static void backfillQueueFamilies(QueueFamilyIndices& indices)
-{
-    if (indices.graphics_family.has_value()) {
-        if (!indices.compute_family.has_value()) {
-            report(LOGGER::VLINE, "\t\tNo Dedicated Compute Family. Falling Back to Graphics Family.");
-            indices.compute_family = indices.graphics_family;
-        }
-
-        if (!indices.transfer_family.has_value()) {
-            report(LOGGER::VLINE, "\t\tNo Dedicated Transfer Family. Falling Back to Graphics Family.");
-            indices.transfer_family = indices.graphics_family;
-        }
-    } else if (indices.compute_family.has_value() && !indices.transfer_family.has_value()) {
-        report(LOGGER::VLINE, "\t\tNo Dedicated Transfer Family. Falling Back to Compute Family.");
-        indices.transfer_family = indices.compute_family;
-    }
-}
-
 // Collects the distinct families that were actually found on the selected device.
 static std::set<uint32_t> collectQueueFamilies(const QueueFamilyIndices& indices)
 {
@@ -207,128 +142,6 @@ static std::set<uint32_t> collectQueueFamilies(const QueueFamilyIndices& indices
     }
 
     return families;
-}
-
-// Get queue families
-void NovaCore::getQueueFamilies(VkPhysicalDevice scanned_device, VkSurfaceKHR surface, bool need_presentation)
-{
-    report(LOGGER::VLINE, "\t .. Acquiring Queue Families ..");
-
-    // Each candidate device is scanned from scratch; leftovers from a rejected
-    // device would otherwise make the next one look provisioned.
-    queues.indices.reset();
-    queues.priorities.clear();
-
-    uint32_t queue_family_count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(scanned_device, &queue_family_count, nullptr);
-    queues.families.resize(queue_family_count);
-    vkGetPhysicalDeviceQueueFamilyProperties(scanned_device, &queue_family_count, queues.families.data());
-
-    for (int i = 0; i < queues.families.size(); i++) {
-        report(LOGGER::VLINE, "\t\tQueue Family %d", i);
-
-        // Presentation is only meaningful against a surface; compute-only devices
-        // leave present_family disengaged.
-        if (need_presentation && surface != VK_NULL_HANDLE && !queues.indices.present_family.has_value()) {
-            VkBool32 present_support = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(scanned_device, i, surface, &present_support);
-
-            if (present_support) {
-                queues.indices.present_family = i;
-                report(LOGGER::VLINE, "\t\tPresent Family Set.");
-            }
-        }
-
-        setQueueFamilyProperties(i, surface, need_presentation);
-    }
-
-    backfillQueueFamilies(queues.indices);
-}
-
-// Device extension support check
-static bool checkDeviceExtensionSupport(VkPhysicalDevice device, const std::vector<const char*>& required_extensions)
-{
-    uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-
-    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
-
-    std::set<std::string> requiredExtensions(required_extensions.begin(), required_extensions.end());
-
-    for (const auto& extension : availableExtensions) {
-        requiredExtensions.erase(extension.extensionName);
-    }
-
-    return requiredExtensions.empty();
-}
-
-// Device provision check
-bool NovaCore::deviceProvisioned(VkPhysicalDevice scanned_device, VkSurfaceKHR surface, bool need_swapchain)
-{
-    getQueueFamilies(scanned_device, surface, need_swapchain && surface != VK_NULL_HANDLE);
-
-    // In compute-only mode, we don't need extensions or swapchain support
-    if (!need_swapchain) {
-        return queues.indices.isComplete(false);
-    }
-
-    // Graphics mode: check device extensions
-    const std::vector<const char*> DEVICE_EXTENSIONS = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
-    };
-
-    bool extensionsSupported = checkDeviceExtensionSupport(scanned_device, DEVICE_EXTENSIONS);
-    return queues.indices.isComplete(true) && extensionsSupported;
-}
-
-static const char* deviceTypeName(VkPhysicalDeviceType type)
-{
-    switch (type) {
-        case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return "Integrated GPU";
-        case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:   return "Discrete GPU";
-        case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:    return "Virtual GPU";
-        case VK_PHYSICAL_DEVICE_TYPE_CPU:            return "CPU";
-        default:                                     return "Other";
-    }
-}
-
-// Physical device creation
-void NovaCore::createPhysicalDevice(bool need_presentation, VkSurfaceKHR surface)
-{
-    report(LOGGER::VLINE, "\t .. Selecting Physical Device ..");
-
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-
-    if (deviceCount == 0) {
-        report(LOGGER::ERROR, "Failed to find GPUs with Vulkan support!");
-        throw std::runtime_error("No Vulkan-capable GPU found");
-    }
-
-    std::vector<VkPhysicalDevice> devices(deviceCount);
-    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-
-    for (const auto& device : devices) {
-        if (deviceProvisioned(device, surface, need_presentation)) {
-            physical_device = device;
-            break;
-        }
-    }
-
-    if (physical_device == VK_NULL_HANDLE) {
-        report(LOGGER::ERROR, "Failed to find a suitable GPU!");
-        throw std::runtime_error("No suitable GPU found");
-    }
-
-    VkPhysicalDeviceProperties props;
-    vkGetPhysicalDeviceProperties(physical_device, &props);
-    report(LOGGER::INFO, "Selected GPU: %s", props.deviceName);
-    report(LOGGER::INFO, "Selected GPU Type: %s", deviceTypeName(props.deviceType));
-
-    if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
-        report(LOGGER::WARN, "Selected GPU is a CPU software rasterizer - expect severely degraded throughput");
-    }
 }
 
 // One queue per distinct family. `priority` is borrowed, not copied: it has to
@@ -394,6 +207,13 @@ void NovaCore::createDeviceHandle(const std::vector<VkDeviceQueueCreateInfo>& qu
     std::vector<const char*> deviceExtensions;
     if (need_swapchain_extension) {
         deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    }
+
+    // Resolved at selection time against what the winning device reports, so
+    // every name here is already known to exist on `physical_device`.
+    for (const auto& optional : enabled_device_extensions) {
+        deviceExtensions.push_back(optional.c_str());
+        report(LOGGER::VLINE, "\t\t.. Enabling device extension %s", optional.c_str());
     }
 
     VkDeviceCreateInfo createInfo = {

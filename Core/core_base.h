@@ -1,5 +1,6 @@
 #pragma once
 #include "./modules/atomic/atomic.h"
+#include "./core_device_select.h"
 #include "./components/resource_registry.h"
 #include "./components/vk_memory.h"
 #include "./components/lexicon.h"
@@ -76,6 +77,10 @@ protected:
     // Window extent (may be unused in compute mode)
     VkExtent2D window_extent;
 
+    // Optional device extensions the winning device actually reported, resolved
+    // once at selection time and enabled verbatim on the logical device.
+    std::vector<std::string> enabled_device_extensions;
+
     // Protected constructor (only derived classes can instantiate)
     NovaCore(const std::string& debug_level);
 
@@ -85,6 +90,14 @@ protected:
     // Shared initialization methods
     void createVulkanInstance(bool need_surface_extensions);
     void createPhysicalDevice(bool need_presentation, VkSurfaceKHR surface = VK_NULL_HANDLE);
+
+    /**
+     * Score every candidate that clears the request's gates and keep the best.
+     *
+     * DISCRETE > VIRTUAL > INTEGRATED > CPU, tie-broken by a DRM-node match
+     * against request.drm_fd. Every candidate is reported at INFO.
+     */
+    void createPhysicalDevice(const NovaDeviceRequest& request);
     void createLogicalDevice(bool need_swapchain_extension);
     void createImmediateContext();
     void createSharedCommandPools();
@@ -102,7 +115,20 @@ protected:
     bool checkValidationLayerSupport();
     void getQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface, bool need_presentation);
     bool deviceProvisioned(VkPhysicalDevice device, VkSurfaceKHR surface, bool need_swapchain);
-    void setQueueFamilyProperties(unsigned int i, VkSurfaceKHR surface, bool need_presentation);
+    bool deviceProvisioned(VkPhysicalDevice device, const NovaDeviceRequest& request);
+
+    // Re-scan the winner, resolve its optional extensions, emit the D.3 report.
+    void finalizeDeviceSelection(const NovaDeviceRequest& request);
+    std::vector<std::string> resolveOptionalExtensions(VkPhysicalDevice device,
+                                                       const std::vector<const char*>& wanted);
+    /**
+     * Record what family `index` can do on the device currently being scanned.
+     *
+     * Takes no surface and no presentation flag: presentation is a property of
+     * a (family, surface) pair that getQueueFamilies() resolves itself, and
+     * carrying them here only made two parameters that were never read.
+     */
+    void setQueueFamilyProperties(uint32_t index);
 
     void _blankContext();
     void setWindowExtent(VkExtent2D extent);
@@ -147,4 +173,14 @@ public:
     VkDevice getDevice() const { return logical_device; }
     VkInstance getInstance() const { return instance; }
     VkPhysicalDevice getPhysicalDevice() const { return physical_device; }
+
+    // Family every render submission and every graphics immediate uses. What a
+    // caller needs to name the other side of a queue-family ownership transfer.
+    // UINT32_MAX on a device that exposes no graphics family.
+    uint32_t getGraphicsFamilyIndex() const {
+        return queues.indices.graphics_family.value_or(UINT32_MAX);
+    }
+
+    // True when `name` was resolved and enabled on the logical device.
+    bool hasDeviceExtension(const char* name) const;
 };

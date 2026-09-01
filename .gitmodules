@@ -1,6 +1,9 @@
-[submodule "Core/external/tinyobj"]
-	path = Core/external/tinyobj
-	url = git@github.com:tinyobjloader/tinyobjloader.git
-[submodule "Core/components/extern/fastgltf"]
-	path = Core/components/extern/fastgltf
-	url = git@github.com:BigStickStudio/fastgltf.git
+[submodule "extern/imgui"]
+	path = extern/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "extern/lumberjack"]
+	path = extern/lumberjack
+	url = git@github.com:neotecdigital/lumberjack.git
+[submodule "extern/OATS-rs"]
+	path = extern/OATS-rs
+	url = git@github.com:NeoTecDigital/OATS-rs.git

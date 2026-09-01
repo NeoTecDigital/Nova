@@ -1,25 +1,38 @@
-VULKAN_SDK_PATH = /usr/include/vulkan
-STB_PATH = /usr/include/stb
-TINYOBJ_PATH = ./Core/components/extern/tinyobj/
-VK_EXP_PATH = /etc/vulkan/explicit_layer.d
+# Written by Richard Christopher, Copyright 2026 NeoTec Digital
+#
+# This Makefile no longer defines its own source list. It used to carry a private
+# copy of NOVA_SOURCES that diverged from CMakeLists.txt (it had
+# Core/modules/atomic/atomic.cpp and Core/modules/pipeline/scene.cpp; CMake did
+# not), which left NovaCoreLegacy::updateUniformBuffer unresolved in libNova.a.
+#
+# CMakeLists.txt is now the single source of truth for the Nova source set.
+# Everything here delegates to it so the two can never diverge again.
 
-CFLAGS = -std=c++20 -I $(VULKAN_SDK_PATH) -I $(STB_PATH) -I $(TINYOBJ_PATH)
-LDFLAGS = -L $(VULKAN_SDK_PATH) -lSDL2 -lvulkan -ldl -pthread
-NOVA_SOURCES = ./Nova.cpp ./Core/core.cpp ./Core/core_base.cpp ./Core/nova_compute.cpp ./Core/nova_graphics.cpp \
-               ./Core/components/genesis.cpp ./Core/components/logger.cpp \
-               ./Core/modules/device.cpp ./Core/modules/management.cpp ./Core/modules/presentation.cpp \
-               ./Core/modules/render.cpp ./Core/modules/atomic/atomic.cpp \
-               ./Core/modules/camera/camera.cpp ./Core/modules/camera/perspective.cpp \
-               ./Core/modules/pipeline/pipeline.cpp ./Core/modules/pipeline/scene.cpp
+BUILD_DIR ?= build
+CMAKE     ?= cmake
+JOBS      ?= $(shell nproc 2>/dev/null || echo 4)
 
-all: wavecube_compute
+.PHONY: all configure wavecube_compute Clouds test clean distclean
 
-wavecube_compute: wavecube_compute.cpp
-	@echo "Building WaveCube compute binary..."
-	g++ $(CFLAGS) -o wavecube_compute wavecube_compute.cpp $(NOVA_SOURCES) $(LDFLAGS)
-	@echo "✅ Built: wavecube_compute"
+all: configure
+	$(CMAKE) --build $(BUILD_DIR) -j$(JOBS)
+
+configure: $(BUILD_DIR)/CMakeCache.txt
+
+$(BUILD_DIR)/CMakeCache.txt:
+	$(CMAKE) -S . -B $(BUILD_DIR)
+
+wavecube_compute: configure
+	$(CMAKE) --build $(BUILD_DIR) -j$(JOBS) --target wavecube_compute
+
+Clouds: configure
+	$(CMAKE) --build $(BUILD_DIR) -j$(JOBS) --target Clouds
+
+test: all
+	cd $(BUILD_DIR) && ctest --output-on-failure
 
 clean:
-	rm -f wavecube_compute
+	@if [ -d $(BUILD_DIR) ]; then $(CMAKE) --build $(BUILD_DIR) --target clean; fi
 
-.PHONY: all clean
+distclean:
+	rm -rf $(BUILD_DIR)

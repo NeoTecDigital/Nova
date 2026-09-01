@@ -50,17 +50,8 @@ Nova::Nova(NovaConfig config)
                 return;
             }
 
-            // Create Vulkan surface from SDL window
-            VkSurfaceKHR surface;
-            if (!SDL_Vulkan_CreateSurface(_window, VK_NULL_HANDLE, &surface)) {
-                report(LOGGER::ERROR, "Nova - Failed to create Vulkan surface");
-                SDL_DestroyWindow(_window);
-                SDL_Quit();
-                return;
-            }
-
             report(LOGGER::INFO, "Nova - Graphics mode: creating NovaGraphics instance ..");
-            _architect_graphics = new NovaGraphics(config.screen, config.debug_level, surface);
+            _architect_graphics = new NovaGraphics(config.screen, config.debug_level, _window);
             _architect = _architect_graphics;  // Legacy compatibility
 
             // Initialize graphics pipeline

@@ -41,6 +41,7 @@ class Nova {
         NovaCore* getCore();  // Base interface (compute or graphics)
         NovaCompute* getCompute();  // Compute-only interface (nullptr if graphics mode)
         NovaGraphics* getGraphics();  // Graphics interface (nullptr if compute mode)
+        struct SDL_Window* getWindow() const { return _window; }
 
     private:
         NovaConfig _config;

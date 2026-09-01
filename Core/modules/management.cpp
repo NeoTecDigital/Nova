@@ -301,7 +301,7 @@ void NovaCoreLegacy::createCommandPool()
         if (!compute_only) {
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
                 char name[32];
-                sprintf(name, "Graphics %d", i);
+                snprintf(name, sizeof(name), "Graphics %zu", i);
                 VkCommandPoolCreateInfo _gfx_cmd_pool_create_info = createCommandPoolInfo(queues.indices.graphics_family.value(), name);
                 VK_TRY(vkCreateCommandPool(logical_device, &_gfx_cmd_pool_create_info, nullptr, &frames[i].cmd.pool));
 
@@ -367,7 +367,7 @@ void NovaCoreLegacy::createCommandBuffers()
         if (!compute_only) {
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
                 char name[32];
-                sprintf(name, "Graphics %d", i);
+                snprintf(name, sizeof(name), "Graphics %zu", i);
                 VkCommandBufferAllocateInfo _gfx_cmd_buf_alloc_info = createCommandBuffersInfo(frames[i].cmd.pool, name);
                 VK_TRY(vkAllocateCommandBuffers(logical_device, &_gfx_cmd_buf_alloc_info, &frames[i].cmd.buffer));
             }
@@ -611,12 +611,14 @@ Buffer_T NovaCoreLegacy::createEphemeralBuffer(size_t size, VkBufferUsageFlags f
     {
         report(LOGGER::VLINE, "\t .. Creating Ephemeral Buffer ..");
 
-        Buffer_T buffer;
+        Buffer_T buffer{};
     
         VkBufferCreateInfo _buffer_info = getBufferInfo(size, flags);
         VmaAllocationCreateInfo _alloc_info = getVMAAllocationInfo(mem_usage);
 
-        VK_TRY(vmaCreateBuffer(allocator, &_buffer_info, &_alloc_info, &buffer.buffer, &buffer.allocation, nullptr));
+        // pAllocationInfo must be supplied so Buffer_T::info carries the mapped
+        // pointer and real size; VMA_ALLOCATION_CREATE_MAPPED_BIT is set above.
+        VK_TRY(vmaCreateBuffer(allocator, &_buffer_info, &_alloc_info, &buffer.buffer, &buffer.allocation, &buffer.info));
 
         return buffer;
     }

@@ -27,10 +27,13 @@ struct VertexRange {
     size_t end;
 };
 
+// Members are default-initialized: `info` in particular is only meaningful once a
+// vmaCreateBuffer call fills it in, and a garbage size/pMappedData read like a
+// valid mapping to callers. Zero is the unambiguous "not allocated yet" state.
 struct Buffer_T {
-    VkBuffer buffer;
-    VmaAllocation allocation;
-    VmaAllocationInfo info;
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VmaAllocation allocation = VK_NULL_HANDLE;
+    VmaAllocationInfo info = {};
 };
 
 struct MeshBuffer {
@@ -92,14 +95,25 @@ struct FrameData
 
 struct QueueFamilyIndices 
     {
-        std::optional<unsigned int> graphics_family = -1;
-        std::optional<unsigned int> present_family = -1;
-        std::optional<unsigned int> transfer_family = -1;
-        std::optional<unsigned int> compute_family = -1;
+        // Left disengaged until a matching family is found on the scanned device.
+        std::optional<unsigned int> graphics_family;
+        std::optional<unsigned int> present_family;
+        std::optional<unsigned int> transfer_family;
+        std::optional<unsigned int> compute_family;
 
-        bool isComplete() {
-            return graphics_family >= 0 && present_family >= 0 && transfer_family >= 0 && compute_family >= 0;
-        }
+        void reset() { *this = QueueFamilyIndices{}; }
+
+        // Every mode dispatches work and staging copies.
+        bool hasComputeQueues() const 
+            { return compute_family.has_value() && transfer_family.has_value(); }
+
+        // Surface-backed rendering additionally needs a graphics and a present family.
+        bool hasPresentQueues() const 
+            { return graphics_family.has_value() && present_family.has_value(); }
+
+        // needs_present: true for surface-backed (graphics) devices, false for compute-only.
+        bool isComplete(bool needs_present) const 
+            { return hasComputeQueues() && (!needs_present || hasPresentQueues()); }
     };
 
 struct Immediate

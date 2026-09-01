@@ -54,11 +54,12 @@ public:
     bool framebuffer_resized = false;
 
     /**
-     * Constructor - Initialize graphics mode
+     * Constructor - Initialize graphics mode with SDL window
      * @param extent Window extent (width, height)
      * @param debug_level Logging level
-     * @param surface Vulkan surface (created by SDL/GLFW)
+     * @param window SDL window handle
      */
+    NovaGraphics(VkExtent2D extent, const std::string& debug_level, struct SDL_Window* window);
     NovaGraphics(VkExtent2D extent, const std::string& debug_level, VkSurfaceKHR surface);
 
     /**
@@ -67,9 +68,10 @@ public:
     ~NovaGraphics() override;
 
     /**
-     * Render a frame
+     * Render a frame with custom rendering callback
      */
     void drawFrame();
+    void renderFrame(std::function<void(VkCommandBuffer, uint32_t)>&& render_callback);
 
     /**
      * Update window extent (for resize)
@@ -84,9 +86,29 @@ public:
     void constructGraphicsPipeline(const std::string& vert = "", const std::string& frag = "");
 
     /**
+     * Index of the frame-in-flight slot currently being RECORDED.
+     *
+     * frame_ct is incremented at the very end of renderFrame(), after present,
+     * so during the render callback this returns the slot whose in-flight fence
+     * was already waited on at the top of renderFrame(). Per-frame resources
+     * indexed by this value are therefore guaranteed free of GPU readers.
+     */
+    uint32_t getCurrentFrameIndex() const { return frame_ct % MAX_FRAMES_IN_FLIGHT; }
+
+    /**
      * Get swapchain context
      */
     SwapChainContext& getSwapchain() { return swapchain; }
+
+    /**
+     * Get render pass
+     */
+    VkRenderPass getRenderPass() const { return render_pass; }
+
+    /**
+     * Get window extent
+     */
+    VkExtent2D getWindowExtent() const { return window_extent; }
 
     /**
      * Get graphics queue

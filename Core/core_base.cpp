@@ -33,10 +33,10 @@ void NovaCore::_blankContext()
 
     queues.compute = VK_NULL_HANDLE;
     queues.transfer = VK_NULL_HANDLE;
+    queues.graphics = VK_NULL_HANDLE;
 
-    immediate.fence = VK_NULL_HANDLE;
-    immediate.cmd = VK_NULL_HANDLE;
-    immediate.pool = VK_NULL_HANDLE;
+    immediate = ImmediateContext{};
+    graphics_immediate = ImmediateContext{};
 
     compute_pool = VK_NULL_HANDLE;
     transfer_pool = VK_NULL_HANDLE;
@@ -142,7 +142,9 @@ void NovaCore::setQueueFamilyProperties(unsigned int i, VkSurfaceKHR surface, bo
 
     if (queue_family->queueFlags & VK_QUEUE_COMPUTE_BIT) {
         queue_name += "{ Compute } ";
-        if (queues.indices.graphics_family.value() != i) {
+        // A disengaged graphics index compares unequal, so an unseen graphics
+        // family also counts as "dedicated".
+        if (queues.indices.graphics_family != i) {
             queues.indices.compute_family = i;
             queues.priorities.push_back(std::vector<float>(queue_family->queueCount, 1.0f));
             report(LOGGER::VLINE, "\t\tCompute Family Set.");
@@ -151,7 +153,7 @@ void NovaCore::setQueueFamilyProperties(unsigned int i, VkSurfaceKHR surface, bo
 
     if (queue_family->queueFlags & VK_QUEUE_TRANSFER_BIT) {
         queue_name += "{ Transfer } ";
-        if (queues.indices.graphics_family.value() != i) {
+        if (queues.indices.graphics_family != i) {
             queues.indices.transfer_family = i;
             queues.priorities.push_back(std::vector<float>(queue_family->queueCount, 1.0f));
             report(LOGGER::VLINE, "\t\tTransfer Family Set.");
@@ -170,10 +172,52 @@ void NovaCore::setQueueFamilyProperties(unsigned int i, VkSurfaceKHR surface, bo
     report(LOGGER::VLINE, "\t\t\t %s", queue_name.c_str());
 }
 
+// Vulkan guarantees a graphics family also supports compute and transfer, so it backs
+// any family that has no dedicated candidate; a compute family backs transfer.
+static void backfillQueueFamilies(QueueFamilyIndices& indices)
+{
+    if (indices.graphics_family.has_value()) {
+        if (!indices.compute_family.has_value()) {
+            report(LOGGER::VLINE, "\t\tNo Dedicated Compute Family. Falling Back to Graphics Family.");
+            indices.compute_family = indices.graphics_family;
+        }
+
+        if (!indices.transfer_family.has_value()) {
+            report(LOGGER::VLINE, "\t\tNo Dedicated Transfer Family. Falling Back to Graphics Family.");
+            indices.transfer_family = indices.graphics_family;
+        }
+    } else if (indices.compute_family.has_value() && !indices.transfer_family.has_value()) {
+        report(LOGGER::VLINE, "\t\tNo Dedicated Transfer Family. Falling Back to Compute Family.");
+        indices.transfer_family = indices.compute_family;
+    }
+}
+
+// Collects the distinct families that were actually found on the selected device.
+static std::set<uint32_t> collectQueueFamilies(const QueueFamilyIndices& indices)
+{
+    std::set<uint32_t> families;
+
+    for (const auto& family : { indices.graphics_family,
+                                indices.present_family,
+                                indices.transfer_family,
+                                indices.compute_family }) {
+        if (family.has_value()) {
+            families.insert(family.value());
+        }
+    }
+
+    return families;
+}
+
 // Get queue families
 void NovaCore::getQueueFamilies(VkPhysicalDevice scanned_device, VkSurfaceKHR surface, bool need_presentation)
 {
     report(LOGGER::VLINE, "\t .. Acquiring Queue Families ..");
+
+    // Each candidate device is scanned from scratch; leftovers from a rejected
+    // device would otherwise make the next one look provisioned.
+    queues.indices.reset();
+    queues.priorities.clear();
 
     uint32_t queue_family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(scanned_device, &queue_family_count, nullptr);
@@ -183,36 +227,22 @@ void NovaCore::getQueueFamilies(VkPhysicalDevice scanned_device, VkSurfaceKHR su
     for (int i = 0; i < queues.families.size(); i++) {
         report(LOGGER::VLINE, "\t\tQueue Family %d", i);
 
-        // Check for presentation support if needed
-        if (need_presentation && surface != VK_NULL_HANDLE) {
-            if (queues.indices.present_family.value() == -1) {
-                VkBool32 present_support = false;
-                vkGetPhysicalDeviceSurfaceSupportKHR(scanned_device, i, surface, &present_support);
+        // Presentation is only meaningful against a surface; compute-only devices
+        // leave present_family disengaged.
+        if (need_presentation && surface != VK_NULL_HANDLE && !queues.indices.present_family.has_value()) {
+            VkBool32 present_support = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(scanned_device, i, surface, &present_support);
 
-                if (present_support) {
-                    queues.indices.present_family = i;
-                    report(LOGGER::VLINE, "\t\tPresent Family Set.");
-                }
-            }
-        } else if (!need_presentation) {
-            // In compute-only mode, set present family to first graphics family (dummy value)
-            if (queues.indices.present_family.value() == -1) {
-                if (queues.families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-                    queues.indices.present_family = i;
-                    report(LOGGER::VLINE, "\t\tPresent Family Set (compute-only, dummy value)");
-                }
+            if (present_support) {
+                queues.indices.present_family = i;
+                report(LOGGER::VLINE, "\t\tPresent Family Set.");
             }
         }
 
         setQueueFamilyProperties(i, surface, need_presentation);
     }
 
-    // Check if the queues are complete and set transfer/compute family to graphics family if not set
-    if (!queues.indices.isComplete()) {
-        report(LOGGER::VLINE, "\t\tQueue Families Incomplete. Setting Transfer/Compute Family to Graphics Family.");
-        queues.indices.transfer_family = queues.indices.graphics_family.value();
-        queues.indices.compute_family = queues.indices.graphics_family.value();
-    }
+    backfillQueueFamilies(queues.indices);
 }
 
 // Device extension support check
@@ -236,11 +266,11 @@ static bool checkDeviceExtensionSupport(VkPhysicalDevice device, const std::vect
 // Device provision check
 bool NovaCore::deviceProvisioned(VkPhysicalDevice scanned_device, VkSurfaceKHR surface, bool need_swapchain)
 {
-    getQueueFamilies(scanned_device, surface, surface != VK_NULL_HANDLE);
+    getQueueFamilies(scanned_device, surface, need_swapchain && surface != VK_NULL_HANDLE);
 
     // In compute-only mode, we don't need extensions or swapchain support
     if (!need_swapchain) {
-        return queues.indices.isComplete();
+        return queues.indices.isComplete(false);
     }
 
     // Graphics mode: check device extensions
@@ -249,7 +279,18 @@ bool NovaCore::deviceProvisioned(VkPhysicalDevice scanned_device, VkSurfaceKHR s
     };
 
     bool extensionsSupported = checkDeviceExtensionSupport(scanned_device, DEVICE_EXTENSIONS);
-    return queues.indices.isComplete() && extensionsSupported;
+    return queues.indices.isComplete(true) && extensionsSupported;
+}
+
+static const char* deviceTypeName(VkPhysicalDeviceType type)
+{
+    switch (type) {
+        case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return "Integrated GPU";
+        case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:   return "Discrete GPU";
+        case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:    return "Virtual GPU";
+        case VK_PHYSICAL_DEVICE_TYPE_CPU:            return "CPU";
+        default:                                     return "Other";
+    }
 }
 
 // Physical device creation
@@ -283,6 +324,31 @@ void NovaCore::createPhysicalDevice(bool need_presentation, VkSurfaceKHR surface
     VkPhysicalDeviceProperties props;
     vkGetPhysicalDeviceProperties(physical_device, &props);
     report(LOGGER::INFO, "Selected GPU: %s", props.deviceName);
+    report(LOGGER::INFO, "Selected GPU Type: %s", deviceTypeName(props.deviceType));
+
+    if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
+        report(LOGGER::WARN, "Selected GPU is a CPU software rasterizer - expect severely degraded throughput");
+    }
+}
+
+// One queue per distinct family. `priority` is borrowed, not copied: it has to
+// outlive the VkDeviceCreateInfo these infos are handed to.
+static std::vector<VkDeviceQueueCreateInfo> buildQueueCreateInfos(const std::set<uint32_t>& families,
+                                                                  const float& priority)
+{
+    std::vector<VkDeviceQueueCreateInfo> infos;
+    infos.reserve(families.size());
+
+    for (uint32_t family : families) {
+        infos.push_back(VkDeviceQueueCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueFamilyIndex = family,
+            .queueCount = 1,
+            .pQueuePriorities = &priority
+        });
+    }
+
+    return infos;
 }
 
 // Logical device creation
@@ -290,66 +356,23 @@ void NovaCore::createLogicalDevice(bool need_swapchain_extension)
 {
     report(LOGGER::VLINE, "\t .. Creating Logical Device ..");
 
-    // Create unique queue create infos
-    std::set<uint32_t> uniqueQueueFamilies = {
-        queues.indices.graphics_family.value(),
-        queues.indices.transfer_family.value(),
-        queues.indices.compute_family.value()
-    };
+    // Only request families that were actually found (compute-only devices have no graphics family)
+    const std::set<uint32_t> uniqueQueueFamilies = collectQueueFamilies(queues.indices);
 
-    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-    float queuePriority = 1.0f;
-
-    for (uint32_t queueFamily : uniqueQueueFamilies) {
-        VkDeviceQueueCreateInfo queueCreateInfo = {
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .queueFamilyIndex = queueFamily,
-            .queueCount = 1,
-            .pQueuePriorities = &queuePriority
-        };
-        queueCreateInfos.push_back(queueCreateInfo);
+    if (uniqueQueueFamilies.empty()) {
+        report(LOGGER::ERROR, "No queue families resolved for the selected device!");
+        throw std::runtime_error("No queue families resolved for the selected device");
     }
 
-    VkPhysicalDeviceFeatures deviceFeatures{};
-    deviceFeatures.samplerAnisotropy = VK_TRUE;
+    const float queuePriority = 1.0f;
+    createDeviceHandle(buildQueueCreateInfos(uniqueQueueFamilies, queuePriority),
+                       need_swapchain_extension);
 
-    // Device extensions
-    std::vector<const char*> deviceExtensions;
-    if (need_swapchain_extension) {
-        deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    }
+    acquireQueueHandles();
 
-    VkDeviceCreateInfo createInfo = {
-        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
-        .pQueueCreateInfos = queueCreateInfos.data(),
-        .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
-        .ppEnabledExtensionNames = deviceExtensions.data(),
-        .pEnabledFeatures = &deviceFeatures
-    };
-
-    VK_TRY(vkCreateDevice(physical_device, &createInfo, nullptr, &logical_device));
-
-    // Get queue handles
-    vkGetDeviceQueue(logical_device, queues.indices.compute_family.value(), 0, &queues.compute);
-    vkGetDeviceQueue(logical_device, queues.indices.transfer_family.value(), 0, &queues.transfer);
-
-    // Create VMA allocator
-    VmaAllocatorCreateInfo allocatorInfo = {
-        .physicalDevice = physical_device,
-        .device = logical_device,
-        .instance = instance
-    };
-    VK_TRY(vmaCreateAllocator(&allocatorInfo, &allocator));
-
-    // Register for cleanup
-    resource_registry.register_resource("vma_allocator", [this]() {
-        if (allocator != VK_NULL_HANDLE) {
-            vmaDestroyAllocator(allocator);
-            allocator = VK_NULL_HANDLE;
-        }
-    });
-
+    // ResourceRegistry tears down LIFO: registration order is the INVERSE of
+    // destruction order. vmaDestroyAllocator calls vkFreeMemory, so the device must
+    // outlive the allocator -- register the device FIRST to have it destroyed LAST.
     resource_registry.register_resource("logical_device", [this]() {
         if (logical_device != VK_NULL_HANDLE) {
             vkDestroyDevice(logical_device, nullptr);
@@ -357,7 +380,102 @@ void NovaCore::createLogicalDevice(bool need_swapchain_extension)
         }
     });
 
+    createMemoryAllocator();
+
     report(LOGGER::INFO, "Logical device created");
+}
+
+void NovaCore::createDeviceHandle(const std::vector<VkDeviceQueueCreateInfo>& queue_infos,
+                                  bool need_swapchain_extension)
+{
+    VkPhysicalDeviceFeatures deviceFeatures{};
+    deviceFeatures.samplerAnisotropy = VK_TRUE;
+
+    std::vector<const char*> deviceExtensions;
+    if (need_swapchain_extension) {
+        deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    }
+
+    VkDeviceCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .queueCreateInfoCount = static_cast<uint32_t>(queue_infos.size()),
+        .pQueueCreateInfos = queue_infos.data(),
+        .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
+        .ppEnabledExtensionNames = deviceExtensions.data(),
+        .pEnabledFeatures = &deviceFeatures
+    };
+
+    VK_TRY(vkCreateDevice(physical_device, &createInfo, nullptr, &logical_device));
+}
+
+// One queue per resolved family, index 0. collectQueueFamilies() already asked
+// createLogicalDevice for each of these, so a handle exists wherever an index does.
+void NovaCore::acquireQueueHandles()
+{
+    vkGetDeviceQueue(logical_device, queues.indices.compute_family.value(), 0, &queues.compute);
+    vkGetDeviceQueue(logical_device, queues.indices.transfer_family.value(), 0, &queues.transfer);
+
+    // Index 0 of the graphics family is the same handle NovaGraphics renders on,
+    // which is what lets an immediate submission be ordered against the frames.
+    if (queues.indices.graphics_family.has_value()) {
+        vkGetDeviceQueue(logical_device, queues.indices.graphics_family.value(), 0, &queues.graphics);
+    }
+}
+
+void NovaCore::createMemoryAllocator()
+{
+    VmaAllocatorCreateInfo allocatorInfo = {
+        .physicalDevice = physical_device,
+        .device = logical_device,
+        .instance = instance
+    };
+    VK_TRY(vmaCreateAllocator(&allocatorInfo, &allocator));
+
+    // Registered after the device => destroyed before it.
+    resource_registry.register_resource("vma_allocator", [this]() {
+        if (allocator != VK_NULL_HANDLE) {
+            vmaDestroyAllocator(allocator);
+            allocator = VK_NULL_HANDLE;
+        }
+    });
+}
+
+// One immediate context: pool bound to `queue_family`, one primary buffer, one fence.
+void NovaCore::buildImmediateContext(ImmediateContext& context, uint32_t queue_family, VkQueue queue)
+{
+    VkCommandPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = queue_family
+    };
+    VK_TRY(vkCreateCommandPool(logical_device, &pool_info, nullptr, &context.pool));
+
+    VkCommandBufferAllocateInfo cmd_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = context.pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1
+    };
+    VK_TRY(vkAllocateCommandBuffers(logical_device, &cmd_info, &context.cmd));
+
+    VkFenceCreateInfo fence_info = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT
+    };
+    VK_TRY(vkCreateFence(logical_device, &fence_info, nullptr, &context.fence));
+
+    context.queue = queue;
+}
+
+void NovaCore::destroyImmediateContext(ImmediateContext& context)
+{
+    if (context.fence != VK_NULL_HANDLE) {
+        vkDestroyFence(logical_device, context.fence, nullptr);
+    }
+    if (context.pool != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(logical_device, context.pool, nullptr);
+    }
+    context = ImmediateContext{};
 }
 
 // Immediate context creation (Phase 1 fix)
@@ -365,43 +483,22 @@ void NovaCore::createImmediateContext()
 {
     report(LOGGER::VLINE, "\t .. Creating Immediate Context ..");
 
-    // Create command pool for immediate submissions
-    VkCommandPoolCreateInfo pool_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = queues.indices.transfer_family.value()
-    };
+    buildImmediateContext(immediate, queues.indices.transfer_family.value(), queues.transfer);
 
-    VK_TRY(vkCreateCommandPool(logical_device, &pool_info, nullptr, &immediate.pool));
-
-    // Allocate command buffer
-    VkCommandBufferAllocateInfo cmd_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = immediate.pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1
-    };
-
-    VK_TRY(vkAllocateCommandBuffers(logical_device, &cmd_info, &immediate.cmd));
-
-    // Create fence
-    VkFenceCreateInfo fence_info = {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .flags = VK_FENCE_CREATE_SIGNALED_BIT
-    };
-
-    VK_TRY(vkCreateFence(logical_device, &fence_info, nullptr, &immediate.fence));
+    // A graphics family is optional: compute-only devices may expose none, and
+    // isComplete(false) does not ask for one. Where it exists, the context is
+    // built eagerly - it is the only legal home for barriers naming graphics
+    // stages, and for writes to EXCLUSIVE images the frame submissions sample.
+    if (queues.graphics != VK_NULL_HANDLE) {
+        buildImmediateContext(graphics_immediate, queues.indices.graphics_family.value(), queues.graphics);
+    } else {
+        report(LOGGER::WARN, "No graphics family on this device - immediate graphics submissions fall back to transfer");
+    }
 
     // Register for cleanup
     resource_registry.register_resource("immediate_context", [this]() {
-        if (immediate.fence != VK_NULL_HANDLE) {
-            vkDestroyFence(logical_device, immediate.fence, nullptr);
-            immediate.fence = VK_NULL_HANDLE;
-        }
-        if (immediate.pool != VK_NULL_HANDLE) {
-            vkDestroyCommandPool(logical_device, immediate.pool, nullptr);
-            immediate.pool = VK_NULL_HANDLE;
-        }
+        destroyImmediateContext(graphics_immediate);
+        destroyImmediateContext(immediate);
     });
 
     report(LOGGER::INFO, "Immediate context created");
@@ -444,28 +541,38 @@ void NovaCore::createSharedCommandPools()
 }
 
 // Immediate submit implementation
-void NovaCore::immediateSubmit(std::function<void(VkCommandBuffer)>&& func)
+void NovaCore::submitImmediate(ImmediateContext& context, const std::function<void(VkCommandBuffer)>& func)
 {
-    VK_TRY(vkResetFences(logical_device, 1, &immediate.fence));
-    VK_TRY(vkResetCommandBuffer(immediate.cmd, 0));
+    VK_TRY(vkResetFences(logical_device, 1, &context.fence));
+    VK_TRY(vkResetCommandBuffer(context.cmd, 0));
 
     VkCommandBufferBeginInfo begin_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
     };
 
-    VK_TRY(vkBeginCommandBuffer(immediate.cmd, &begin_info));
-    func(immediate.cmd);
-    VK_TRY(vkEndCommandBuffer(immediate.cmd));
+    VK_TRY(vkBeginCommandBuffer(context.cmd, &begin_info));
+    func(context.cmd);
+    VK_TRY(vkEndCommandBuffer(context.cmd));
 
     VkSubmitInfo submit_info = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
-        .pCommandBuffers = &immediate.cmd
+        .pCommandBuffers = &context.cmd
     };
 
-    VK_TRY(vkQueueSubmit(queues.transfer, 1, &submit_info, immediate.fence));
-    VK_TRY(vkWaitForFences(logical_device, 1, &immediate.fence, VK_TRUE, UINT64_MAX));
+    VK_TRY(vkQueueSubmit(context.queue, 1, &submit_info, context.fence));
+    VK_TRY(vkWaitForFences(logical_device, 1, &context.fence, VK_TRUE, UINT64_MAX));
+}
+
+void NovaCore::immediateSubmit(std::function<void(VkCommandBuffer)>&& func)
+{
+    submitImmediate(immediate, func);
+}
+
+void NovaCore::immediateSubmitGraphics(std::function<void(VkCommandBuffer)>&& func)
+{
+    submitImmediate(hasGraphicsImmediate() ? graphics_immediate : immediate, func);
 }
 
 // Buffer creation
@@ -482,8 +589,10 @@ Buffer_T NovaCore::createEphemeralBuffer(size_t size, VkBufferUsageFlags flags, 
         .usage = usage
     };
 
-    Buffer_T buffer;
-    VK_TRY(vmaCreateBuffer(allocator, &buffer_info, &alloc_info, &buffer.buffer, &buffer.allocation, nullptr));
+    // pAllocationInfo must be supplied: Buffer_T::info is what callers read to get
+    // the mapped pointer, offset and real size. Passing nullptr left it uninitialized.
+    Buffer_T buffer{};
+    VK_TRY(vmaCreateBuffer(allocator, &buffer_info, &alloc_info, &buffer.buffer, &buffer.allocation, &buffer.info));
 
     return buffer;
 }

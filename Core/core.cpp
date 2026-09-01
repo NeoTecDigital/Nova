@@ -1,6 +1,7 @@
 #include "./core.h"
 
 #include <SDL2/SDL_vulkan.h>
+#include <string>
 
     // Get Current Frame
 FrameData& NovaCoreLegacy::current_frame() { { return frames[_frame_ct % MAX_FRAMES_IN_FLIGHT]; } }
@@ -260,24 +261,27 @@ void NovaCoreLegacy::setWindowExtent(VkExtent2D extent)
     // LOGGING //
     /////////////
 
+static std::string familyIndexStr(const std::optional<unsigned int>& family) 
+    { return family.has_value() ? std::to_string(family.value()) : std::string("<unset>"); }
+
 void NovaCoreLegacy::logQueues() 
     {
         report(LOGGER::DEBUG, "\t .. Logging Queues ..");
         report(LOGGER::DLINE, "\t\tFamilies: %d", queues.families.size());
-        report(LOGGER::DLINE, "\t\tPresent Family Index: %d", queues.indices.present_family.value());
+        report(LOGGER::DLINE, "\t\tPresent Family Index: %s", familyIndexStr(queues.indices.present_family).c_str());
         report(LOGGER::DLINE, "\t\tPresent: %p", queues.present);
-        report(LOGGER::DLINE, "\t\tGraphics Family Index: %d", queues.indices.graphics_family.value());
+        report(LOGGER::DLINE, "\t\tGraphics Family Index: %s", familyIndexStr(queues.indices.graphics_family).c_str());
         report(LOGGER::DLINE, "\t\tGraphics: %p", queues.graphics);
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) 
             {
                 report(LOGGER::DLINE, "\t\t\tCommand Pool (Graphics %d): %p", i, frames[i].cmd.pool);
                 report(LOGGER::DLINE, "\t\t\tCommand Buffer (Graphics %d): %p", i, frames[i].cmd.buffer);
             }
-        report(LOGGER::DLINE, "\t\tTransfer Family Index: %d", queues.indices.transfer_family.value());
+        report(LOGGER::DLINE, "\t\tTransfer Family Index: %s", familyIndexStr(queues.indices.transfer_family).c_str());
         report(LOGGER::DLINE, "\t\tTransfer: %p", queues.transfer);
         report(LOGGER::DLINE, "\t\tCommand Pool (Transfer): %p", queues.xfr.pool);
         report(LOGGER::DLINE, "\t\tCommand Buffer (Transfer): %p", queues.xfr.buffer);
-        report(LOGGER::DLINE, "\t\tCompute Family Index: %d", queues.indices.compute_family.value());
+        report(LOGGER::DLINE, "\t\tCompute Family Index: %s", familyIndexStr(queues.indices.compute_family).c_str());
         report(LOGGER::DLINE, "\t\tCompute: %p", queues.compute);
         report(LOGGER::DLINE, "\t\tCommand Pool (Compute): %p", queues.cmp.pool);
         report(LOGGER::DLINE, "\t\tCommand Buffer (Compute): %p", queues.cmp.buffer);

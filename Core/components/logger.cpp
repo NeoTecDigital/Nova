@@ -26,6 +26,9 @@ static DEBUG_LEVEL getDebugLevel (LOGGER log_level) {
             return DEBUG_LEVEL::SILENT;
         case LOGGER::ERROR:
             return DEBUG_LEVEL::RELEASE;
+        case LOGGER::WARN:
+            // Lowest configured level at which a WARN message is emitted.
+            return DEBUG_LEVEL::STAGING;
         case LOGGER::INFO:
             return DEBUG_LEVEL::STAGING;
         case LOGGER::DEBUG:
@@ -62,6 +65,9 @@ void report(LOGGER log_level, const char* format, ...){
                     break;
                 case LOGGER::ERROR:
                     std::cout << " [ERROR]: ";
+                    break;
+                case LOGGER::WARN:
+                    std::cout << " [WARN]: ";
                     break;
                 case LOGGER::INFO:
                     std::cout << " [INFO]: ";

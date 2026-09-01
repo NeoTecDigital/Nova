@@ -1,5 +1,41 @@
 #include "./nova_graphics.h"
+#include <SDL2/SDL_vulkan.h>
 #include <set>
+
+NovaGraphics::NovaGraphics(VkExtent2D extent, const std::string& debug_level, struct SDL_Window* window)
+    : NovaCore(debug_level)
+{
+    report(LOGGER::INFO, "NovaGraphics - Initializing graphics mode with SDL window ..");
+
+    setWindowExtent(extent);
+
+    // Initialize base resources WITH surface extensions for SDL
+    createVulkanInstance(true);
+
+    // Create Vulkan surface from SDL window using the valid VkInstance
+    if (!SDL_Vulkan_CreateSurface(window, instance, &surface)) {
+        report(LOGGER::ERROR, "NovaGraphics - Failed to create Vulkan surface from SDL window");
+        return;
+    }
+
+    createPhysicalDevice(true, surface);
+    createLogicalDevice(true);
+    createSharedCommandPools();
+    createImmediateContext();
+
+    // Get graphics and present queues
+    vkGetDeviceQueue(logical_device, queues.indices.graphics_family.value(), 0, &graphics_queue);
+    vkGetDeviceQueue(logical_device, queues.indices.present_family.value(), 0, &present_queue);
+
+    // Initialize graphics-specific resources
+    createSwapchain();
+    createImageViews();
+    createRenderPass();
+    createFramebuffers();
+    createFrameSyncObjects();
+
+    report(LOGGER::INFO, "NovaGraphics - Initialized successfully");
+}
 
 NovaGraphics::NovaGraphics(VkExtent2D extent, const std::string& debug_level, VkSurfaceKHR surf)
     : NovaCore(debug_level), surface(surf)
@@ -360,8 +396,118 @@ void NovaGraphics::createFrameSyncObjects()
 
 void NovaGraphics::drawFrame()
 {
-    // Placeholder - will implement full rendering loop
-    report(LOGGER::VERBOSE, "NovaGraphics::drawFrame() - not yet implemented");
+    renderFrame([](VkCommandBuffer, uint32_t){});
+}
+
+void NovaGraphics::renderFrame(std::function<void(VkCommandBuffer, uint32_t)>&& render_callback)
+{
+    FrameData& frame = current_frame();
+
+    VK_TRY(vkWaitForFences(logical_device, 1, &frame.in_flight, VK_TRUE, UINT64_MAX));
+
+    uint32_t image_index = 0;
+    VkResult result = vkAcquireNextImageKHR(
+        logical_device,
+        swapchain.instance,
+        UINT64_MAX,
+        frame.image_available[0],
+        VK_NULL_HANDLE,
+        &image_index
+    );
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        recreateSwapchain();
+        return;
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        report(LOGGER::ERROR, "Failed to acquire swapchain image!");
+        return;
+    }
+
+    VK_TRY(vkResetFences(logical_device, 1, &frame.in_flight));
+
+    VkCommandBuffer cmd = frame.cmd.buffer;
+    VK_TRY(vkResetCommandBuffer(cmd, 0));
+
+    VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+    };
+    VK_TRY(vkBeginCommandBuffer(cmd, &begin_info));
+
+    VkClearValue clear_values[1];
+    clear_values[0].color = {{ 0.04f, 0.05f, 0.08f, 1.0f }};
+
+    VkRenderPassBeginInfo render_pass_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = render_pass,
+        .framebuffer = swapchain.framebuffers[image_index],
+        .renderArea = {
+            .offset = {0, 0},
+            .extent = swapchain.extent
+        },
+        .clearValueCount = 1,
+        .pClearValues = clear_values
+    };
+
+    vkCmdBeginRenderPass(cmd, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkViewport viewport = {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = static_cast<float>(swapchain.extent.width),
+        .height = static_cast<float>(swapchain.extent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+    VkRect2D scissor = {
+        .offset = {0, 0},
+        .extent = swapchain.extent
+    };
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    // Execute user render callback
+    if (render_callback) {
+        render_callback(cmd, image_index);
+    }
+
+    vkCmdEndRenderPass(cmd);
+    VK_TRY(vkEndCommandBuffer(cmd));
+
+    VkSemaphore wait_semaphores[] = { frame.image_available[0] };
+    VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    VkSemaphore signal_semaphores[] = { frame.render_finished[0] };
+
+    VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = wait_semaphores,
+        .pWaitDstStageMask = wait_stages,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = signal_semaphores
+    };
+
+    VK_TRY(vkQueueSubmit(graphics_queue, 1, &submit_info, frame.in_flight));
+
+    VkPresentInfoKHR present_info = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = signal_semaphores,
+        .swapchainCount = 1,
+        .pSwapchains = &swapchain.instance,
+        .pImageIndices = &image_index
+    };
+
+    result = vkQueuePresentKHR(present_queue, &present_info);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebuffer_resized) {
+        framebuffer_resized = false;
+        recreateSwapchain();
+    }
+
+    frame_ct++;
 }
 
 void NovaGraphics::setWindowExtent(VkExtent2D extent)

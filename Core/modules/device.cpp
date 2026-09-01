@@ -2,6 +2,7 @@
 #include "../components/vk_memory.h"
 
 #include <set>
+#include <stdexcept>
 #include <string>
 
 
@@ -45,7 +46,9 @@ void NovaCoreLegacy::setQueueFamilyProperties(unsigned int i) {
         { 
             queue_name += "{ Compute } "; 
 
-            if (queues.indices.graphics_family.value() != i) 
+            // A disengaged graphics index compares unequal, so an unseen graphics
+            // family also counts as "dedicated".
+            if (queues.indices.graphics_family != i) 
                 {
                     queues.indices.compute_family = i;
                     queues.priorities.push_back(std::vector<float>(queue_family->queueCount, 1.0f));
@@ -57,7 +60,7 @@ void NovaCoreLegacy::setQueueFamilyProperties(unsigned int i) {
         { 
             queue_name += "{ Transfer } "; 
 
-            if (queues.indices.graphics_family.value() != i) 
+            if (queues.indices.graphics_family != i) 
                 {
                     queues.indices.transfer_family = i;
                     queues.priorities.push_back(std::vector<float>(queue_family->queueCount, 1.0f));
@@ -76,9 +79,54 @@ void NovaCoreLegacy::setQueueFamilyProperties(unsigned int i) {
     report(LOGGER::VLINE, "\t\t\t %s", queue_name.c_str());
 }
 
+// Vulkan guarantees a graphics family also supports compute and transfer, so it backs
+// any family that has no dedicated candidate; a compute family backs transfer.
+static void backfillQueueFamilies(QueueFamilyIndices& indices)
+    {
+        if (indices.graphics_family.has_value()) 
+            { 
+                if (!indices.compute_family.has_value()) 
+                    {
+                        report(LOGGER::VLINE, "\t\tNo Dedicated Compute Family. Falling Back to Graphics Family.");
+                        indices.compute_family = indices.graphics_family;
+                    }
+
+                if (!indices.transfer_family.has_value()) 
+                    {
+                        report(LOGGER::VLINE, "\t\tNo Dedicated Transfer Family. Falling Back to Graphics Family.");
+                        indices.transfer_family = indices.graphics_family;
+                    }
+            }
+        else if (indices.compute_family.has_value() && !indices.transfer_family.has_value()) 
+            {
+                report(LOGGER::VLINE, "\t\tNo Dedicated Transfer Family. Falling Back to Compute Family.");
+                indices.transfer_family = indices.compute_family;
+            }
+    }
+
+// Collects the distinct families that were actually found on the selected device.
+static std::set<uint32_t> collectQueueFamilies(const QueueFamilyIndices& indices)
+    {
+        std::set<uint32_t> families;
+
+        for (const auto& family : { indices.graphics_family,
+                                    indices.present_family,
+                                    indices.compute_family,
+                                    indices.transfer_family })
+            { if (family.has_value()) { families.insert(family.value()); } }
+
+        return families;
+    }
+
 void NovaCoreLegacy::getQueueFamilies(VkPhysicalDevice scanned_device) 
     {
         report(LOGGER::VLINE, "\t .. Acquiring Queue Families ..");
+
+        // Each candidate device is scanned from scratch; leftovers from a rejected
+        // device would otherwise make the next one look provisioned.
+        queues.indices.reset();
+        queues.priorities.clear();
+
         uint32_t _queue_family_count = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(scanned_device, &_queue_family_count, nullptr);
         queues.families.resize(_queue_family_count);
@@ -88,39 +136,24 @@ void NovaCoreLegacy::getQueueFamilies(VkPhysicalDevice scanned_device)
             {
                 report(LOGGER::VLINE, "\t\tQueue Family %d", i);
 
-                // Only check for presentation support in graphics mode (when surface exists)
-                if (!compute_only && surface != VK_NULL_HANDLE) {
-                    if (queues.indices.present_family.value() == -1){
-                            VkBool32 _present_support = false;
-                            vkGetPhysicalDeviceSurfaceSupportKHR(scanned_device, i, surface, &_present_support);
+                // Presentation is only meaningful against a surface; compute-only devices
+                // leave present_family disengaged.
+                if (!compute_only && surface != VK_NULL_HANDLE && !queues.indices.present_family.has_value()) 
+                    {
+                        VkBool32 _present_support = false;
+                        vkGetPhysicalDeviceSurfaceSupportKHR(scanned_device, i, surface, &_present_support);
 
-                            if (_present_support)
-                                {
-                                    queues.indices.present_family = i;
-                                    report(LOGGER::VLINE, "\t\tPresent Family Set.");
-                                }
-                        }
-                } else if (compute_only) {
-                    // In compute-only mode, set present family to first graphics family
-                    // This satisfies isComplete() check without needing actual presentation support
-                    if (queues.indices.present_family.value() == -1) {
-                        if (queues.families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-                            queues.indices.present_family = i;
-                            report(LOGGER::VLINE, "\t\tPresent Family Set (compute-only, dummy value)");
-                        }
+                        if (_present_support)
+                            {
+                                queues.indices.present_family = i;
+                                report(LOGGER::VLINE, "\t\tPresent Family Set.");
+                            }
                     }
-                }
 
                 setQueueFamilyProperties(i);
             }
 
-        // Check if the queues are complete and set the transfer family to the graphics family if not set
-        if (!queues.indices.isComplete()) 
-            { 
-                report(LOGGER::VLINE, "\t\tQueue Families Incomplete. Setting Transfer Family to Graphics Family.");
-                queues.indices.transfer_family = queues.indices.graphics_family.value();
-                queues.indices.compute_family = queues.indices.graphics_family.value();
-            }
+        backfillQueueFamilies(queues.indices);
     }
 
 static bool checkDeviceExtensionSupport(VkPhysicalDevice device) 
@@ -149,7 +182,7 @@ bool NovaCoreLegacy::deviceProvisioned(VkPhysicalDevice scanned_device)
 
         // In compute-only mode, we don't need extensions or swapchain support
         if (compute_only) {
-            return queues.indices.isComplete();
+            return queues.indices.isComplete(false);
         }
 
         // Graphics mode: check extensions and swapchain
@@ -162,7 +195,7 @@ bool NovaCoreLegacy::deviceProvisioned(VkPhysicalDevice scanned_device)
                 swap_chain_adequate = !swap_chain_support.formats.empty() && !swap_chain_support.present_modes.empty();
             }
 
-        return queues.indices.isComplete() && extensions_supported && swap_chain_adequate;
+        return queues.indices.isComplete(true) && extensions_supported && swap_chain_adequate;
     }
 
 
@@ -239,20 +272,16 @@ void NovaCoreLegacy::createLogicalDevice()
         vulkan12Features.pNext = nullptr;
 
         std::vector<VkDeviceQueueCreateInfo> _queue_create_infos;
-        std::set<uint32_t> _unique_queue_families = {
-                queues.indices.graphics_family.value(),
-                queues.indices.present_family.value(),
-                queues.indices.compute_family.value(),
-                queues.indices.transfer_family.value()
-            };
+        const std::set<uint32_t> _unique_queue_families = collectQueueFamilies(queues.indices);
+
+        if (_unique_queue_families.empty()) 
+            { throw std::runtime_error("No queue families resolved for the selected device"); }
 
         report(LOGGER::VLINE, "\t .. Creating Queue Family ..");
         for (uint32_t _queue_family : _unique_queue_families)
             {
                 report(LOGGER::VLINE, "\t\tQueue Family: %d", _queue_family);
                 report(LOGGER::VLINE, "\t\t\tQueue Count: %d", queues.families[_queue_family].queueCount);
-
-                if (_queue_family == -1) { continue; }
 
                 VkDeviceQueueCreateInfo _queue_info = getQueueCreateInfo(_queue_family);
 
@@ -278,8 +307,12 @@ void NovaCoreLegacy::createLogicalDevice()
 
         VK_TRY(vkCreateDevice(physical_device, &create_info, nullptr, &logical_device));
 
-        vkGetDeviceQueue(logical_device, queues.indices.graphics_family.value(), 0, &queues.graphics);
-        vkGetDeviceQueue(logical_device, queues.indices.present_family.value(), 0, &queues.present);
+        if (queues.indices.graphics_family.has_value()) 
+            { vkGetDeviceQueue(logical_device, queues.indices.graphics_family.value(), 0, &queues.graphics); }
+
+        if (queues.indices.present_family.has_value()) 
+            { vkGetDeviceQueue(logical_device, queues.indices.present_family.value(), 0, &queues.present); }
+
         vkGetDeviceQueue(logical_device, queues.indices.compute_family.value(), 0, &queues.compute);
         vkGetDeviceQueue(logical_device, queues.indices.transfer_family.value(), 0, &queues.transfer);
 

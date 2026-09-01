@@ -1,15 +1,66 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 #include <vulkan/vulkan.h>
 #include "./logger.h"
 #include <stdio.h>
 #include <cstdlib>
 
-#define VK_TRY(x)                                                       \
-    do {                                                                \
-        VkResult err = x;                                               \
-        if (err) {                                                      \
-            fprintf(stderr, " [ERROR] Vulkan: %s\n", err);              \
-            abort();                                                    \
-        }                                                               \
-    } while (0)
+/**
+ * Human-readable name for a VkResult code.
+ * Covers the codes the engine can realistically surface; anything else
+ * degrades to "VK_UNKNOWN" so the numeric code stays the source of truth.
+ */
+static inline const char* vk_result_str(VkResult result) {
+    switch (result) {
+        case VK_SUCCESS:                        return "VK_SUCCESS";
+        case VK_NOT_READY:                      return "VK_NOT_READY";
+        case VK_TIMEOUT:                        return "VK_TIMEOUT";
+        case VK_EVENT_SET:                      return "VK_EVENT_SET";
+        case VK_EVENT_RESET:                    return "VK_EVENT_RESET";
+        case VK_INCOMPLETE:                     return "VK_INCOMPLETE";
+        case VK_SUBOPTIMAL_KHR:                 return "VK_SUBOPTIMAL_KHR";
+        case VK_ERROR_OUT_OF_HOST_MEMORY:       return "VK_ERROR_OUT_OF_HOST_MEMORY";
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:     return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+        case VK_ERROR_INITIALIZATION_FAILED:    return "VK_ERROR_INITIALIZATION_FAILED";
+        case VK_ERROR_DEVICE_LOST:              return "VK_ERROR_DEVICE_LOST";
+        case VK_ERROR_MEMORY_MAP_FAILED:        return "VK_ERROR_MEMORY_MAP_FAILED";
+        case VK_ERROR_LAYER_NOT_PRESENT:        return "VK_ERROR_LAYER_NOT_PRESENT";
+        case VK_ERROR_EXTENSION_NOT_PRESENT:    return "VK_ERROR_EXTENSION_NOT_PRESENT";
+        case VK_ERROR_FEATURE_NOT_PRESENT:      return "VK_ERROR_FEATURE_NOT_PRESENT";
+        case VK_ERROR_INCOMPATIBLE_DRIVER:      return "VK_ERROR_INCOMPATIBLE_DRIVER";
+        case VK_ERROR_TOO_MANY_OBJECTS:         return "VK_ERROR_TOO_MANY_OBJECTS";
+        case VK_ERROR_FORMAT_NOT_SUPPORTED:     return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+        case VK_ERROR_FRAGMENTED_POOL:          return "VK_ERROR_FRAGMENTED_POOL";
+        case VK_ERROR_OUT_OF_POOL_MEMORY:       return "VK_ERROR_OUT_OF_POOL_MEMORY";
+        case VK_ERROR_SURFACE_LOST_KHR:         return "VK_ERROR_SURFACE_LOST_KHR";
+        case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
+        case VK_ERROR_OUT_OF_DATE_KHR:          return "VK_ERROR_OUT_OF_DATE_KHR";
+        case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR: return "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR";
+        case VK_ERROR_VALIDATION_FAILED_EXT:    return "VK_ERROR_VALIDATION_FAILED_EXT";
+        default:                                return "VK_UNKNOWN";
+    }
+}
 
+/**
+ * VK_TRY - evaluate a Vulkan call exactly once and abort on a hard failure.
+ *
+ * Only NEGATIVE VkResult values are errors. Positive codes (VK_NOT_READY,
+ * VK_TIMEOUT, VK_INCOMPLETE, VK_SUBOPTIMAL_KHR, ...) are success codes and
+ * must not abort; they are reported to stderr so they remain visible.
+ */
+#define VK_TRY(x)                                                              \
+    do {                                                                       \
+        const VkResult vk_try_result_ = (x);                                   \
+        if (vk_try_result_ < 0) {                                              \
+            fprintf(stderr, " [ERROR] Vulkan: %s (%d) at %s:%d\n",             \
+                    vk_result_str(vk_try_result_),                             \
+                    static_cast<int>(vk_try_result_),                          \
+                    __FILE__, __LINE__);                                       \
+            abort();                                                           \
+        } else if (vk_try_result_ != VK_SUCCESS) {                             \
+            fprintf(stderr, " [WARN] Vulkan: %s (%d) at %s:%d\n",              \
+                    vk_result_str(vk_try_result_),                             \
+                    static_cast<int>(vk_try_result_),                          \
+                    __FILE__, __LINE__);                                       \
+        }                                                                      \
+    } while (0)

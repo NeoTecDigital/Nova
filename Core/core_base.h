@@ -31,18 +31,40 @@ protected:
     struct {
         VkQueue compute = VK_NULL_HANDLE;
         VkQueue transfer = VK_NULL_HANDLE;
+        // Engaged only when the selected device exposes a graphics family; the
+        // same handle NovaGraphics submits its frames on (family, index 0).
+        VkQueue graphics = VK_NULL_HANDLE;
         QueueFamilyIndices indices;
         std::vector<VkQueueFamilyProperties> families;
         std::vector<std::vector<float>> priorities;
         DeletionQueue deletion;  // Legacy deletion queue
     } queues;
 
-    // Immediate submission context (properly initialized in Phase 1)
-    struct {
+    /**
+     * One-shot command recording bound to a single queue family.
+     *
+     * The family is what makes a context usable, not an implementation detail:
+     * vkCmdPipelineBarrier rejects any pipeline stage the recording family cannot
+     * execute, and an EXCLUSIVE resource written on one family then read on
+     * another needs an explicit ownership transfer. Callers therefore pick the
+     * context whose family matches the work instead of sharing a single one.
+     */
+    struct ImmediateContext {
         VkFence fence = VK_NULL_HANDLE;
         VkCommandBuffer cmd = VK_NULL_HANDLE;
         VkCommandPool pool = VK_NULL_HANDLE;
-    } immediate;
+        VkQueue queue = VK_NULL_HANDLE;
+
+        bool engaged() const { return cmd != VK_NULL_HANDLE && queue != VK_NULL_HANDLE; }
+    };
+
+    // Transfer-family context: staging copies that name no graphics stage.
+    ImmediateContext immediate;
+
+    // Graphics-family context: uploads whose barriers name graphics stages, or
+    // that touch resources the render submissions also read. Left disengaged on
+    // devices that expose no graphics family, which compute-only mode accepts.
+    ImmediateContext graphics_immediate;
 
     // Command pools (shared)
     VkCommandPool compute_pool = VK_NULL_HANDLE;
@@ -66,6 +88,15 @@ protected:
     void createLogicalDevice(bool need_swapchain_extension);
     void createImmediateContext();
     void createSharedCommandPools();
+    void createDeviceHandle(const std::vector<VkDeviceQueueCreateInfo>& queue_infos,
+                            bool need_swapchain_extension);
+    void acquireQueueHandles();
+    void createMemoryAllocator();
+
+    // Allocate/release the pool, command buffer and fence of one context.
+    void buildImmediateContext(ImmediateContext& context, uint32_t queue_family, VkQueue queue);
+    void destroyImmediateContext(ImmediateContext& context);
+    void submitImmediate(ImmediateContext& context, const std::function<void(VkCommandBuffer)>& func);
 
     // Helper methods
     bool checkValidationLayerSupport();
@@ -80,10 +111,29 @@ public:
     // Public API (shared by all modes)
 
     /**
-     * Submit commands immediately and wait for completion
-     * Uses immediate context initialized in Phase 1
+     * Record and submit on the TRANSFER family, then wait for it to retire.
+     *
+     * Valid for staging copies and layout transitions expressed purely in
+     * transfer stages. A transfer family carries no graphics or compute
+     * capability, so barriers naming those stages belong on another context.
      */
     void immediateSubmit(std::function<void(VkCommandBuffer)>&& func);
+
+    /**
+     * Record and submit on the GRAPHICS family, then wait for it to retire.
+     *
+     * Use for work whose barriers name graphics pipeline stages, or that writes
+     * an EXCLUSIVE resource the frame submissions later read: sharing the render
+     * queue's family removes the ownership transfer and makes submission order
+     * against the frames a real ordering guarantee.
+     *
+     * Falls back to the transfer context on devices with no graphics family;
+     * hasGraphicsImmediate() reports which one a caller will get.
+     */
+    void immediateSubmitGraphics(std::function<void(VkCommandBuffer)>&& func);
+
+    // True when immediateSubmitGraphics() runs on a graphics-capable family.
+    bool hasGraphicsImmediate() const { return graphics_immediate.engaged(); }
 
     /**
      * Create buffer using VMA (ephemeral or persistent)

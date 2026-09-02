@@ -115,23 +115,39 @@ public:
      */
     struct Output {
         SpatialPresentLoop* loop = nullptr;
+
+        // Null once the wlr_output has been destroyed. The entry outlives that
+        // moment because a listener callback may not delete the object whose
+        // listener is being dispatched; reapDeadOutputs() erases it afterwards.
         struct wlr_output* output = nullptr;
 
         // Only used on the PixmanSidecar path: the mappable swapchain this
-        // loop allocates for itself, separate from output->swapchain.
+        // loop allocates for itself, separate from output->swapchain, plus the
+        // extent it was created at - the comparison a mode change is detected by.
         struct wlr_swapchain* sidecar_swapchain = nullptr;
+        VkExtent2D sidecar_extent = {0, 0};
 
-        // Only this output feeds frame_done, so a second screen cannot double
-        // the callbacks every client is waiting on.
+        // Set from the output's own `commit` when the mode moved the extent.
+        // Acted on at the top of the next presentFrame(), never inside the
+        // commit dispatch that observed it.
+        bool sidecar_needs_rebuild = false;
+
+        // Exactly one LIVE output feeds frame_done, so a second screen cannot
+        // double the callbacks every client is waiting on. Re-elected when the
+        // holder is destroyed; see electFrameCallbackDriver().
         bool drives_frame_callbacks = false;
 
         WaylandListener<Output> frame_listener;
         WaylandListener<Output> present_listener;
+        WaylandListener<Output> commit_listener;
         WaylandListener<Output> destroy_listener;
+
+        bool live() const { return output != nullptr; }
 
         ~Output();
         void onFrame(void* data);
         void onPresent(void* data);
+        void onCommit(void* data);
         void onDestroy(void* data);
     };
 
@@ -174,6 +190,25 @@ private:
     bool selectPath(struct wlr_output* output);
     bool probeDmabufImport(struct wlr_output* output);
 
+    // False, with a reason logged, when the CPU path already drives an output.
+    // Always true on the import path, which has no shared per-frame buffer.
+    bool sidecarSlotFree(struct wlr_output* candidate) const;
+
+    // Erase the bindings whose wlr_output has been destroyed. Called from
+    // attach(), which is the one place outside listener dispatch that every
+    // hotplug passes through; never from a callback, where erasing would delete
+    // the object owning the listener being dispatched.
+    void reapDeadOutputs();
+
+    // Give frame_done to the first live output if the holder is gone. Safe to
+    // call from a destroy dispatch: it only writes other entries' flags.
+    void electFrameCallbackDriver();
+    bool hasFrameCallbackDriver() const;
+
+    // Record a geometry change the output committed for itself, for the
+    // sidecar path to act on at the next frame.
+    void noteOutputCommit(Output& bound, const struct wlr_output_state& state);
+
     // Nova's VkImage for `buffer`, imported on first sight and cached after.
     const NovaImportedImage* importedImageFor(struct wlr_buffer* buffer);
     void releaseImport(ImportedBuffer* entry);
@@ -184,6 +219,11 @@ private:
     bool ensureSidecarTarget(VkExtent2D extent);
     bool createSidecarImage(VkExtent2D extent);
     bool ensureSidecar(Output& bound, struct wlr_output* output);
+
+    // (Re)create this output's mappable swapchain and the shared render target
+    // at the output's current extent. Also the mode-change recovery path.
+    bool createSidecarSwapchain(Output& bound);
+    bool rebuildSidecar(Output& bound);
     void destroySidecarTarget();
 
     // Acquire, render, set_buffer, commit, unlock. One frame, one output.
@@ -205,6 +245,11 @@ private:
     // compositor's: the output keeps the renderer it was initialised with.
     struct wlr_renderer* sidecar_renderer_ = nullptr;
     struct wlr_allocator* sidecar_allocator_ = nullptr;
+
+    // ONE target for the whole loop, which is why the CPU path drives at most
+    // one output (see attach()). Sizing it per output would silently make the
+    // per-frame row copy read `sidecar_target_.extent` rows into a buffer
+    // belonging to a differently sized screen.
     SidecarTarget sidecar_target_;
 
     uint64_t commits_ = 0;

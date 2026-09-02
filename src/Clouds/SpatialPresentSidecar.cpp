@@ -37,17 +37,53 @@ bool SpatialPresentLoop::ensureSidecar(Output& bound, struct wlr_output* output)
         }
     }
 
+    return createSidecarSwapchain(bound);
+}
+
+// The swapchain and the loop's single render target, both sized from the
+// output's CURRENT extent. Replacing an existing swapchain is the mode-change
+// path; creating the first one is attach().
+bool SpatialPresentLoop::createSidecarSwapchain(Output& bound) {
+    if (!bound.output || !sidecar_allocator_) return false;
+
+    if (bound.sidecar_swapchain) {
+        wlr_swapchain_destroy(bound.sidecar_swapchain);
+        bound.sidecar_swapchain = nullptr;
+    }
+    bound.sidecar_extent = {0, 0};
+
     struct wlr_drm_format format = { .format = kPresentFallbackDrmFormat, .len = 0, .capacity = 0,
                                      .modifiers = nullptr };
-    bound.sidecar_swapchain = wlr_swapchain_create(sidecar_allocator_, output->width,
-                                                   output->height, &format);
+    bound.sidecar_swapchain = wlr_swapchain_create(sidecar_allocator_, bound.output->width,
+                                                   bound.output->height, &format);
     if (!bound.sidecar_swapchain) {
         report(LOGGER::ERROR, "SpatialPresentLoop - Failed to create the mappable sidecar swapchain");
         return false;
     }
-    const VkExtent2D extent = { static_cast<uint32_t>(output->width),
-                                static_cast<uint32_t>(output->height) };
-    return ensureSidecarTarget(extent);
+
+    const VkExtent2D extent = { static_cast<uint32_t>(bound.output->width),
+                                static_cast<uint32_t>(bound.output->height) };
+    if (!ensureSidecarTarget(extent)) return false;
+    bound.sidecar_extent = extent;
+    return true;
+}
+
+// A mode change invalidated both the swapchain and the render target. The
+// render pass is untouched - the format never changes - so every pipeline built
+// against it stays valid across the rebuild.
+bool SpatialPresentLoop::rebuildSidecar(Output& bound) {
+    bound.sidecar_needs_rebuild = false;
+    if (path_ != PresentPath::PixmanSidecar) return true;
+
+    if (!createSidecarSwapchain(bound)) {
+        report(LOGGER::ERROR, "SpatialPresentLoop - Sidecar rebuild failed for output '%s' at %dx%d",
+               bound.output && bound.output->name ? bound.output->name : "unnamed",
+               bound.output ? bound.output->width : 0, bound.output ? bound.output->height : 0);
+        return false;
+    }
+    report(LOGGER::INFO, "SpatialPresentLoop - Sidecar rebuilt at %ux%u",
+           bound.sidecar_extent.width, bound.sidecar_extent.height);
+    return true;
 }
 
 bool SpatialPresentLoop::ensureSidecarTarget(VkExtent2D extent) {
@@ -191,6 +227,23 @@ bool SpatialPresentLoop::presentSidecar(Output&, struct wlr_buffer* buffer) {
     const uint32_t width = sidecar_target_.extent.width;
     const uint32_t height = sidecar_target_.extent.height;
     const size_t src_stride = static_cast<size_t>(width) * 4;
+
+    // The destination is sized by the wlr_buffer, the source by this loop's
+    // one shared target. attach() refuses a second sidecar output and
+    // rebuildSidecar() resizes both together, so these agree - and this is what
+    // makes that a checked fact rather than an assumption, because the cost of
+    // being wrong is a heap overflow inside a scanout buffer.
+    if (buffer->width < 0 || buffer->height < 0 ||
+        static_cast<uint32_t>(buffer->width) < width ||
+        static_cast<uint32_t>(buffer->height) < height || stride < src_stride) {
+        report(LOGGER::ERROR,
+               "SpatialPresentLoop - Sidecar buffer %dx%d (stride %zu) is smaller than the %ux%u "
+               "target; refusing the copy",
+               buffer->width, buffer->height, stride, width, height);
+        wlr_buffer_end_data_ptr_access(buffer);
+        return false;
+    }
+
     const auto* src = static_cast<const uint8_t*>(sidecar_target_.readback_mapped);
     auto* dst = static_cast<uint8_t*>(pixels);
     for (uint32_t row = 0; row < height; ++row) {

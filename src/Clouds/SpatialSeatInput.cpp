@@ -169,7 +169,18 @@ void SpatialOutput::onDestroy(void*) {
 
 void SpatialCompositor::onNewInput(void* data) {
     auto device = static_cast<struct wlr_input_device*>(data);
-    if (!device || !seat_) return;
+    if (!device) return;
+
+    // INVARIANT: a seat exists here. open() runs initProtocols() - which rebinds
+    // new_input from onLatentInput to this handler - then initInput(), which
+    // creates seat_, with no event-loop dispatch between them. Said out loud
+    // rather than swallowed: if that order changes, the device dies silently.
+    if (!seat_) {
+        report(LOGGER::ERROR, "SpatialCompositor - Input device '%s' announced before the seat "
+                              "exists; dropped. initProtocols() must not bind new_input first",
+               device->name ? device->name : "unnamed");
+        return;
+    }
 
     report(LOGGER::INFO, "SpatialCompositor - New input device: %s (%s)",
            device->name ? device->name : "unnamed", describeDeviceType(device->type));

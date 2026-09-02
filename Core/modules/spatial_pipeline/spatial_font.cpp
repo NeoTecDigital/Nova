@@ -1,3 +1,4 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "./spatial_font.h"
 #include "../../components/logger.h"
 #include <vector>
@@ -15,6 +16,14 @@ SpatialFont::SpatialFont(NovaCore* core, TextureBridge* texture_bridge)
 }
 
 SpatialFont::~SpatialFont() {
+    // The atlas is this font's allocation, so it is this font's to return.
+    // Freeing only the FreeType side left the VMA allocator holding a live
+    // image at teardown, which aborts the process on an otherwise clean exit.
+    if (atlas_texture_ && texture_bridge_) {
+        texture_bridge_->releaseTexture(atlas_texture_);
+    }
+    atlas_texture_.reset();
+
     if (ft_face_) {
         FT_Done_Face(ft_face_);
         ft_face_ = nullptr;

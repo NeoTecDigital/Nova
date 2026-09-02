@@ -143,6 +143,16 @@ SpatialScene::~SpatialScene() {
     }
 
     mesh_buffer_.reset();
+
+    // Consumers before the producer. Nodes hold shared_ptr copies of the font's
+    // atlas texture; ~SpatialFont hands that atlas back to the bridge, so the
+    // tree and the focus/grab references into it are dropped first and no node
+    // is left naming a texture whose handles have just been nulled.
+    pointer_grab_.reset();
+    pointer_focus_.reset();
+    keyboard_focus_.reset();
+    root.reset();
+
     font.reset();
 }
 

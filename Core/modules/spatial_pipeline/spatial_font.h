@@ -1,3 +1,4 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
 #include "./spatial_mesh.h"
@@ -22,7 +23,27 @@ struct GlyphMetric {
 
 class SpatialFont {
 public:
+    /**
+     * @param texture_bridge The bridge the atlas is allocated through, and the
+     *        one it is returned to. It MUST outlive this font: the atlas is
+     *        released in ~SpatialFont, and a bridge destroyed first would take
+     *        its VMA allocator down with the allocation still live.
+     */
     SpatialFont(NovaCore* core, TextureBridge* texture_bridge);
+
+    /**
+     * Releases the FreeType handles AND the atlas texture.
+     *
+     * Ownership is whoever-creates-releases: buildAsciiAtlas/buildFallbackAtlas
+     * are the only callers that create the atlas, so this is the only place
+     * that can return it. Without this the allocator is torn down holding a
+     * live allocation and VMA aborts the process on a clean exit.
+     *
+     * releaseTexture() drains the device first and nulls the handle in place,
+     * so the atlas shared_ptr copies scene nodes hold are left pointing at a
+     * zeroed TextureHandle rather than at destroyed Vulkan objects - the same
+     * discipline ~TextureBridge already applies to its fallback texture.
+     */
     ~SpatialFont();
 
     // Load font from TTF file path at specified pixel height

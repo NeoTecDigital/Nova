@@ -9,10 +9,15 @@
 // ever chosen when something asked for it. The virtual output below is the
 // bridge that keeps the interim SDL window fed while Vazio still presents
 // through SDL rather than into a wlr_output, and it goes when that changes.
+//
+// It also carries the session lifecycle (plan S.6): startSubstrate() brings the
+// substrate up latent - display, backend, outputs, no socket and no global -
+// and open() flips the same object to reachable. startServer() is both.
 #include "../../include/Clouds/SpatialCompositor.h"
 #include "../../Core/components/logger.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace Clouds {
 
@@ -104,11 +109,9 @@ bool SpatialCompositor::initBackendStack() {
         return false;
     }
 
-    if (!wlr_renderer_init_wl_display(renderer_, wl_display_)) {
-        report(LOGGER::ERROR, "SpatialCompositor - Failed to bind renderer buffer protocols to the Wayland display");
-        return false;
-    }
-
+    // wlr_renderer_init_wl_display is NOT called here: it is what creates the
+    // wl_shm and linux-dmabuf globals, and a latent session has none. It runs
+    // in initProtocols(), with the rest of the protocol surface area.
     allocator_ = wlr_allocator_autocreate(backend_, renderer_);
     if (!allocator_) {
         report(LOGGER::ERROR, "SpatialCompositor - Failed to autocreate wlroots allocator");
@@ -145,25 +148,158 @@ void SpatialCompositor::onNewOutput(void* data) {
     wlr_output_state_finish(&state);
     ++outputs_seen_;
     adoptOutputBox(output);
-    publishOutput(output);
+    trackOutput(output);
 }
 
-void SpatialCompositor::publishOutput(struct wlr_output* output) {
+void SpatialCompositor::trackOutput(struct wlr_output* output) {
+    auto tracked = std::make_shared<SpatialOutput>();
+    tracked->compositor = this;
+    tracked->output = output;
+    tracked->destroy_listener.bind(tracked.get(), &SpatialOutput::onDestroy, &output->events.destroy);
+    outputs_.push_back(std::move(tracked));
+
+    // An output that arrives while the session is already open is advertised at
+    // once; one that arrives latent is advertised by open(), with the rest.
+    if (stage_ == SessionStage::Open) advertiseOutput(output);
+
+    // Last, and outside the advertise branch: the presentation loop is the one
+    // consumer that exists in both stages, and it is what draws the splash.
+    if (output_ready_) output_ready_(output);
+}
+
+void SpatialCompositor::advertiseOutput(struct wlr_output* output) {
     // Strictly after the commit that enabled the output and set its mode: the
     // global carries the geometry and mode a client enumerates monitors from,
     // and advertising it before the commit publishes a screen with no size.
     // Clients that never see a wl_output see no monitors at all, which is
     // where GTK and Qt stop.
-    auto tracked = std::make_shared<SpatialOutput>();
-    tracked->compositor = this;
-    tracked->output = output;
-    tracked->destroy_listener.bind(tracked.get(), &SpatialOutput::onDestroy, &output->events.destroy);
-
     wlr_output_create_global(output, wl_display_);
-    outputs_.push_back(std::move(tracked));
-
     report(LOGGER::INFO, "SpatialCompositor - Output '%s' advertised as a wl_output global (%dx%d)",
            output->name ? output->name : "unnamed", output->width, output->height);
+}
+
+void SpatialCompositor::setOutputReadyHandler(OutputReadyHandler handler) {
+    output_ready_ = std::move(handler);
+    if (!output_ready_) return;
+
+    // Replay: an output that committed before the loop existed is not a
+    // different kind of output, and making the caller order these two calls
+    // correctly is a rule that would be broken exactly once.
+    for (const auto& tracked : outputs_) {
+        if (tracked && tracked->output) output_ready_(tracked->output);
+    }
+}
+
+// --- Session lifecycle (plan S.6): latent -> open -----------------------------
+
+bool SpatialCompositor::initDisplay() {
+    if (wl_display_) return true;
+
+    wl_display_ = wl_display_create();
+    if (!wl_display_) {
+        report(LOGGER::ERROR, "SpatialCompositor - Failed to create Wayland display");
+        return false;
+    }
+    event_loop_ = wl_display_get_event_loop(wl_display_);
+    if (!event_loop_) {
+        report(LOGGER::ERROR, "SpatialCompositor - Failed to obtain the Wayland event loop");
+        return false;
+    }
+    return true;
+}
+
+bool SpatialCompositor::startSubstrate() {
+    if (stage_ != SessionStage::Down) {
+        report(LOGGER::ERROR, "SpatialCompositor - startSubstrate on a session that is already up");
+        return false;
+    }
+    // wlr_log_init is deliberately absent: it configures a process-global sink,
+    // which is the entry point's business, not a session's. See main().
+    report(LOGGER::INFO, "SpatialCompositor - Bringing the substrate up latent (no socket, no globals)");
+
+    if (!initDisplay() || !initBackendStack()) return false;
+
+    // Bound before wlr_backend_start, because that is when a backend announces
+    // what it has. new_output must be live or the connectors a DRM backend
+    // finds at boot are never adopted; new_input is parked on the latent
+    // handler until a seat exists to route the devices onto.
+    new_output_listener_.bind(this, &SpatialCompositor::onNewOutput, &backend_->events.new_output);
+    new_input_listener_.bind(this, &SpatialCompositor::onLatentInput, &backend_->events.new_input);
+
+    if (!wlr_backend_start(backend_)) {
+        report(LOGGER::ERROR, "SpatialCompositor - Failed to start wlroots backend");
+        return false;
+    }
+    if (!ensureVirtualOutput()) return false;
+
+    stage_ = SessionStage::Latent;
+    report(LOGGER::INFO, "SpatialCompositor - Substrate latent: %zu output(s), 0 sockets, 0 globals",
+           outputs_.size());
+    return true;
+}
+
+bool SpatialCompositor::open(const std::string& socket_name) {
+    if (stage_ != SessionStage::Latent) {
+        report(LOGGER::ERROR, "SpatialCompositor - open() requires a latent session (stage=%d)",
+               static_cast<int>(stage_));
+        return false;
+    }
+    report(LOGGER::INFO, "SpatialCompositor - Opening the session on socket '%s'...", socket_name.c_str());
+
+    if (!initProtocols() || !initInput()) return false;
+    adoptLatentInput();
+    if (!initSocket(socket_name)) return false;
+
+    // The globals the latent stage withheld. After the socket exists is safe:
+    // wl_display_add_socket only starts listening, and no client can be served
+    // until the event loop is dispatched, which happens after this returns.
+    for (const auto& tracked : outputs_) {
+        if (tracked && tracked->output) advertiseOutput(tracked->output);
+    }
+
+    stage_ = SessionStage::Open;
+    printf("\n======================================================\n"
+           "  CLOUDS DISPLAY SERVER ACTIVE\n  Connect clients with:\n"
+           "    WAYLAND_DISPLAY=%s <app>\n"
+           "======================================================\n\n", socket_name_.c_str());
+    fflush(stdout);
+    report(LOGGER::INFO, "SpatialCompositor - Wayland display server active on WAYLAND_DISPLAY=%s",
+           socket_name_.c_str());
+    return true;
+}
+
+void SpatialCompositor::onLatentInput(void* data) {
+    auto device = static_cast<struct wlr_input_device*>(data);
+    if (!device) return;
+
+    // Tracked, not routed: attaching a keyboard needs a wlr_seat, and the seat
+    // is what open() adds. The destroy listener is bound now so a device that
+    // disappears before open() is removed rather than left dangling.
+    auto seat_device = std::make_shared<SpatialSeatDevice>();
+    seat_device->compositor = this;
+    seat_device->device = device;
+    seat_device->destroy_listener.bind(seat_device.get(), &SpatialSeatDevice::onDestroy,
+                                       &device->events.destroy);
+    input_devices_.push_back(std::move(seat_device));
+
+    report(LOGGER::INFO, "SpatialCompositor - Latent-stage input device held for the seat: %s",
+           device->name ? device->name : "unnamed");
+}
+
+void SpatialCompositor::adoptLatentInput() {
+    // Only the devices onLatentInput parked have neither half bound; a device
+    // that arrived through onNewInput was routed when it arrived.
+    for (const auto& seat_device : input_devices_) {
+        if (!seat_device || !seat_device->device) continue;
+        if (seat_device->keyboard || seat_device->pointer) continue;
+
+        if (seat_device->device->type == WLR_INPUT_DEVICE_KEYBOARD) {
+            attachKeyboardDevice(*seat_device);
+        } else if (seat_device->device->type == WLR_INPUT_DEVICE_POINTER) {
+            attachPointerDevice(*seat_device);
+        }
+    }
+    refreshSeatCapabilities();
 }
 
 void SpatialCompositor::selectOutputMode(struct wlr_output* output, struct wlr_output_state& state) {
@@ -209,6 +345,16 @@ void SpatialCompositor::onSessionActive(void*) {
     // back finds the same windows, listeners and textures it left.
     report(LOGGER::INFO, "SpatialCompositor - Session became %s",
            session_active_ ? "active" : "inactive");
+    if (!session_active_) return;
+
+    // A wlr_output only re-arms its frame event on commit, and no frame was
+    // committed while the session was away - so without this kick the
+    // presentation loop would never be asked to draw again after the switch
+    // back. Scheduling one frame per output restarts the cadence; it cannot
+    // spin, because it only runs on the inactive -> active edge.
+    for (const auto& tracked : outputs_) {
+        if (tracked && tracked->output) wlr_output_schedule_frame(tracked->output);
+    }
 }
 
 void SpatialCompositor::onSessionDestroy(void*) {

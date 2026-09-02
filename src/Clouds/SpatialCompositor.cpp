@@ -64,43 +64,22 @@ SpatialCompositor::~SpatialCompositor() {
 }
 
 bool SpatialCompositor::startServer(const std::string& socket_name) {
-    // wlr_log_init is deliberately absent: it configures a process-global sink,
-    // which is the entry point's business, not a session's. See main().
-    report(LOGGER::INFO, "SpatialCompositor - Launching wlroots Wayland server on socket '%s'...", socket_name.c_str());
-
-    wl_display_ = wl_display_create();
-    if (!wl_display_) {
-        report(LOGGER::ERROR, "SpatialCompositor - Failed to create Wayland display");
-        return false;
-    }
-
-    event_loop_ = wl_display_get_event_loop(wl_display_);
-    if (!event_loop_) {
-        report(LOGGER::ERROR, "SpatialCompositor - Failed to obtain the Wayland event loop");
-        return false;
-    }
-
-    if (!initBackendStack() || !initProtocols() || !initInput() || !initSocket(socket_name)) {
-        return false;
-    }
-
-    printf("\n======================================================\n"
-           "  CLOUDS DISPLAY SERVER ACTIVE\n  Connect clients with:\n"
-           "    WAYLAND_DISPLAY=%s <app>\n"
-           "======================================================\n\n", socket_name_.c_str());
-    fflush(stdout);
-
-    report(LOGGER::INFO, "SpatialCompositor - Wayland display server active on WAYLAND_DISPLAY=%s", socket_name_.c_str());
-
-    if (!wlr_backend_start(backend_)) {
-        report(LOGGER::ERROR, "SpatialCompositor - Failed to start wlroots backend");
-        return false;
-    }
-
-    return ensureVirtualOutput();
+    // The nested development entry point's startup, in one call. Both halves
+    // are in SpatialBackendStack.cpp with the rest of the lifecycle; a session
+    // that is reachable from the moment it exists is simply one that does not
+    // linger in the latent stage.
+    return startSubstrate() && open(socket_name);
 }
 
 bool SpatialCompositor::initProtocols() {
+    // The buffer protocols come first: wl_shm and linux-dmabuf are globals the
+    // latent stage deliberately withheld, and wlr_compositor hands clients
+    // buffers that only exist because of them.
+    if (!wlr_renderer_init_wl_display(renderer_, wl_display_)) {
+        report(LOGGER::ERROR, "SpatialCompositor - Failed to bind renderer buffer protocols to the Wayland display");
+        return false;
+    }
+
     compositor_ = wlr_compositor_create(wl_display_, 6, renderer_);
     if (!compositor_) {
         report(LOGGER::ERROR, "SpatialCompositor - Failed to create wlr_compositor");
@@ -129,7 +108,10 @@ bool SpatialCompositor::initProtocols() {
 
     new_xdg_toplevel_listener_.bind(this, &SpatialCompositor::onNewXdgToplevel, &xdg_shell_->events.new_toplevel);
     new_xdg_popup_listener_.bind(this, &SpatialCompositor::onNewXdgPopup, &xdg_shell_->events.new_popup);
-    new_output_listener_.bind(this, &SpatialCompositor::onNewOutput, &backend_->events.new_output);
+
+    // new_output is already bound - it has to be live before wlr_backend_start,
+    // which happens at substrate. new_input moves off the latent handler now
+    // that a seat is about to exist to route devices onto.
     new_input_listener_.bind(this, &SpatialCompositor::onNewInput, &backend_->events.new_input);
     new_toplevel_decoration_listener_.bind(this, &SpatialCompositor::onNewToplevelDecoration,
                                            &xdg_decoration_manager_->events.new_toplevel_decoration);
@@ -340,6 +322,8 @@ void SpatialCompositor::stop() {
     session_ = nullptr;
     session_active_ = true;
     virtual_output_host_ = nullptr;
+    output_ready_ = nullptr;
+    stage_ = SessionStage::Down;
 }
 
 // --- SpatialCompositor - subsurface hosting ---

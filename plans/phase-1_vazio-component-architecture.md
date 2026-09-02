@@ -12,9 +12,10 @@
 
 `macOS : Darwin : Quartz ∷ Clouds : Core : Vazio`
 
-- **Vazio** — this repo. The WindowServer: owns surfaces, composites, routes events. Nothing more.
+- **Vazio** — this repo. The WindowServer/UI compositor: owns surfaces, composites, routes events. Nothing more.
+- **Splash** — Vazio's rendering interface & SDK (named 2026-09-01): the programmable windowing layer between Vazio and Nova. The Registry, `NodeId`/wire handles, the `{ContentSource, InputSink, PresentFeedback}` facets, the presenter registry and the scripting surface (§2, §S.5, §1.4) **are Splash**; OATS lives here, its hooks/handles are Splash's native vocabulary. Phase 4's substrate lands under this name. (Distinct from the *boot splash* stage of §B — which is, aptly, Splash-the-layer running before the rest of the OS.)
 - **wlroots** — client transport (Wayland protocol) only.
-- **Nova** — Vulkan graphics+compute drawing layer inside Vazio.
+- **Nova** — Vulkan graphics+compute drawing layer inside Vazio, driven through Splash.
 - **Core** — separate project (mfsBSD base). All controller/coordinator logic.
 - **Precipitation** — separate engine proxying Core into Vazio. YAML at that boundary.
 - **OATS** — object registry + type system only.

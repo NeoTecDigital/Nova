@@ -61,6 +61,10 @@ pkg_check_modules(LIBDRM REQUIRED libdrm)
 pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
 pkg_check_modules(XKBCOMMON REQUIRED xkbcommon)
 
+# wlr/render/pixman.h is included by include/Clouds/SpatialPresentLoop.h for the
+# CPU-copy presentation path, and it includes <pixman.h> directly.
+pkg_check_modules(PIXMAN REQUIRED pixman-1)
+
 # wlroots major.minor is baked into the pkg-config name.
 pkg_check_modules(WLROOTS wlroots-0.19)
 if(NOT WLROOTS_FOUND)
@@ -299,26 +303,35 @@ target_compile_definitions(Nova PUBLIC
 # ==========================================
 # Clouds display server & spatial UI
 # ==========================================
-set(CLOUDS_FIRST_PARTY_SOURCES
+# The session layer both entry points are built from: scene, compositor,
+# presentation and the spatial UI. Nothing here touches SDL or ImGui, which is
+# what lets the staged boot binary exist at all (plan B.3).
+set(CLOUDS_SESSION_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialNode.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/Primitives.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialScene.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialCompositor.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialBackendStack.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialPresentLoop.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialPresentSidecar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialWindowHost.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialPopupHost.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialSeatInput.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/OatsBridge.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialFilesystem.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/ImGuiEngineOverlay.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/CrmWorkspace.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/DynamicSceneManager.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/EngineHUD.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIComponents.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIDockBar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIMenuBar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIWindow.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/WindowManager.cpp"
+)
+
+set(CLOUDS_FIRST_PARTY_SOURCES
+    ${CLOUDS_SESSION_SOURCES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/ImGuiEngineOverlay.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/EngineHUD.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/examples/clouds_server_main.cpp"
 )
 
@@ -364,6 +377,7 @@ target_include_directories(Clouds PRIVATE
     ${WAYLAND_SERVER_INCLUDE_DIRS}
     ${LIBDRM_INCLUDE_DIRS}
     ${XKBCOMMON_INCLUDE_DIRS}
+    ${PIXMAN_INCLUDE_DIRS}
 )
 
 target_link_libraries(Clouds PRIVATE
@@ -376,6 +390,52 @@ target_link_libraries(Clouds PRIVATE
     ${XKBCOMMON_LIBRARIES}
     ${Vulkan_LIBRARIES}
     ${SDL2_LIBRARIES}
+    ${FREETYPE_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+)
+
+# ==========================================
+# vazio - the staged boot entry (plan section B)
+#
+# Same session layer as Clouds, different composition: no SDL, no ImGui, no
+# window. It presents into wlroots' own output buffers (plan D.2) and holds the
+# session latent until a readiness token arrives. Deliberately a second TARGET
+# and not a second copy of anything: every line it shares with Clouds is shared
+# through CLOUDS_SESSION_SOURCES.
+# ==========================================
+add_executable(vazio
+    ${CLOUDS_SESSION_SOURCES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/examples/vazio_main.cpp"
+    "${PROTOCOL_GEN_DIR}/xdg-shell-protocol.h"
+)
+add_dependencies(vazio nova_shaders)
+
+target_compile_options(vazio PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+target_compile_definitions(vazio PRIVATE WLR_USE_UNSTABLE)
+
+target_include_directories(vazio PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core
+    ${PROTOCOL_GEN_DIR}
+    ${Vulkan_INCLUDE_DIRS}
+    ${FREETYPE_INCLUDE_DIRS}
+    ${WLROOTS_INCLUDE_DIRS}
+    ${WAYLAND_SERVER_INCLUDE_DIRS}
+    ${LIBDRM_INCLUDE_DIRS}
+    ${XKBCOMMON_INCLUDE_DIRS}
+    ${PIXMAN_INCLUDE_DIRS}
+)
+
+target_link_libraries(vazio PRIVATE
+    Nova
+    oats_ffi
+    nlohmann_json::nlohmann_json
+    ${WLROOTS_LIBRARIES}
+    ${WAYLAND_SERVER_LIBRARIES}
+    ${LIBDRM_LIBRARIES}
+    ${XKBCOMMON_LIBRARIES}
+    ${Vulkan_LIBRARIES}
     ${FREETYPE_LIBRARIES}
     ${CMAKE_DL_LIBS}
 )

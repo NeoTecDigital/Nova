@@ -27,6 +27,7 @@ extern "C" {
 #endif
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 
 namespace Clouds {
@@ -51,6 +52,33 @@ struct SpatialCompositorConfig {
     uint32_t virtual_width = 1600;
     uint32_t virtual_height = 1000;
 };
+
+/**
+ * Session lifecycle, plan section S.6.
+ *
+ * `Latent` is the boot-splash substrate: the display exists, the backend, the
+ * renderer, the allocator and the outputs are live and committing frames, and
+ * the session is unreachable BY CONSTRUCTION - no socket has been added, so
+ * there is nothing for a client to connect to and no protocol global for it to
+ * bind. `Open` adds the socket, the protocol globals and the seat to the SAME
+ * display: a state change on one object, never a handoff to a second one, which
+ * is what keeps DRM master acquired exactly once across the whole boot.
+ */
+enum class SessionStage {
+    Down,    // nothing created, or stop() has run
+    Latent,  // substrate up, zero sockets, zero globals, no seat
+    Open     // socket added, globals created, seat live
+};
+
+/**
+ * Notified once for every output that has been enabled, mode-set and committed.
+ *
+ * The presentation loop is the consumer: it is the point at which an output can
+ * be handed to wlr_output_configure_primary_swapchain. Delivered in both the
+ * latent and the open stage, because the splash presents through exactly the
+ * same outputs the session later does.
+ */
+using OutputReadyHandler = std::function<void(struct wlr_output*)>;
 
 // Identifies a window across the compositor boundary. Minted from a per-session
 // counter, never derived from an address: a raw pointer is only meaningful while

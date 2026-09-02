@@ -68,8 +68,22 @@ public:
     SpatialCompositor(const SpatialCompositor&) = delete;
     SpatialCompositor& operator=(const SpatialCompositor&) = delete;
 
-    // Initialize wlroots Wayland server and protocols
+    // Latent (SessionStage, plan S.6): display, backend, session, renderer,
+    // allocator and outputs live and committing, zero sockets, zero globals.
+    // Unreachable by construction - nothing is listening.
+    bool startSubstrate();
+
+    // latent -> open on the SAME display: socket, protocol globals, seat,
+    // listeners, and a wl_output global per already-committed output.
+    bool open(const std::string& socket_name = "wayland-clouds-0");
+
+    // Substrate + open in one call: the nested entry point's whole startup.
     bool startServer(const std::string& socket_name = "wayland-clouds-0");
+
+    SessionStage stage() const { return stage_; }
+
+    // The presentation loop's output hook; replays over committed outputs.
+    void setOutputReadyHandler(OutputReadyHandler handler);
 
     // Process Wayland event loop iteration
     void iterateEventLoop(int timeout_ms = 0);
@@ -283,9 +297,15 @@ public:
     const std::shared_ptr<SpatialNode>& portalRoot() const;
 
 private:
+    bool initDisplay();
     bool initBackendStack();
     bool createBackend();
     bool initProtocols();
+
+    // Latent-stage input: onNewInput() needs a seat, an open()-stage object, so
+    // devices announced during wlr_backend_start() are tracked here instead.
+    void onLatentInput(void* data);
+    void adoptLatentInput();
     bool ensureVirtualOutput();
     bool initInput();
     bool initKeyboard();
@@ -360,8 +380,11 @@ private:
     void selectOutputMode(struct wlr_output* output, struct wlr_output_state& state);
     void adoptOutputBox(struct wlr_output* output);
 
-    // Advertise a committed output as a wl_output global and start tracking it.
-    void publishOutput(struct wlr_output* output);
+    // Track a committed output and hand it to the presentation loop. No
+    // wl_output global here: a global is protocol surface area and the latent
+    // stage has none. advertiseOutput() creates it, only once open.
+    void trackOutput(struct wlr_output* output);
+    void advertiseOutput(struct wlr_output* output);
     void releaseOutputs();
 
     // Send wl_pointer.frame and close the open group. Every notifySeatPointer*
@@ -463,6 +486,9 @@ private:
 
     std::vector<std::shared_ptr<SpatialOutput>> outputs_;
     std::vector<std::shared_ptr<SpatialOutput>> pending_destroy_outputs_;
+
+    SessionStage stage_ = SessionStage::Down;
+    OutputReadyHandler output_ready_;
 
     // Monotonic per-session counter. Zero is reserved as the invalid handle, so
     // a default-constructed handle never names a live window.

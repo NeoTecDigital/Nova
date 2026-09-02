@@ -42,7 +42,7 @@ extern "C" {
 #endif
 
 #include "./WaylandListener.h"
-#include "../../Core/nova_graphics.h"
+#include "Core/nova_graphics.h"
 
 #include <cstdint>
 #include <functional>

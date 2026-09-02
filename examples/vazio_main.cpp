@@ -13,14 +13,14 @@
 // examples/clouds_server_main.cpp remains the nested development entry and is
 // untouched: it wants SDL, ImGui and a socket from the first instant, which is
 // exactly what this binary must not have.
-#include "../include/Clouds/SpatialCompositor.h"
-#include "../include/Clouds/SpatialPresentLoop.h"
-#include "../include/Clouds/SpatialScene.h"
-#include "../include/Clouds/SpatialFilesystem.h"
-#include "../include/Clouds/OatsBridge.h"
-#include "../include/Clouds/Primitives.h"
-#include "../Core/nova_graphics.h"
-#include "../Core/components/logger.h"
+#include "include/Clouds/SpatialCompositor.h"
+#include "include/Clouds/SpatialPresentLoop.h"
+#include "include/Clouds/SpatialScene.h"
+#include "include/Clouds/SpatialFilesystem.h"
+#include "include/Clouds/OatsBridge.h"
+#include "include/Clouds/Primitives.h"
+#include "Core/nova_graphics.h"
+#include "Core/components/logger.h"
 
 #include <fcntl.h>
 #include <signal.h>

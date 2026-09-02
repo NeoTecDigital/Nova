@@ -12,9 +12,9 @@
 // point the swapchain slot is released). So the order below - set_buffer,
 // commit, state_finish, unlock - keeps our own reference alive across the whole
 // of the frame's use of the buffer, which is the point of holding one.
-#include "../../include/Clouds/SpatialPresentLoop.h"
-#include "../../include/Clouds/SpatialCompositor.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/SpatialPresentLoop.h"
+#include "include/Clouds/SpatialCompositor.h"
+#include "Core/components/logger.h"
 
 #include <algorithm>
 #include <cstring>

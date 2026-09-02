@@ -11,8 +11,8 @@
 // back into a host-visible buffer, and the rows are written into the mapped
 // scanout buffer. Separate translation unit from the loop proper purely for the
 // 500-line file cap; it is the same class and the same object.
-#include "../../include/Clouds/SpatialPresentLoop.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/SpatialPresentLoop.h"
+#include "Core/components/logger.h"
 
 #include <cstring>
 

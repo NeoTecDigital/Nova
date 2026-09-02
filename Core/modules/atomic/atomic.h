@@ -1,7 +1,7 @@
 #pragma once
-#include "../../components/lexicon.h"
-#include "../../components/vertex.h"
-#include "../../components/vk_memory.h"
+#include "Core/components/lexicon.h"
+#include "Core/components/vertex.h"
+#include "Core/components/vk_memory.h"
 
 #include <optional>
 #include <vector>

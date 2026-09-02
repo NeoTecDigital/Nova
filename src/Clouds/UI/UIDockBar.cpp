@@ -1,5 +1,5 @@
-#include "../../../include/Clouds/UI/UIDockBar.h"
-#include "../../../include/Clouds/Primitives.h"
+#include "include/Clouds/UI/UIDockBar.h"
+#include "include/Clouds/Primitives.h"
 
 namespace Clouds::UI {
 

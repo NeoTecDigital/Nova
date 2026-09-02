@@ -1,5 +1,5 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
-#include "../extern/OATS-ffi/include/oats_ffi.h"
+#include "extern/OATS-ffi/include/oats_ffi.h"
 
 #include <iostream>
 #include <chrono>

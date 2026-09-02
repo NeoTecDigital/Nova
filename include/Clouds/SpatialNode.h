@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../../Core/math/quaternion_transform.h"
-#include "../../Core/math/raycast.h"
-#include "../../Core/math/hyper_math.h"
-#include "../../Core/modules/spatial_pipeline/spatial_pipeline.h"
-#include "../../Core/modules/spatial_pipeline/spatial_mesh.h"
-#include "../../Core/modules/spatial_pipeline/spatial_font.h"
+#include "Core/math/quaternion_transform.h"
+#include "Core/math/raycast.h"
+#include "Core/math/hyper_math.h"
+#include "Core/modules/spatial_pipeline/spatial_pipeline.h"
+#include "Core/modules/spatial_pipeline/spatial_mesh.h"
+#include "Core/modules/spatial_pipeline/spatial_font.h"
 #include <vector>
 #include <memory>
 #include <functional>

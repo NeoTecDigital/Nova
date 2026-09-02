@@ -9,8 +9,8 @@
 // window the same entry points are driven by SDL. Neither producer knows about
 // the other, which is the whole point: the SDL half can be deleted without the
 // DRM half noticing.
-#include "../../include/Clouds/SpatialCompositor.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/SpatialCompositor.h"
+#include "Core/components/logger.h"
 
 #include <linux/input-event-codes.h>
 #include <algorithm>

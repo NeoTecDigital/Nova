@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../SpatialNode.h"
-#include "../Primitives.h"
+#include "include/Clouds/SpatialNode.h"
+#include "include/Clouds/Primitives.h"
 #include "./UIComponents.h"
 #include "./UITheme.h"
 #include <memory>

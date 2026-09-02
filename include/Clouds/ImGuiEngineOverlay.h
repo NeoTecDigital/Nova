@@ -1,8 +1,8 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
-#include "../../Core/nova_graphics.h"
-#include "../../Core/math/engine_physics.h"
+#include "Core/nova_graphics.h"
+#include "Core/math/engine_physics.h"
 #include "./OatsBridge.h"
 #include "./SpatialFilesystem.h"
 #include <SDL2/SDL.h>

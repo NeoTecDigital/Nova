@@ -4,8 +4,8 @@
 #include "./UIWindow.h"
 #include "./UIMenuBar.h"
 #include "./UIDockBar.h"
-#include "../OatsBridge.h"
-#include "../../../Core/math/engine_physics.h"
+#include "include/Clouds/OatsBridge.h"
+#include "Core/math/engine_physics.h"
 #include <vector>
 #include <memory>
 

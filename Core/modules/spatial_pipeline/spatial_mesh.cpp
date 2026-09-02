@@ -1,7 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "./spatial_mesh.h"
-#include "../../nova_graphics.h"
-#include "../../components/logger.h"
+#include "Core/nova_graphics.h"
+#include "Core/components/logger.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>

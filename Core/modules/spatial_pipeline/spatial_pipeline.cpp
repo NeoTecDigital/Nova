@@ -1,5 +1,5 @@
 #include "./spatial_pipeline.h"
-#include "../../components/logger.h"
+#include "Core/components/logger.h"
 #include <fstream>
 #include <stdexcept>
 

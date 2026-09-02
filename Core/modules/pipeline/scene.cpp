@@ -1,4 +1,4 @@
-#include "../../core.h"
+#include "Core/core.h"
 #include <cstring>
 #include <chrono>
 
@@ -7,7 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "../../components/extern/stb_image.h"
+#include "Core/components/extern/stb_image.h"
 // TEXTURE_PATH removed - was hardcoded during development, not needed
 
 // Do we need to move this to the graphics pipeline?

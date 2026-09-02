@@ -1,5 +1,5 @@
-#include "../../include/Clouds/EngineHUD.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/EngineHUD.h"
+#include "Core/components/logger.h"
 #include <iomanip>
 #include <sstream>
 

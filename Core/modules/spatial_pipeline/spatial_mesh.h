@@ -1,9 +1,9 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
-#include "../../core_base.h"
+#include "Core/core_base.h"
 #include "./spatial_vertex.h"
-#include "../../math/quaternion_transform.h"
+#include "Core/math/quaternion_transform.h"
 #include <array>
 #include <string>
 #include <vector>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../SpatialNode.h"
-#include "../../../Core/modules/spatial_pipeline/spatial_font.h"
+#include "include/Clouds/SpatialNode.h"
+#include "Core/modules/spatial_pipeline/spatial_font.h"
 #include "./UITheme.h"
 #include <functional>
 #include <vector>

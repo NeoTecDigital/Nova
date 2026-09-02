@@ -11,9 +11,9 @@
 // UIWindow is likewise built with a null font, which is the supported path
 // its own setupChrome() already guards for.
 
-#include "../include/Clouds/SpatialScene.h"
-#include "../include/Clouds/UI/UIWindow.h"
-#include "../include/Clouds/UI/UIComponents.h"
+#include "include/Clouds/SpatialScene.h"
+#include "include/Clouds/UI/UIWindow.h"
+#include "include/Clouds/UI/UIComponents.h"
 
 #include <cmath>
 #include <cstdio>

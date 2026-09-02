@@ -2,7 +2,7 @@
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
-#include "../../math/hyper_math.h"
+#include "Core/math/hyper_math.h"
 #include <array>
 
 namespace NovaSpatial {

@@ -4,7 +4,7 @@
 #include "./SpatialNode.h"
 #include "./Primitives.h"
 #include "./OatsBridge.h"
-#include "../../Core/modules/spatial_pipeline/spatial_font.h"
+#include "Core/modules/spatial_pipeline/spatial_font.h"
 #include <memory>
 #include <vector>
 

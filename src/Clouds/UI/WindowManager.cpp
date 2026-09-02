@@ -1,8 +1,8 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 
-#include "../../../include/Clouds/UI/WindowManager.h"
-#include "../../../include/Clouds/Primitives.h"
-#include "../../../Core/components/logger.h"
+#include "include/Clouds/UI/WindowManager.h"
+#include "include/Clouds/Primitives.h"
+#include "Core/components/logger.h"
 #include <sstream>
 #include <iomanip>
 

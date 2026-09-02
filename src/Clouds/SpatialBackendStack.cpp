@@ -13,8 +13,8 @@
 // It also carries the session lifecycle (plan S.6): startSubstrate() brings the
 // substrate up latent - display, backend, outputs, no socket and no global -
 // and open() flips the same object to reachable. startServer() is both.
-#include "../../include/Clouds/SpatialCompositor.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/SpatialCompositor.h"
+#include "Core/components/logger.h"
 
 #include <algorithm>
 #include <utility>

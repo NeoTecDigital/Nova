@@ -1,7 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 
-#include "../../include/Clouds/DynamicSceneManager.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/DynamicSceneManager.h"
+#include "Core/components/logger.h"
 #include <vector>
 
 namespace Clouds {

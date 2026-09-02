@@ -1,5 +1,5 @@
-#include "../core.h"
-#include "../components/vk_memory.h"
+#include "Core/core.h"
+#include "Core/components/vk_memory.h"
 
 #include <set>
 #include <stdexcept>

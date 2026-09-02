@@ -1,7 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
-#include "../../include/Clouds/SpatialFilesystem.h"
-#include "../../include/Clouds/Primitives.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/SpatialFilesystem.h"
+#include "include/Clouds/Primitives.h"
+#include "Core/components/logger.h"
 #include <cmath>
 #include <iostream>
 #include <algorithm>

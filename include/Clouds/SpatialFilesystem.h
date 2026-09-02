@@ -2,8 +2,8 @@
 #pragma once
 
 #include "./SpatialNode.h"
-#include "../../Core/modules/spatial_pipeline/spatial_mesh.h"
-#include "../../Core/modules/spatial_pipeline/spatial_font.h"
+#include "Core/modules/spatial_pipeline/spatial_mesh.h"
+#include "Core/modules/spatial_pipeline/spatial_font.h"
 #include <string>
 #include <vector>
 #include <memory>

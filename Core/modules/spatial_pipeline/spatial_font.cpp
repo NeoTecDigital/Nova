@@ -1,6 +1,6 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "./spatial_font.h"
-#include "../../components/logger.h"
+#include "Core/components/logger.h"
 #include <vector>
 #include <cstring>
 #include <algorithm>

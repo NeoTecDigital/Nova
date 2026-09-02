@@ -5,9 +5,9 @@
 // map/unmap into the portal root, client buffer import, frame pacing and the
 // deferred destruction path. The session substrate (bring-up, sockets, seat,
 // teardown) lives in SpatialCompositor.cpp.
-#include "../../include/Clouds/SpatialCompositor.h"
-#include "../../Core/components/logger.h"
-#include "../../Core/modules/spatial_pipeline/texture_bridge.h"
+#include "include/Clouds/SpatialCompositor.h"
+#include "Core/components/logger.h"
+#include "Core/modules/spatial_pipeline/texture_bridge.h"
 #include <drm_fourcc.h>
 #include <algorithm>
 

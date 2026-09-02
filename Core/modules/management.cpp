@@ -1,6 +1,6 @@
-#include "../core.h"
+#include "Core/core.h"
 #define VMA_IMPLEMENTATION
-#include "../components/vk_memory.h"
+#include "Core/components/vk_memory.h"
 
     ///////////////////////////
     // PIPELINE CONSTRUCTION //

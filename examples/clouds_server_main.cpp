@@ -1,11 +1,11 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
-#include "../Nova.h"
-#include "../include/Clouds/SpatialScene.h"
-#include "../include/Clouds/SpatialCompositor.h"
-#include "../include/Clouds/OatsBridge.h"
-#include "../include/Clouds/SpatialFilesystem.h"
-#include "../include/Clouds/ImGuiEngineOverlay.h"
-#include "../Core/components/logger.h"
+#include "Nova.h"
+#include "include/Clouds/SpatialScene.h"
+#include "include/Clouds/SpatialCompositor.h"
+#include "include/Clouds/OatsBridge.h"
+#include "include/Clouds/SpatialFilesystem.h"
+#include "include/Clouds/ImGuiEngineOverlay.h"
+#include "Core/components/logger.h"
 #include "./sdl_evdev_scancodes.h"
 
 #include <SDL2/SDL.h>

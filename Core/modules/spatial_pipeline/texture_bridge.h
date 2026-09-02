@@ -1,7 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
-#include "../../core_base.h"
+#include "Core/core_base.h"
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <memory>

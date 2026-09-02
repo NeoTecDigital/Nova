@@ -2,7 +2,7 @@
 
 #include "./SpatialNode.h"
 #include "./Primitives.h"
-#include "../../Core/math/engine_physics.h"
+#include "Core/math/engine_physics.h"
 #include <memory>
 #include <functional>
 #include <string>

@@ -1,9 +1,9 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 
-#include "../../include/Clouds/OatsBridge.h"
-#include "../../include/Clouds/OatsTraitCodec.h"
-#include "../../Core/components/logger.h"
-#include "../../extern/OATS-ffi/include/oats_ffi.h"
+#include "include/Clouds/OatsBridge.h"
+#include "include/Clouds/OatsTraitCodec.h"
+#include "Core/components/logger.h"
+#include "extern/OATS-ffi/include/oats_ffi.h"
 
 #include <nlohmann/json.hpp>
 #include <exception>

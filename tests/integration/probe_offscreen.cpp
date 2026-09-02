@@ -9,8 +9,8 @@
 // The teardown is therefore the last and most important assertion in the file.
 // It is deliberately NOT wrapped in anything: the process exit code is the
 // check. rc 0 = the registry entry ran once, at the right level, on live state.
-#include "../../Core/nova_graphics.h"
-#include "../../Core/components/logger.h"
+#include "Core/nova_graphics.h"
+#include "Core/components/logger.h"
 
 #include <cstdio>
 #include <cstdlib>

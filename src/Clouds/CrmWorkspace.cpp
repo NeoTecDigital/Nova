@@ -1,7 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 
-#include "../../include/Clouds/CrmWorkspace.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/CrmWorkspace.h"
+#include "Core/components/logger.h"
 #include <sstream>
 
 namespace Clouds {

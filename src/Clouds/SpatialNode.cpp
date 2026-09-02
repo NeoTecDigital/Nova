@@ -1,4 +1,4 @@
-#include "../../include/Clouds/SpatialNode.h"
+#include "include/Clouds/SpatialNode.h"
 #include <algorithm>
 
 namespace Clouds {

@@ -1,6 +1,6 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
-#include "../../include/Clouds/SpatialCompositor.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/SpatialCompositor.h"
+#include "Core/components/logger.h"
 #include <algorithm>
 #include <cstdlib>
 

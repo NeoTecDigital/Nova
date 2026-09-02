@@ -1,13 +1,13 @@
 #pragma once
 
 #include "./SpatialNode.h"
-#include "../../Core/modules/spatial_pipeline/spatial_pipeline.h"
-#include "../../Core/modules/spatial_pipeline/spatial_mesh.h"
-#include "../../Core/modules/spatial_pipeline/spatial_font.h"
-#include "../../Core/modules/spatial_pipeline/texture_bridge.h"
-#include "../../Core/math/engine_physics.h"
-#include "../../Core/math/spatial_cluster.h"
-#include "../../Core/math/input_filter.h"
+#include "Core/modules/spatial_pipeline/spatial_pipeline.h"
+#include "Core/modules/spatial_pipeline/spatial_mesh.h"
+#include "Core/modules/spatial_pipeline/spatial_font.h"
+#include "Core/modules/spatial_pipeline/texture_bridge.h"
+#include "Core/math/engine_physics.h"
+#include "Core/math/spatial_cluster.h"
+#include "Core/math/input_filter.h"
 #include <memory>
 #include <vector>
 

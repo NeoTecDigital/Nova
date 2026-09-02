@@ -1,6 +1,6 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
-#include "../../include/Clouds/SpatialScene.h"
-#include "../../include/Clouds/Primitives.h"
+#include "include/Clouds/SpatialScene.h"
+#include "include/Clouds/Primitives.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 

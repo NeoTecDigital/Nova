@@ -1,6 +1,6 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
-#include "../../include/Clouds/ImGuiEngineOverlay.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/ImGuiEngineOverlay.h"
+#include "Core/components/logger.h"
 #include <imgui.h>
 #include <backends/imgui_impl_sdl2.h>
 #include <backends/imgui_impl_vulkan.h>

@@ -1,6 +1,6 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "./texture_bridge.h"
-#include "../../components/logger.h"
+#include "Core/components/logger.h"
 #include <cstring>
 #include <stdexcept>
 

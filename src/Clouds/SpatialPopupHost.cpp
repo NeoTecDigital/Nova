@@ -12,8 +12,8 @@
 // called: in a 3D scene the constraint area is not a screen rectangle, so the
 // policy is a Desktop/Portal decision rather than a transport one. Until then a
 // menu that would overflow simply overflows, which is visible and honest.
-#include "../../include/Clouds/SpatialCompositor.h"
-#include "../../Core/components/logger.h"
+#include "include/Clouds/SpatialCompositor.h"
+#include "Core/components/logger.h"
 
 #include <algorithm>
 

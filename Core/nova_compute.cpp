@@ -6,7 +6,7 @@ NovaCompute::NovaCompute(const std::string& debug_level)
     report(LOGGER::INFO, "NovaCompute - Initializing compute-only mode ..");
 
     // Initialize base resources (no surface)
-    createVulkanInstance(false);  // No surface extensions
+    createVulkanInstance({});     // No window system: no surface extensions
     createPhysicalDevice(false);  // No presentation support needed
     createLogicalDevice(false);   // No swapchain extension
     createSharedCommandPools();
@@ -43,6 +43,14 @@ NovaCompute::~NovaCompute()
 {
     report(LOGGER::INFO, "NovaCompute - Destroying");
     vkDeviceWaitIdle(logical_device);
+
+    // compute_fence is a NovaCompute member; resource_registry belongs to the
+    // base. Draining the entry from ~NovaCore would run it after this object's
+    // members are gone. VkFence is a trivially destructible handle so the bytes
+    // happened to survive, but the pattern is the teardown UAF that ~NovaGraphics
+    // already had to fix - so run and unregister it HERE, while the member is
+    // still alive. Idempotent: run_and_release is a no-op if the key is absent.
+    resource_registry.run_and_release("compute_resources");
 }
 
 void NovaCompute::submitCompute(std::function<void(VkCommandBuffer)>&& func)

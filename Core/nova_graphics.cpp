@@ -1,52 +1,30 @@
 #include "./nova_graphics.h"
-#include <SDL2/SDL_vulkan.h>
 
-NovaGraphics::NovaGraphics(VkExtent2D extent, const std::string& debug_level, struct SDL_Window* window)
-    : NovaCore(debug_level)
-{
-    report(LOGGER::INFO, "NovaGraphics - Initializing graphics mode with SDL window ..");
+// No window-system header belongs in this translation unit. The SDL-window
+// constructor lives in Core/nova_sdl.cpp, which is the one place in Nova that
+// links libSDL2; everything here is surface-agnostic.
 
-    setWindowExtent(extent);
-
-    // Initialize base resources WITH surface extensions for SDL
-    createVulkanInstance(true);
-
-    // Create Vulkan surface from SDL window using the valid VkInstance
-    if (!SDL_Vulkan_CreateSurface(window, instance, &surface)) {
-        report(LOGGER::ERROR, "NovaGraphics - Failed to create Vulkan surface from SDL window");
-        return;
-    }
-
-    createPhysicalDevice(true, surface);
-    createLogicalDevice(true);
-    createSharedCommandPools();
-    createImmediateContext();
-
-    // Get graphics and present queues
-    vkGetDeviceQueue(logical_device, queues.indices.graphics_family.value(), 0, &graphics_queue);
-    vkGetDeviceQueue(logical_device, queues.indices.present_family.value(), 0, &present_queue);
-
-    // Initialize graphics-specific resources
-    createSwapchain();
-    createImageViews();
-    createRenderPass();
-    createFramebuffers();
-    createFrameSyncObjects();
-
-    report(LOGGER::INFO, "NovaGraphics - Initialized successfully");
-}
-
-NovaGraphics::NovaGraphics(VkExtent2D extent, const std::string& debug_level, VkSurfaceKHR surf)
+NovaGraphics::NovaGraphics(VkExtent2D extent, const std::string& debug_level, VkSurfaceKHR surf,
+                           const std::vector<const char*>& instance_extensions)
     : NovaCore(debug_level), surface(surf)
 {
     report(LOGGER::INFO, "NovaGraphics - Initializing graphics mode ..");
 
     setWindowExtent(extent);
 
-    // Initialize base resources WITH surface support
-    createVulkanInstance(true);   // Need surface extensions (SDL/GLFW)
+    createVulkanInstance(instance_extensions);
+    completeSurfaceBackedInit();
+
+    report(LOGGER::INFO, "NovaGraphics - Initialized successfully");
+}
+
+// Second half of every surface-backed bring-up, from device selection through
+// frame sync. Both surface constructors call it with `surface` already live, so
+// the SDL path and the external-surface path stay one code path.
+void NovaGraphics::completeSurfaceBackedInit()
+{
     createPhysicalDevice(true, surface);   // Need presentation support
-    createLogicalDevice(true);    // Need swapchain extension
+    createLogicalDevice(true);             // Need swapchain extension
     createSharedCommandPools();
     createImmediateContext();
 
@@ -60,8 +38,6 @@ NovaGraphics::NovaGraphics(VkExtent2D extent, const std::string& debug_level, Vk
     createRenderPass();
     createFramebuffers();
     createFrameSyncObjects();
-
-    report(LOGGER::INFO, "NovaGraphics - Initialized successfully");
 }
 
 NovaGraphics::~NovaGraphics()
@@ -69,7 +45,18 @@ NovaGraphics::~NovaGraphics()
     report(LOGGER::INFO, "NovaGraphics - Destroying");
     vkDeviceWaitIdle(logical_device);
 
-    // Cleanup graphics resources
+    // offscreen_targets and imported_images are NovaGraphics members, so their
+    // release belongs HERE, in the derived destructor body, before any member
+    // of this object has been destroyed. NovaCore::resource_registry cannot do
+    // it: the base destructor drains the registry after both members are gone,
+    // which is a use-after-free that -O0 survives by accident and -O2 turns
+    // into `double free or corruption`. release() rather than run_and_release()
+    // because the registered entry is a tripwire, not a copy of this teardown
+    // (see registerOffscreenCleanup). Both calls are idempotent and both are
+    // no-ops on the surface-backed path, which registers no entry.
+    destroyOffscreenState();
+    resource_registry.release(kOffscreenCleanupKey);
+
     if (graphics_pipeline) {
         delete graphics_pipeline;
         graphics_pipeline = nullptr;
@@ -79,7 +66,17 @@ NovaGraphics::~NovaGraphics()
         vkDestroyRenderPass(logical_device, render_pass, nullptr);
     }
 
-    // Cleanup swapchain
+    destroySwapchainResources();
+    destroyFrameSyncObjects();
+
+    // The surface is destroyed by whoever created it (nova_sdl.cpp for the SDL
+    // path, the caller for the external-surface path), never here.
+}
+
+// Framebuffers, image views and the swapchain itself. All three collections are
+// empty in offscreen mode, which is what makes this callable unconditionally.
+void NovaGraphics::destroySwapchainResources()
+{
     for (auto framebuffer : swapchain.framebuffers) {
         if (framebuffer != VK_NULL_HANDLE) {
             vkDestroyFramebuffer(logical_device, framebuffer, nullptr);
@@ -95,8 +92,13 @@ NovaGraphics::~NovaGraphics()
     if (swapchain.instance != VK_NULL_HANDLE) {
         vkDestroySwapchainKHR(logical_device, swapchain.instance, nullptr);
     }
+}
 
-    // Cleanup frame sync objects
+// The per-frame-in-flight slots. Offscreen mode populates the fence and the
+// command pool but leaves both semaphore vectors empty, so the same walk covers
+// either construction path.
+void NovaGraphics::destroyFrameSyncObjects()
+{
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         for (auto semaphore : frames[i].image_available) {
             if (semaphore != VK_NULL_HANDLE) {
@@ -115,8 +117,6 @@ NovaGraphics::~NovaGraphics()
             vkDestroyCommandPool(logical_device, frames[i].cmd.pool, nullptr);
         }
     }
-
-    // Surface will be destroyed by SDL/GLFW externally
 }
 
 void NovaGraphics::createRenderPass()

@@ -57,6 +57,9 @@ endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FREETYPE REQUIRED freetype2)
 pkg_check_modules(WAYLAND_SERVER REQUIRED wayland-server)
+
+# The integration harnesses under tests/integration/ are real Wayland clients.
+pkg_check_modules(WAYLAND_CLIENT REQUIRED wayland-client)
 pkg_check_modules(LIBDRM REQUIRED libdrm)
 pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
 pkg_check_modules(XKBCOMMON REQUIRED xkbcommon)
@@ -122,6 +125,75 @@ add_custom_command(
     DEPENDS ${XDG_SHELL_XML}
     COMMENT "wayland-scanner: xdg-shell private code"
 )
+
+# --- Client-side protocol code, for the in-repo integration harnesses ---------
+#
+# The harnesses under tests/integration/ are real Wayland CLIENTS driven against
+# a real SpatialCompositor, so they need the client-header form of the same XML
+# the server rule above consumes, plus the two unstable protocols the compositor
+# advertises and the protocol phases assert on. Mirrors the server rule exactly;
+# only the wayland-scanner mode and the output name differ.
+set(NOVA_CLIENT_PROTOCOL_MAP
+    "xdg-shell|${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml"
+    "xdg-decoration-unstable-v1|${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"
+    "primary-selection-unstable-v1|${WAYLAND_PROTOCOLS_DIR}/unstable/primary-selection/primary-selection-unstable-v1.xml"
+)
+
+set(NOVA_CLIENT_PROTOCOL_SOURCES "")
+set(NOVA_CLIENT_PROTOCOL_HEADERS "")
+foreach(_entry IN LISTS NOVA_CLIENT_PROTOCOL_MAP)
+    string(REPLACE "|" ";" _pair "${_entry}")
+    list(GET _pair 0 _proto_name)
+    list(GET _pair 1 _proto_xml)
+    if(NOT EXISTS "${_proto_xml}")
+        message(FATAL_ERROR
+            "Missing Wayland protocol XML: ${_proto_xml}\n"
+            "tests/integration needs it to generate client bindings. Install a "
+            "complete wayland-protocols package.")
+    endif()
+
+    set(_client_header "${PROTOCOL_GEN_DIR}/${_proto_name}-client-protocol.h")
+    set(_client_code   "${PROTOCOL_GEN_DIR}/${_proto_name}-client-protocol.c")
+
+    add_custom_command(
+        OUTPUT "${_client_header}"
+        COMMAND ${WAYLAND_SCANNER} client-header "${_proto_xml}" "${_client_header}"
+        DEPENDS "${_proto_xml}"
+        COMMENT "wayland-scanner: ${_proto_name} client header"
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT "${_client_code}"
+        COMMAND ${WAYLAND_SCANNER} private-code "${_proto_xml}" "${_client_code}"
+        DEPENDS "${_proto_xml}"
+        COMMENT "wayland-scanner: ${_proto_name} private code"
+        VERBATIM
+    )
+    list(APPEND NOVA_CLIENT_PROTOCOL_HEADERS "${_client_header}")
+    list(APPEND NOVA_CLIENT_PROTOCOL_SOURCES "${_client_code}")
+endforeach()
+
+# Generated C: not ours to fix.
+set_source_files_properties(${NOVA_CLIENT_PROTOCOL_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
+
+# ONE target owns the generation, and everything else depends on that target.
+#
+# Listing a custom-command OUTPUT as a source of several targets makes the
+# Makefile generator emit the rule once per target, and a parallel build then
+# races two wayland-scanner invocations writing the same header - which surfaces
+# as "zwp_primary_selection_device_manager_v1_interface was not declared",
+# i.e. a compile against a half-written file. A library with a single owner
+# removes the race by construction, and target-level dependencies give the
+# ordering the header needs.
+add_custom_target(nova_client_protocol_headers DEPENDS ${NOVA_CLIENT_PROTOCOL_HEADERS})
+
+add_library(nova_client_protocols STATIC ${NOVA_CLIENT_PROTOCOL_SOURCES})
+add_dependencies(nova_client_protocols nova_client_protocol_headers)
+target_include_directories(nova_client_protocols PUBLIC
+    ${PROTOCOL_GEN_DIR}
+    ${WAYLAND_CLIENT_INCLUDE_DIRS}
+)
+target_link_libraries(nova_client_protocols PUBLIC ${WAYLAND_CLIENT_LIBRARIES})
 
 # ==========================================
 # GLSL -> SPIR-V
@@ -234,8 +306,10 @@ add_dependencies(oats_ffi oats_ffi_build)
 # ==========================================
 # Nova engine library
 # ==========================================
+# Nova.cpp is deliberately absent: `class Nova` IS the SDL application wrapper
+# (SDL_Init, SDL_CreateWindow, SDL_PollEvent, SDL_Vulkan_GetDrawableSize), so it
+# belongs to the NovaSDL target below, not to the windowless engine archive.
 set(NOVA_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/Nova.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Core/core_base.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Core/core_device_select.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Core/core.cpp"
@@ -284,21 +358,68 @@ target_include_directories(Nova PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/Core
     ${Vulkan_INCLUDE_DIRS}
-    ${SDL2_INCLUDE_DIRS}
     ${FREETYPE_INCLUDE_DIRS}
 )
+
+# SDL2 headers - and ONLY the headers - are a compile requirement of any consumer
+# that includes Core/nova_graphics.h: that header pulls in
+# Core/modules/camera/camera.h, which includes <SDL2/SDL_events.h> for
+# Camera::processEvents(SDL_Event&). `vazio` is such a consumer
+# (examples/vazio_main.cpp constructs an offscreen NovaGraphics), so the include
+# path is genuinely PUBLIC. An include path is not a link edge: `vazio` compiles
+# against SDL2's headers and links none of its code. Narrowing this further means
+# taking SDL out of Camera's public interface, not out of here.
+target_include_directories(Nova PUBLIC ${SDL2_INCLUDE_DIRS})
 
 target_link_libraries(Nova PUBLIC
     glm::glm
     ${Vulkan_LIBRARIES}
-    ${SDL2_LIBRARIES}
     ${FREETYPE_LIBRARIES}
     ${CMAKE_DL_LIBS}
 )
 
+# Nova links NO SDL, in any scope. A PRIVATE dependency on a STATIC library is
+# still forwarded to consumers as $<LINK_ONLY:>, so as long as any archive member
+# a consumer pulls carried an undefined SDL symbol, every consumer - `vazio`
+# included - resolved against libSDL2 and carried it at runtime. The two members
+# that did (core_base.cpp.o: SDL_Vulkan_GetInstanceExtensions,
+# nova_graphics.cpp.o: SDL_Vulkan_CreateSurface) no longer call SDL at all; both
+# call sites now live in Core/nova_sdl.cpp, in the separate NovaSDL archive below.
+
 target_compile_definitions(Nova PUBLIC
     NOVA_COMPUTE_ENABLED
 )
+
+# ==========================================
+# NovaSDL - the window-system half of the engine
+#
+# One translation unit: Core/nova_sdl.cpp, holding NovaSDL::vulkanInstanceExtensions
+# and the SDL_Window constructor of NovaGraphics. Kept OUT of libNova.a so that a
+# target which never opens a window cannot accidentally acquire libSDL2 through
+# the archive. Link this only from targets that do.
+#
+# Two translation units live here: Core/nova_sdl.cpp (the extension query and the
+# SDL_Window constructor of NovaGraphics) and Nova.cpp (`class Nova`, the SDL
+# application wrapper that owns the window and the event pump). Both are
+# SDL-calling by nature; the dependency direction is strictly NovaSDL -> Nova,
+# never back, which is what keeps the two static archives acyclic on the link line.
+#
+# ONE residual SDL reference remains inside libNova.a: core.cpp.o, the deprecated
+# NovaCoreLegacy, calls SDL_Vulkan_GetInstanceExtensions. It is NOT moved because
+# NovaCoreLegacy's methods are spread across five translation units and splitting
+# the class across two archives would reintroduce exactly the ordering problem
+# this arrangement removes. Nothing reachable from `vazio` pulls that member, so
+# it costs nothing today; a target that does start using NovaCoreLegacy fails
+# loudly at link time and must link NovaSDL. Enforced by the `nova_link_hygiene`
+# test at the bottom of this file.
+# ==========================================
+add_library(NovaSDL STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/Core/nova_sdl.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova.cpp"
+)
+target_compile_options(NovaSDL PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+target_link_libraries(NovaSDL PUBLIC Nova ${SDL2_LIBRARIES})
+target_include_directories(NovaSDL PUBLIC ${SDL2_INCLUDE_DIRS})
 
 # ==========================================
 # Clouds display server & spatial UI
@@ -381,7 +502,7 @@ target_include_directories(Clouds PRIVATE
 )
 
 target_link_libraries(Clouds PRIVATE
-    Nova
+    NovaSDL
     oats_ffi
     nlohmann_json::nlohmann_json
     ${WLROOTS_LIBRARIES}
@@ -397,11 +518,20 @@ target_link_libraries(Clouds PRIVATE
 # ==========================================
 # vazio - the staged boot entry (plan section B)
 #
-# Same session layer as Clouds, different composition: no SDL, no ImGui, no
-# window. It presents into wlroots' own output buffers (plan D.2) and holds the
-# session latent until a readiness token arrives. Deliberately a second TARGET
-# and not a second copy of anything: every line it shares with Clouds is shared
-# through CLOUDS_SESSION_SOURCES.
+# Same session layer as Clouds, different composition: no ImGui, no window, and
+# no source of its own that calls SDL. It presents into wlroots' own output
+# buffers (plan D.2) and holds the session latent until a readiness token
+# arrives. Deliberately a second TARGET and not a second copy of anything: every
+# line it shares with Clouds is shared through CLOUDS_SESSION_SOURCES.
+#
+# It links no libSDL2: verified by `ldd vazio` and enforced by construction -
+# Nova carries no SDL link edge in any scope, and the only SDL-calling
+# translation unit lives in the separate NovaSDL archive, which this target does
+# not link. It still COMPILES against SDL2's headers, because Core/nova_graphics.h
+# reaches Core/modules/camera/camera.h and that declares
+# Camera::processEvents(SDL_Event&). An include path is not a runtime dependency.
+# This distinction matters here and nowhere else: an early-userspace boot binary
+# carrying an unnecessary shared object is a boot-time fact, not a cosmetic one.
 # ==========================================
 add_executable(vazio
     ${CLOUDS_SESSION_SOURCES}
@@ -448,9 +578,13 @@ target_link_libraries(vazio PRIVATE
 # lost from the CMake build. The Makefile now delegates here; this is the single
 # definition of the Nova source set.
 # ==========================================
+# Links NovaSDL, not Nova: wavecube_compute.cpp drives `class Nova`, whose
+# translation unit calls SDL_Init/SDL_CreateWindow unconditionally. Compute-only
+# at runtime, SDL-referencing at link time - stating that here rather than
+# hiding it behind a transitive dependency is the whole point of the split.
 add_executable(wavecube_compute "${CMAKE_CURRENT_SOURCE_DIR}/wavecube_compute.cpp")
 target_compile_options(wavecube_compute PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
-target_link_libraries(wavecube_compute PRIVATE Nova)
+target_link_libraries(wavecube_compute PRIVATE NovaSDL)
 
 # ==========================================
 # Seam benchmarks & limit integration tests
@@ -516,3 +650,216 @@ set_tests_properties(seam_math_raycast seam_ffi_roundtrip scene_input PROPERTIES
     TIMEOUT 120
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 )
+
+# ==========================================
+# Integration harnesses (tests/integration)
+#
+# These are the harnesses that used to live in scratch directories and were lost
+# with them. They are in the repository and under CTest now, which is the whole
+# point: a proof that only exists in /tmp is a proof that expires.
+#
+# Every one of them runs against a PRIVATE XDG_RUNTIME_DIR under the build tree
+# and forces WLR_BACKENDS=headless. None of them can touch a live session:
+# a compositor here binds its own socket, in its own runtime dir, with a
+# pid-suffixed name. The runtime dir is kept SHORT on purpose - sockaddr_un's
+# sun_path is 108 bytes and the failure when it overflows names neither the path
+# nor the limit.
+# ==========================================
+set(NOVA_TEST_RUNTIME_ROOT "${CMAKE_CURRENT_BINARY_DIR}/trt")
+
+# The session layer these harnesses drive. Same sources as `vazio`, compiled
+# once more for the tests rather than linked out of an executable - identical
+# defines and warning flags, so no ODR hazard, and the tests stay independent of
+# how the product binaries happen to be composed.
+# The generated protocol code is NOT listed here: it lives in the
+# nova_client_protocols library above, which every harness links.
+set(NOVA_INTEGRATION_SESSION_SOURCES
+    ${CLOUDS_SESSION_SOURCES}
+)
+
+set(NOVA_INTEGRATION_INCLUDES
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration
+    ${PROTOCOL_GEN_DIR}
+    ${Vulkan_INCLUDE_DIRS}
+    ${FREETYPE_INCLUDE_DIRS}
+    ${WLROOTS_INCLUDE_DIRS}
+    ${WAYLAND_SERVER_INCLUDE_DIRS}
+    ${WAYLAND_CLIENT_INCLUDE_DIRS}
+    ${LIBDRM_INCLUDE_DIRS}
+    ${XKBCOMMON_INCLUDE_DIRS}
+    ${PIXMAN_INCLUDE_DIRS}
+)
+
+set(NOVA_INTEGRATION_LIBS
+    Nova
+    nova_client_protocols
+    oats_ffi
+    nlohmann_json::nlohmann_json
+    ${WLROOTS_LIBRARIES}
+    ${WAYLAND_SERVER_LIBRARIES}
+    ${WAYLAND_CLIENT_LIBRARIES}
+    ${LIBDRM_LIBRARIES}
+    ${XKBCOMMON_LIBRARIES}
+    ${Vulkan_LIBRARIES}
+    ${FREETYPE_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+)
+
+# p1-class: protocol completeness and seat routing, server + forked real client.
+add_executable(test_protocol_seat
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/test_protocol_seat.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/protocol_client_shell.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/protocol_client_seat.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/wl_client_kit.cpp"
+    ${NOVA_INTEGRATION_SESSION_SOURCES}
+)
+add_dependencies(test_protocol_seat nova_shaders nova_client_protocol_headers)
+target_compile_options(test_protocol_seat PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+target_compile_definitions(test_protocol_seat PRIVATE WLR_USE_UNSTABLE)
+target_include_directories(test_protocol_seat PRIVATE ${NOVA_INTEGRATION_INCLUDES})
+target_link_libraries(test_protocol_seat PRIVATE ${NOVA_INTEGRATION_LIBS})
+
+# lt-class: three connect/disconnect cycles against one compositor, then a
+# double stop().
+add_executable(test_disconnect_cycle
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/test_disconnect_cycle.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/wl_client_kit.cpp"
+    ${NOVA_INTEGRATION_SESSION_SOURCES}
+)
+add_dependencies(test_disconnect_cycle nova_shaders nova_client_protocol_headers)
+target_compile_options(test_disconnect_cycle PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+target_compile_definitions(test_disconnect_cycle PRIVATE WLR_USE_UNSTABLE)
+target_include_directories(test_disconnect_cycle PRIVATE ${NOVA_INTEGRATION_INCLUDES})
+target_link_libraries(test_disconnect_cycle PRIVATE ${NOVA_INTEGRATION_LIBS})
+
+# Nova teardown probes. probe_offscreen is the standing guard on the P0
+# registry use-after-free: it constructs and destroys an offscreen NovaGraphics
+# and dies at -O2 if a base-class registry ever again runs a cleanup that
+# touches derived members.
+add_executable(probe_offscreen "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/probe_offscreen.cpp")
+target_compile_options(probe_offscreen PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+target_include_directories(probe_offscreen PRIVATE ${NOVA_INTEGRATION_INCLUDES})
+target_link_libraries(probe_offscreen PRIVATE Nova ${CMAKE_DL_LIBS})
+
+add_executable(probe_font_leak "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/probe_font_leak.cpp")
+target_compile_options(probe_font_leak PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+target_include_directories(probe_font_leak PRIVATE ${NOVA_INTEGRATION_INCLUDES})
+target_link_libraries(probe_font_leak PRIVATE Nova ${CMAKE_DL_LIBS})
+
+# Present-loop defects D1-D4: multi-output sidecar bounds, frame-callback driver
+# re-election, half-decided path selection, sidecar mode change. Drives the loop
+# against a bare wlroots headless backend, because none of the four is reachable
+# through a product binary that creates exactly one output and never changes mode.
+add_executable(probe_present_loop
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/probe_present_loop.cpp"
+    ${NOVA_INTEGRATION_SESSION_SOURCES}
+)
+add_dependencies(probe_present_loop nova_shaders nova_client_protocol_headers)
+target_compile_options(probe_present_loop PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+target_compile_definitions(probe_present_loop PRIVATE WLR_USE_UNSTABLE)
+target_include_directories(probe_present_loop PRIVATE ${NOVA_INTEGRATION_INCLUDES})
+target_link_libraries(probe_present_loop PRIVATE ${NOVA_INTEGRATION_LIBS})
+
+add_test(NAME protocol_seat COMMAND test_protocol_seat)
+add_test(NAME disconnect_cycle COMMAND test_disconnect_cycle)
+add_test(NAME nova_offscreen_teardown COMMAND probe_offscreen)
+add_test(NAME nova_font_atlas_release COMMAND probe_font_leak)
+add_test(NAME nova_font_atlas_release_explicit COMMAND probe_font_leak release)
+add_test(NAME present_loop_election COMMAND probe_present_loop election)
+add_test(NAME present_loop_sidecar COMMAND probe_present_loop sidecar)
+
+# The staged-boot milestone drives the real `vazio` binary. $<TARGET_FILE:vazio>
+# rather than a guessed path, so it follows whatever the generator decides.
+add_test(NAME staged_boot_e2e
+    COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/staged_boot_e2e.sh"
+            "$<TARGET_FILE:vazio>" "${NOVA_TEST_RUNTIME_ROOT}/e2e"
+)
+
+set_tests_properties(
+    protocol_seat disconnect_cycle nova_offscreen_teardown nova_font_atlas_release
+    nova_font_atlas_release_explicit present_loop_election present_loop_sidecar
+    staged_boot_e2e
+    PROPERTIES
+        TIMEOUT 300
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        ENVIRONMENT "WLR_BACKENDS=headless;WLR_RENDERER=pixman;LIBGL_ALWAYS_SOFTWARE=1"
+)
+
+# present_loop_election is the ONE test that must NOT force the pixman renderer.
+# D2 - frame-callback driver re-election across two outputs - is only reachable
+# on the zero-copy dmabuf-import path, and the probe correctly SKIPS itself when
+# the sidecar path was selected. Forcing pixman here would leave a green test
+# that had quietly stopped testing the thing it is named after (3 checks instead
+# of 10). Its sibling present_loop_sidecar keeps pixman, because the CPU-copy
+# path is exactly what it is for.
+set_tests_properties(present_loop_election PROPERTIES
+    ENVIRONMENT "WLR_BACKENDS=headless;LIBGL_ALWAYS_SOFTWARE=1"
+)
+
+# Each Wayland-serving harness gets its OWN runtime dir. Sharing one would let a
+# stale socket from a previous run satisfy the next run's connect, which is the
+# race that made the old out-of-tree lt harness flaky.
+set_tests_properties(protocol_seat PROPERTIES
+    ENVIRONMENT "WLR_BACKENDS=headless;WLR_RENDERER=pixman;LIBGL_ALWAYS_SOFTWARE=1;XDG_RUNTIME_DIR=${NOVA_TEST_RUNTIME_ROOT}/ps"
+)
+set_tests_properties(disconnect_cycle PROPERTIES
+    ENVIRONMENT "WLR_BACKENDS=headless;WLR_RENDERER=pixman;LIBGL_ALWAYS_SOFTWARE=1;XDG_RUNTIME_DIR=${NOVA_TEST_RUNTIME_ROOT}/dc"
+)
+
+# --------------------------------------------------------------------------
+# NEGATIVE CONTROLS
+#
+# Every harness carries modes that deliberately break one input so the run MUST
+# fail. A test that has never been seen to fail is a test that has never been
+# seen to work. Select one with VAZIO_TEST_NEG in the environment; ctest passes
+# it through, so the whole thing is:
+#
+#     VAZIO_TEST_NEG=<mode> ctest --test-dir build -R <test>
+#
+#   protocol_seat
+#     send        client never attaches a buffer -> nothing maps (28 failures)
+#     configure   client never acks the initial configure -> wlroots refuses the
+#                 map (33 failures)
+#     nopointer   server never drives the pointer -> the whole seat phase is
+#                 unfed (9 failures)
+#   disconnect_cycle
+#     earlystop   stop() before the last cycle -> cycle 3 cannot connect
+#     nodispatch  stop servicing the event loop for one cycle -> that client hangs
+#   staged_boot_e2e
+#     abortlog    inject a `double free or corruption` line into the splash log ->
+#                 the abort-signature gate must fire
+#     noready     write the readiness token to a path vazio was not given -> the
+#                 latent -> open flip never happens
+#
+# All seven were verified failing, and the unmodified run verified green, in
+# both configurations.
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# NOT wired into ctest, and deliberately so. Both need a rebuild with different
+# flags or a different loader environment, and a ctest entry that silently does
+# neither would be a test that reports on something other than what it names.
+#
+#   AddressSanitizer:
+#     cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+#           -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+#           -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+#     cmake --build build-asan -j && ctest --test-dir build-asan
+#     Known environmental record: one 256-byte allocation under pthread_once
+#     inside a dlopen'd Vulkan ICD. Reproduced by a Vulkan-only probe that links
+#     no first-party compositor code; it is not ours.
+#
+#   Vulkan validation layers:
+#     VK_LOADER_LAYERS_ENABLE=VK_LAYER_KHRONOS_validation \
+#     VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation ctest --test-dir build -R nova_
+#     Verify the layer actually loaded (VK_LOADER_DEBUG=layer) before believing
+#     a zero-VUID result: a layer that failed to load is also silent.
+# --------------------------------------------------------------------------
+
+# Link hygiene: the boot binary must never acquire an SDL runtime dependency.
+# Referenced by the NovaSDL rationale comment above the NovaSDL target.
+add_test(NAME nova_link_hygiene
+    COMMAND sh -c "! ldd $<TARGET_FILE:vazio> | grep -q libSDL2")

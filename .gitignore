@@ -1,6 +1,18 @@
 # Written by Richard Christopher, Copyright 2026 NeoTec Digital
 
 # ---------------------------------------------------------------------------
+# Scratch space
+#
+# Anchored at the repository root, so it never swallows a `scratchpad/` a
+# subdirectory might legitimately want. Nothing under it has ever been tracked;
+# this rule exists so that an agent or a developer dropping a build tree or a
+# throwaway probe here cannot accidentally stage half a gigabyte. Work that is
+# worth keeping goes in tests/integration/, not here - that is the whole lesson
+# of the harnesses this repository lost when a scratch directory was swept.
+# ---------------------------------------------------------------------------
+/scratchpad/
+
+# ---------------------------------------------------------------------------
 # CMake / build trees
 # ---------------------------------------------------------------------------
 build/

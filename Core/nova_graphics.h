@@ -56,6 +56,17 @@ private:
 
     FrameData& current_frame() { return frames[frame_ct % MAX_FRAMES_IN_FLIGHT]; }
 
+    /**
+     * Everything a surface-backed instance needs once `surface` is live:
+     * device selection with presentation, queues, swapchain, render pass,
+     * framebuffers and frame sync.
+     *
+     * Shared by both surface constructors - the SDL one in Core/nova_sdl.cpp
+     * and the external-VkSurfaceKHR one in Core/nova_graphics.cpp - so the two
+     * paths cannot drift apart. Not called on the offscreen path.
+     */
+    void completeSurfaceBackedInit();
+
     // Private graphics initialization methods
     void createSwapchain();
     void createImageViews();
@@ -64,11 +75,34 @@ private:
     void createFrameSyncObjects();
     void recreateSwapchain();
 
+    // Teardown halves of the surface-backed path, split out of ~NovaGraphics so
+    // the destructor stays readable. Both are safe in offscreen mode, where the
+    // collections they walk are empty.
+    void destroySwapchainResources();
+    void destroyFrameSyncObjects();
+
     // Frame slots without the per-swapchain-image semaphores: an offscreen
     // submission has nothing to acquire from and nothing to present to, so the
     // in-flight fence is the whole of its synchronisation.
     void createOffscreenFrameSyncObjects();
     void registerOffscreenCleanup();
+
+    /**
+     * The registry key the offscreen cleanup entry is filed under.
+     *
+     * NovaCore::resource_registry belongs to the BASE, so it runs its entries
+     * from ~NovaCore - after offscreen_targets and imported_images below have
+     * already been destroyed. ~NovaGraphics therefore runs and unregisters this
+     * entry itself, by this key, while those members are still alive. The key
+     * is named here because two translation units address it: nova_offscreen.cpp
+     * registers, nova_graphics.cpp releases.
+     */
+    static constexpr const char* kOffscreenCleanupKey = "offscreen_targets";
+
+    // Release the offscreen-mode GPU state this instance owns: every imported
+    // image, then the render passes and framebuffers. Idempotent.
+    void destroyOffscreenState();
+
     bool resolveOffscreenTarget(const NovaRenderTarget& target,
                                 VkRenderPass& pass_out,
                                 VkFramebuffer& framebuffer_out);
@@ -95,13 +129,30 @@ public:
     bool framebuffer_resized = false;
 
     /**
-     * Constructor - Initialize graphics mode with SDL window
+     * Constructor - Initialize graphics mode with SDL window.
+     *
+     * DEFINED IN Core/nova_sdl.cpp, not in nova_graphics.cpp. That translation
+     * unit is the only one in Nova that calls libSDL2, and it is compiled into
+     * the separate NovaSDL archive so that windowless targets never resolve
+     * against SDL at all. Declaring it here costs nothing: `struct SDL_Window`
+     * is an incomplete type and needs no SDL header.
+     *
      * @param extent Window extent (width, height)
      * @param debug_level Logging level
      * @param window SDL window handle
      */
     NovaGraphics(VkExtent2D extent, const std::string& debug_level, struct SDL_Window* window);
-    NovaGraphics(VkExtent2D extent, const std::string& debug_level, VkSurfaceKHR surface);
+
+    /**
+     * Constructor - Initialize graphics mode against a surface Nova did not make.
+     *
+     * @param instance_extensions The instance-level WSI extensions the caller's
+     *        platform requires. Passed as data rather than queried, because
+     *        this translation unit has no window system to ask - the caller who
+     *        owns the surface is the one that knows.
+     */
+    NovaGraphics(VkExtent2D extent, const std::string& debug_level, VkSurfaceKHR surface,
+                 const std::vector<const char*>& instance_extensions);
 
     /**
      * Constructor - offscreen mode: no SDL, no surface, no swapchain.

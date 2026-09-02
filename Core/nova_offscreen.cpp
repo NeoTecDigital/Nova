@@ -189,7 +189,7 @@ NovaGraphics::NovaGraphics(const NovaOffscreenConfig& config, const std::string&
     setWindowExtent(config.extent);
 
     // No SDL, so no VK_KHR_surface / VK_KHR_*_surface at instance level.
-    createVulkanInstance(false);
+    createVulkanInstance({});
 
     NovaDeviceRequest request = {};
     request.need_presentation = false;
@@ -263,27 +263,48 @@ void NovaGraphics::createOffscreenFrameSyncObjects()
     report(LOGGER::INFO, "Offscreen frame sync objects created");
 }
 
-// Registered last, so the registry's LIFO teardown runs it first - before the
-// allocator and long before the device the objects belong to.
+// A TRIPWIRE, not a cleanup - and the distinction is the whole fix.
+//
+// Everything the offscreen state consists of (offscreen_targets,
+// imported_images) is a NovaGraphics member, but resource_registry belongs to
+// NovaCore. The registry drains from ~NovaCore, which runs AFTER every
+// NovaGraphics member has been destroyed, so a cleanup function placed here
+// could only ever touch freed storage: survivable at -O0 by accident, a double
+// free at -O2.
+//
+// So ~NovaGraphics does the release itself, in its own destructor body, where
+// nothing of this object has been destroyed yet, and then drops this entry
+// unrun. Reaching this lambda therefore means ~NovaGraphics did NOT run - the
+// only way being a constructor that threw after this registration - which is
+// exactly the state in which touching the members would be a use-after-free.
+// Reporting is the correct action there; the objects are released with the
+// device a few registry entries later.
 void NovaGraphics::registerOffscreenCleanup()
 {
-    resource_registry.register_resource("offscreen_targets", [this]() {
-        // One idle wait covers every outstanding import; releaseImportedImage()
-        // would also mutate the vector being walked.
-        if (logical_device != VK_NULL_HANDLE && !imported_images.empty()) {
-            vkDeviceWaitIdle(logical_device);
-        }
-
-        for (NovaImportedImage& imported : imported_images) {
-            destroyImportedResources(imported);
-        }
-        imported_images.clear();
-
-        if (offscreen_targets) {
-            offscreen_targets->destroy();
-            offscreen_targets.reset();
-        }
+    resource_registry.register_resource(kOffscreenCleanupKey, []() {
+        report(LOGGER::ERROR,
+               "NovaGraphics - Offscreen cleanup reached from ~NovaCore: ~NovaGraphics never ran, "
+               "so the offscreen state cannot be released safely and is left to the device teardown");
     });
+}
+
+void NovaGraphics::destroyOffscreenState()
+{
+    // One idle wait covers every outstanding import; releaseImportedImage()
+    // would also mutate the vector being walked.
+    if (logical_device != VK_NULL_HANDLE && !imported_images.empty()) {
+        vkDeviceWaitIdle(logical_device);
+    }
+
+    for (NovaImportedImage& imported : imported_images) {
+        destroyImportedResources(imported);
+    }
+    imported_images.clear();
+
+    if (offscreen_targets) {
+        offscreen_targets->destroy();
+        offscreen_targets.reset();
+    }
 }
 
     ///////////////////////////////

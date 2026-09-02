@@ -1,6 +1,5 @@
 #include "./core_base.h"
 #include "./components/vk_memory.h"
-#include <SDL2/SDL_vulkan.h>
 #include <set>
 #include <string>
 #include <stdexcept>
@@ -49,8 +48,13 @@ void NovaCore::setWindowExtent(VkExtent2D extent)
     window_extent = extent;
 }
 
-// Vulkan instance creation
-void NovaCore::createVulkanInstance(bool need_surface_extensions)
+// Vulkan instance creation.
+//
+// Extensions arrive as data. This translation unit deliberately links no window
+// system: the SDL query that used to live here is now
+// NovaSDL::vulkanInstanceExtensions (Core/nova_sdl.cpp), so `vazio` and every
+// other windowless consumer of libNova.a stops carrying libSDL2.
+void NovaCore::createVulkanInstance(const std::vector<const char*>& instance_extensions)
 {
     report(LOGGER::VLINE, "\t .. Instantiating Vulkan Instance ..");
 
@@ -72,23 +76,13 @@ void NovaCore::createVulkanInstance(bool need_surface_extensions)
     // Handle Extensions
     report(LOGGER::VERBOSE, "Vulkan: Checking for extensions ..");
 
-    uint32_t extension_count = 0;
-    std::vector<const char*> extensions;
-
-    if (need_surface_extensions) {
-        // Graphics mode: need SDL surface extensions
-        SDL_Vulkan_GetInstanceExtensions(nullptr, &extension_count, nullptr);
-        extensions.resize(extension_count);
-        SDL_Vulkan_GetInstanceExtensions(nullptr, &extension_count, extensions.data());
-    }
-
-    report(LOGGER::VLINE, "\t .. %d extensions found", extension_count);
-    for (const auto& ext : extensions) {
+    report(LOGGER::VLINE, "\t .. %zu extensions requested", instance_extensions.size());
+    for (const auto& ext : instance_extensions) {
         report(LOGGER::VLINE, "\t\t%s", ext);
     }
 
-    create_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-    create_info.ppEnabledExtensionNames = extensions.data();
+    create_info.enabledExtensionCount = static_cast<uint32_t>(instance_extensions.size());
+    create_info.ppEnabledExtensionNames = instance_extensions.data();
 
     // Validation layers (optional)
     const std::vector<const char*> VALIDATION_LAYERS = {};
@@ -409,8 +403,15 @@ Buffer_T NovaCore::createEphemeralBuffer(size_t size, VkBufferUsageFlags flags, 
         .usage = usage
     };
 
-    // pAllocationInfo must be supplied: Buffer_T::info is what callers read to get
-    // the mapped pointer, offset and real size. Passing nullptr left it uninitialized.
+    // pAllocationInfo must be supplied so Buffer_T::info describes the real
+    // allocation - memory, offset, size - instead of holding indeterminate bytes.
+    //
+    // info.pMappedData is NOT one of those fields: VMA only fills it for an
+    // allocation created with VMA_ALLOCATION_CREATE_MAPPED_BIT, which this
+    // function deliberately does not request, so it is always null here. A
+    // caller that needs the memory mapped owns that mapping itself, via
+    // vmaMapMemory / vmaUnmapMemory (SpatialPresentLoop's sidecar readback is
+    // the one such caller today).
     Buffer_T buffer{};
     VK_TRY(vmaCreateBuffer(allocator, &buffer_info, &alloc_info, &buffer.buffer, &buffer.allocation, &buffer.info));
 

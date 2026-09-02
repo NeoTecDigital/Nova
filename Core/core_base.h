@@ -5,6 +5,7 @@
 #include "./components/vk_memory.h"
 #include "./components/lexicon.h"
 #include <functional>
+#include <vector>
 
 /**
  * NovaCore - Base class for all Nova modes (Compute and Graphics)
@@ -87,8 +88,18 @@ protected:
     // Virtual destructor (required for polymorphism)
     virtual ~NovaCore();
 
-    // Shared initialization methods
-    void createVulkanInstance(bool need_surface_extensions);
+    /**
+     * Create the VkInstance from a caller-supplied extension list.
+     *
+     * The list is DATA, not a mode flag: NovaCore has no window system and must
+     * not acquire one. A surface-backed mode passes the WSI extensions its
+     * platform reports (see NovaSDL::vulkanInstanceExtensions in
+     * Core/nova_sdl.h); compute and offscreen modes pass an empty list. This is
+     * what keeps libSDL2 out of every binary that never opens a window.
+     *
+     * The pointers are borrowed for the duration of the call only.
+     */
+    void createVulkanInstance(const std::vector<const char*>& instance_extensions);
     void createPhysicalDevice(bool need_presentation, VkSurfaceKHR surface = VK_NULL_HANDLE);
 
     /**

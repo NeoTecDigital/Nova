@@ -23,7 +23,7 @@ public:
 
     UIWindow(const std::string& window_title,
              const glm::vec2& content_size,
-             std::shared_ptr<Nova::SpatialFont> font_ptr);
+             std::shared_ptr<Splash::SpatialFont> font_ptr);
     virtual ~UIWindow() = default;
 
     void setTitle(const std::string& new_title);
@@ -42,7 +42,7 @@ public:
     void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
-    std::shared_ptr<Nova::SpatialFont> font_;
+    std::shared_ptr<Splash::SpatialFont> font_;
 
     // Window chrome
     std::shared_ptr<Splash::SpatialPanel> titlebar_panel_;

@@ -568,7 +568,7 @@ void checkFlowRun(const std::vector<std::shared_ptr<UIButton>>& run,
 }
 
 void testDockBarFlowsFromItsLeftInset() {
-    auto font = std::make_shared<Nova::SpatialFont>(nullptr, nullptr);
+    auto font = std::make_shared<Splash::SpatialFont>(nullptr, nullptr);
     const float width = 2.20f;
     auto dock = std::make_shared<UIDockBar>(width, font);
 
@@ -591,7 +591,7 @@ void testDockBarFlowsFromItsLeftInset() {
 }
 
 void testMenuBarFlowsAndOpensOneDropdownAtATime() {
-    auto font = std::make_shared<Nova::SpatialFont>(nullptr, nullptr);
+    auto font = std::make_shared<Splash::SpatialFont>(nullptr, nullptr);
     const float width = 2.60f;
     auto bar = std::make_shared<UIMenuBar>(width, font);
 

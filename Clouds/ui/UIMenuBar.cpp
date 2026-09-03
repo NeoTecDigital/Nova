@@ -8,7 +8,7 @@ namespace Clouds::UI {
 // ---------------------------------------------------------------------------
 UIMenuDropdown::UIMenuDropdown(const std::vector<MenuItem>& items,
                                float width,
-                               std::shared_ptr<Nova::SpatialFont> font_ptr,
+                               std::shared_ptr<Splash::SpatialFont> font_ptr,
                                std::function<void()> on_item_selected) {
     name = "UIMenuDropdown";
     float item_h = 0.045f;
@@ -57,7 +57,7 @@ void UIMenuDropdown::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
 // UIMenuBar Implementation
 // ---------------------------------------------------------------------------
 UIMenuBar::UIMenuBar(float bar_width,
-                     std::shared_ptr<Nova::SpatialFont> font_ptr)
+                     std::shared_ptr<Splash::SpatialFont> font_ptr)
     : font_(font_ptr) {
     name = "UIMenuBar";
     size = glm::vec2(bar_width, g_Theme.menubar_height);

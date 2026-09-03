@@ -25,7 +25,7 @@ glm::vec2 panelSizeFor(const OatsSpatialPill& pill) {
 } // namespace
 
 DynamicSceneManager::DynamicSceneManager(std::shared_ptr<SpatialNode> root_node,
-                                         std::shared_ptr<Nova::SpatialFont> font,
+                                         std::shared_ptr<Splash::SpatialFont> font,
                                          std::shared_ptr<OatsBridge> oats_bridge)
     : root_(root_node), font_(font), oats_bridge_(oats_bridge) {
 }

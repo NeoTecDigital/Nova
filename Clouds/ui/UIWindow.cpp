@@ -5,7 +5,7 @@ namespace Clouds::UI {
 
 UIWindow::UIWindow(const std::string& window_title,
                    const glm::vec2& content_size,
-                   std::shared_ptr<Nova::SpatialFont> font_ptr)
+                   std::shared_ptr<Splash::SpatialFont> font_ptr)
     : title(window_title), font_(font_ptr) {
     name = "UIWindow: " + title;
     window_size = glm::vec2(content_size.x, content_size.y + g_Theme.titlebar_height);

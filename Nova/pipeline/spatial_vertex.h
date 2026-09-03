@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include "Nova/math/hyper_math.h"
 #include <array>
+#include <vector>
 
 namespace Nova {
 
@@ -60,6 +61,20 @@ struct SpatialVertex {
 
         return attrs;
     }
+};
+
+/**
+ * MeshData - CPU-side geometry in the exact layout Nova draws.
+ *
+ * The currency of the content/GPU seam: Splash generators produce it, and
+ * Nova::MeshBuffer is the only thing that ever puts it on a device. It lives
+ * beside SpatialVertex rather than beside the buffer because a producer needs
+ * the vertex format and nothing else - including it must not drag VMA, Core or
+ * a Vulkan buffer type into a layer that has no business naming them.
+ */
+struct MeshData {
+    std::vector<SpatialVertex> vertices;
+    std::vector<uint32_t> indices;
 };
 
 struct SpatialPushConstants {

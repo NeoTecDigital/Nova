@@ -2,8 +2,8 @@
 
 #include "./SpatialNode.h"
 #include "Nova/pipeline/spatial_pipeline.h"
-#include "Nova/pipeline/spatial_mesh.h"
-#include "Nova/pipeline/spatial_font.h"
+#include "Nova/pipeline/mesh_buffer.h"
+#include "Splash/content/spatial_font.h"
 #include "Nova/pipeline/texture_bridge.h"
 #include "Nova/math/engine_physics.h"
 #include "Nova/math/spatial_cluster.h"
@@ -16,7 +16,7 @@ namespace Splash {
 class SpatialScene {
 public:
     std::shared_ptr<SpatialNode> root;
-    std::shared_ptr<Nova::SpatialFont> font;
+    std::shared_ptr<Splash::SpatialFont> font;
 
     glm::vec3 camera_pos{0.0f, 0.0f, 2.5f};
     glm::vec3 camera_target{0.0f, 0.0f, 0.0f};

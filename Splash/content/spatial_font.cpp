@@ -5,9 +5,9 @@
 #include <cstring>
 #include <algorithm>
 
-namespace Nova {
+namespace Splash {
 
-SpatialFont::SpatialFont(Core* core, TextureBridge* texture_bridge)
+SpatialFont::SpatialFont(Nova::Core* core, Nova::TextureBridge* texture_bridge)
     : core_(core), texture_bridge_(texture_bridge) {
     if (FT_Init_FreeType(&ft_library_) != 0) {
         report(LOGGER::ERROR, "SpatialFont - Failed to initialize FreeType library");
@@ -163,11 +163,11 @@ glm::vec2 SpatialFont::measureText(const std::string& text, float font_scale) {
     return glm::vec2(width, max_height);
 }
 
-MeshData SpatialFont::createTextMesh(const std::string& text,
-                                     float font_scale,
-                                     const glm::vec4& color,
-                                     bool center_aligned) {
-    MeshData mesh;
+Nova::MeshData SpatialFont::createTextMesh(const std::string& text,
+                                           float font_scale,
+                                           const glm::vec4& color,
+                                           bool center_aligned) {
+    Nova::MeshData mesh;
     glm::vec2 total_size = measureText(text, font_scale);
 
     float pen_x = center_aligned ? (-total_size.x * 0.5f) : 0.0f;
@@ -211,4 +211,4 @@ MeshData SpatialFont::createTextMesh(const std::string& text,
     return mesh;
 }
 
-} // namespace Nova
+} // namespace Splash

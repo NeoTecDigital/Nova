@@ -8,6 +8,8 @@ add_library(Splash STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/Primitives.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/DynamicSceneManager.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/oats/OatsBridge.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/content/mesh_generators.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/content/spatial_font.cpp"
 )
 target_compile_options(Splash PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 

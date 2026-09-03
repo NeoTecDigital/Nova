@@ -14,7 +14,7 @@
 // code is the result and the checks only establish that there was something
 // real to tear down.
 #include "Nova/nova_graphics.h"
-#include "Nova/pipeline/spatial_font.h"
+#include "Splash/content/spatial_font.h"
 #include "Nova/pipeline/texture_bridge.h"
 #include "Nova/components/logger.h"
 
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
         check(bridge->getDescriptorSetLayout() != VK_NULL_HANDLE,
               "TextureBridge initialized its descriptor pool and layout");
 
-        auto font = std::make_unique<Nova::SpatialFont>(nova.get(), bridge.get());
+        auto font = std::make_unique<Splash::SpatialFont>(nova.get(), bridge.get());
 
         // No TTF path is given on purpose: the fallback atlas is a real VMA
         // image allocation, which is all this probe needs, and it removes any

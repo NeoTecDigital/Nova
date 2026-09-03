@@ -4,8 +4,8 @@
 #include "Nova/math/raycast.h"
 #include "Nova/math/hyper_math.h"
 #include "Nova/pipeline/spatial_pipeline.h"
-#include "Nova/pipeline/spatial_mesh.h"
-#include "Nova/pipeline/spatial_font.h"
+#include "Nova/pipeline/mesh_buffer.h"
+#include "Splash/content/spatial_font.h"
 #include <vector>
 #include <memory>
 #include <functional>

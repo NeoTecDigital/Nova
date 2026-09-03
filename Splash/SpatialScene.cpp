@@ -1,6 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "./SpatialScene.h"
 #include "./Primitives.h"
+#include "Splash/content/mesh_generators.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 
@@ -159,18 +160,18 @@ SpatialScene::~SpatialScene() {
 void SpatialScene::initialize(const std::string& font_path) {
     mesh_buffer_ = std::make_unique<Nova::SpatialMeshBuffer>(core_, 65536, 131072);
 
-    font = std::make_shared<Nova::SpatialFont>(core_, texture_bridge_);
+    font = std::make_shared<Splash::SpatialFont>(core_, texture_bridge_);
     font->loadFromFile(font_path, 48);
 
     // Lookat Reticle: Green circle around a dark grey crosshair
-    lookat_reticle_mesh_ = Nova::SpatialMeshGenerator::createReticle(
+    lookat_reticle_mesh_ = Splash::SpatialMeshGenerator::createReticle(
         glm::vec4(0.12f, 0.92f, 0.35f, 0.95f), // Green ring
         glm::vec4(0.22f, 0.25f, 0.28f, 0.95f), // Dark grey crosshair
         0.055f, 0.005f, 0.075f, 0.004f
     );
 
     // Cursor Reticle: Blue circle around a red crosshair
-    cursor_reticle_mesh_ = Nova::SpatialMeshGenerator::createReticle(
+    cursor_reticle_mesh_ = Splash::SpatialMeshGenerator::createReticle(
         glm::vec4(0.15f, 0.60f, 1.0f, 0.95f),  // Blue ring
         glm::vec4(0.95f, 0.20f, 0.25f, 0.95f), // Red crosshair
         0.045f, 0.005f, 0.065f, 0.004f

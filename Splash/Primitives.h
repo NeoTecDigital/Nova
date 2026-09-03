@@ -2,6 +2,7 @@
 #pragma once
 
 #include "./SpatialNode.h"
+#include "Splash/content/mesh_cache.h"
 #include <functional>
 
 namespace Splash {
@@ -23,7 +24,7 @@ public:
 private:
     // Quad geometry is a pure function of the public fields above; the cache
     // keys on their values so mutating them invalidates it automatically.
-    Nova::MeshCache quad_cache_;
+    Splash::MeshCache quad_cache_;
 };
 
 /**
@@ -41,11 +42,11 @@ public:
 
     float corner_radius = 0.02f;
     float border_thickness = 0.003f;
-    std::shared_ptr<Nova::SpatialFont> font;
+    std::shared_ptr<Splash::SpatialFont> font;
 
     SpatialButton(const std::string& btn_label,
                   const glm::vec2& btn_size,
-                  std::shared_ptr<Nova::SpatialFont> spatial_font,
+                  std::shared_ptr<Splash::SpatialFont> spatial_font,
                   std::function<void()> click_handler = nullptr);
 
     void onRayEnter(const Nova::Math::RayHit& hit) override;
@@ -59,8 +60,8 @@ private:
 
     // Background quad and glyph run are cached independently: hovering recolours
     // the box every frame but leaves the far more expensive text mesh untouched.
-    Nova::MeshCache box_cache_;
-    Nova::MeshCache text_cache_;
+    Splash::MeshCache box_cache_;
+    Splash::MeshCache text_cache_;
 
     const Nova::MeshData& resolveBoxMesh(const glm::vec4& color);
     const Nova::MeshData& resolveTextMesh(float font_scale);
@@ -75,10 +76,10 @@ public:
     glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
     float font_scale = 0.002f;
     bool center_aligned = true;
-    std::shared_ptr<Nova::SpatialFont> font;
+    std::shared_ptr<Splash::SpatialFont> font;
 
     SpatialLabel(const std::string& label_text,
-                 std::shared_ptr<Nova::SpatialFont> spatial_font,
+                 std::shared_ptr<Splash::SpatialFont> spatial_font,
                  float scale = 0.002f,
                  const glm::vec4& col = glm::vec4(1.0f));
 
@@ -88,7 +89,7 @@ public:
 
 private:
     // Keyed on the glyph string as well as scale, colour and alignment.
-    Nova::MeshCache text_cache_;
+    Splash::MeshCache text_cache_;
 };
 
 /**
@@ -125,7 +126,7 @@ public:
 private:
     // The hosted texture changes every frame; the quad it is sampled onto does
     // not, and is only rebuilt when size or corner radius moves.
-    Nova::MeshCache quad_cache_;
+    Splash::MeshCache quad_cache_;
 };
 
 } // namespace Splash

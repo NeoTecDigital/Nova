@@ -4,7 +4,7 @@
 #include "./SpatialNode.h"
 #include "./Primitives.h"
 #include "Splash/oats/OatsBridge.h"
-#include "Nova/pipeline/spatial_font.h"
+#include "Splash/content/spatial_font.h"
 #include <memory>
 #include <unordered_map>
 #include <string>
@@ -29,7 +29,7 @@ struct Active3DNode {
 class DynamicSceneManager {
 public:
     DynamicSceneManager(std::shared_ptr<SpatialNode> root_node,
-                        std::shared_ptr<Nova::SpatialFont> font,
+                        std::shared_ptr<Splash::SpatialFont> font,
                         std::shared_ptr<OatsBridge> oats_bridge);
     ~DynamicSceneManager() = default;
 
@@ -45,7 +45,7 @@ public:
 
 private:
     std::shared_ptr<SpatialNode> root_;
-    std::shared_ptr<Nova::SpatialFont> font_;
+    std::shared_ptr<Splash::SpatialFont> font_;
     std::shared_ptr<OatsBridge> oats_bridge_;
 
     std::shared_ptr<SpatialNode> dynamic_root_;

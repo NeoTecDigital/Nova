@@ -3,101 +3,11 @@
 
 #include "Nova/core_base.h"
 #include "./spatial_vertex.h"
-#include "Nova/math/quaternion_transform.h"
-#include <array>
-#include <string>
 #include <vector>
-#include <memory>
 
 namespace Nova {
 
 class Graphics;
-
-struct MeshData {
-    std::vector<SpatialVertex> vertices;
-    std::vector<uint32_t> indices;
-};
-
-/**
- * MeshCache - Value-keyed hold for generated geometry.
- *
- * UI geometry is otherwise regenerated from scratch on every collectRender()
- * pass. The key is the exact parameter tuple that was handed to the generator,
- * so callers may mutate their public fields freely and the cache still
- * self-invalidates: there is no dirty flag that can be forgotten.
- *
- * Signature slots are generator-specific and compared for exact equality --
- * these are copies of the caller's own values, never recomputed results, so
- * bitwise float equality is the correct predicate.
- */
-class MeshCache {
-public:
-    static constexpr size_t SIGNATURE_SLOTS = 12;
-    using Signature = std::array<float, SIGNATURE_SLOTS>;
-
-    bool isValidFor(const Signature& params) const {
-        return valid_ && text_.empty() && params_ == params;
-    }
-
-    bool isValidFor(const Signature& params, const std::string& text) const {
-        return valid_ && params_ == params && text_ == text;
-    }
-
-    void store(const Signature& params, MeshData mesh) {
-        params_ = params;
-        text_.clear();
-        mesh_ = std::move(mesh);
-        valid_ = true;
-    }
-
-    void store(const Signature& params, const std::string& text, MeshData mesh) {
-        params_ = params;
-        text_ = text;
-        mesh_ = std::move(mesh);
-        valid_ = true;
-    }
-
-    const MeshData& mesh() const { return mesh_; }
-    void invalidate() { valid_ = false; }
-
-private:
-    Signature params_{};
-    std::string text_;
-    MeshData mesh_;
-    bool valid_ = false;
-};
-
-class SpatialMeshGenerator {
-public:
-    // Generate an oriented 3D rectangular plane centered at local origin (0, 0, 0)
-    // with UVs (0,0) top-left to (1,1) bottom-right
-    static MeshData createPlanarQuad(const glm::vec2& size,
-                                     const glm::vec4& color = glm::vec4(1.0f),
-                                     float border_thickness = 0.0f,
-                                     float corner_radius = 0.0f,
-                                     float render_mode = 0.0f);
-
-    // Generate a curved cylindrical arc quad in 3D space.
-    // A radius at or below MIN_ARC_RADIUS has no arc to sweep and degenerates
-    // to a planar quad rather than dividing by zero.
-    static MeshData createCurvedArc(const glm::vec2& size,
-                                    float radius,
-                                    uint32_t segments = 32,
-                                    const glm::vec4& color = glm::vec4(1.0f),
-                                    float border_thickness = 0.0f,
-                                    float corner_radius = 0.0f,
-                                    float render_mode = 0.0f);
-
-    // Generate a 3D reticle (annular circle ring + crosshair bars)
-    static MeshData createReticle(const glm::vec4& circle_color,
-                                  const glm::vec4& crosshair_color,
-                                  float radius = 0.06f,
-                                  float ring_thickness = 0.006f,
-                                  float crosshair_length = 0.08f,
-                                  float crosshair_thickness = 0.005f);
-
-    static constexpr float MIN_ARC_RADIUS = 1e-5f;
-};
 
 /**
  * SpatialMeshBuffer - Per-frame-in-flight dynamic geometry ring.

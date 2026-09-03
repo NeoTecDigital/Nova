@@ -164,7 +164,7 @@ struct BootDesktop {
     std::vector<std::shared_ptr<Splash::SpatialPanel>> orbiters;
     float elapsed = 0.0f;
 
-    void build(const std::shared_ptr<Nova::SpatialFont>& font, const char* channel) {
+    void build(const std::shared_ptr<Splash::SpatialFont>& font, const char* channel) {
         root = std::make_shared<Splash::SpatialNode>();
         root->name = "BootDesktop";
 

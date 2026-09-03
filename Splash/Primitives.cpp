@@ -1,5 +1,6 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "./Primitives.h"
+#include "Splash/content/mesh_generators.h"
 
 namespace Splash {
 namespace {
@@ -28,14 +29,14 @@ void SpatialPanel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
     glm::mat4 model = world_xf.toMatrix();
 
     // Procedural panel quad (mode 0.0), rebuilt only when its inputs move.
-    const Nova::MeshCache::Signature signature = {{
+    const Splash::MeshCache::Signature signature = {{
         size.x, size.y,
         background_color.r, background_color.g, background_color.b, background_color.a,
         border_thickness, corner_radius, PROCEDURAL_SDF_MODE
     }};
 
     if (!quad_cache_.isValidFor(signature)) {
-        quad_cache_.store(signature, Nova::SpatialMeshGenerator::createPlanarQuad(
+        quad_cache_.store(signature, Splash::SpatialMeshGenerator::createPlanarQuad(
             size, background_color, border_thickness, corner_radius, PROCEDURAL_SDF_MODE));
     }
 
@@ -56,7 +57,7 @@ void SpatialPanel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
 
 SpatialButton::SpatialButton(const std::string& btn_label,
                              const glm::vec2& btn_size,
-                             std::shared_ptr<Nova::SpatialFont> spatial_font,
+                             std::shared_ptr<Splash::SpatialFont> spatial_font,
                              std::function<void()> click_handler)
     : label(btn_label), on_click(click_handler), font(spatial_font) {
     size = btn_size;
@@ -130,14 +131,14 @@ void SpatialButton::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
 const Nova::MeshData& SpatialButton::resolveBoxMesh(const glm::vec4& color) {
     // Only the colour moves under interaction, so the cache turns over on state
     // change rather than every frame.
-    const Nova::MeshCache::Signature signature = {{
+    const Splash::MeshCache::Signature signature = {{
         size.x, size.y,
         color.r, color.g, color.b, color.a,
         border_thickness, corner_radius, PROCEDURAL_SDF_MODE
     }};
 
     if (!box_cache_.isValidFor(signature)) {
-        box_cache_.store(signature, Nova::SpatialMeshGenerator::createPlanarQuad(
+        box_cache_.store(signature, Splash::SpatialMeshGenerator::createPlanarQuad(
             size, color, border_thickness, corner_radius, PROCEDURAL_SDF_MODE));
     }
 
@@ -145,7 +146,7 @@ const Nova::MeshData& SpatialButton::resolveBoxMesh(const glm::vec4& color) {
 }
 
 const Nova::MeshData& SpatialButton::resolveTextMesh(float font_scale) {
-    const Nova::MeshCache::Signature signature = {{
+    const Splash::MeshCache::Signature signature = {{
         font_scale,
         text_color.r, text_color.g, text_color.b, text_color.a,
         1.0f // centre-aligned
@@ -160,7 +161,7 @@ const Nova::MeshData& SpatialButton::resolveTextMesh(float font_scale) {
 }
 
 SpatialLabel::SpatialLabel(const std::string& label_text,
-                           std::shared_ptr<Nova::SpatialFont> spatial_font,
+                           std::shared_ptr<Splash::SpatialFont> spatial_font,
                            float scale,
                            const glm::vec4& col)
     : text(label_text), color(col), font_scale(scale), font(spatial_font) {
@@ -184,7 +185,7 @@ void SpatialLabel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
     Nova::Math::QuatTransform world_xf = getWorldTransform();
     glm::mat4 model = world_xf.toMatrix();
 
-    const Nova::MeshCache::Signature signature = {{
+    const Splash::MeshCache::Signature signature = {{
         font_scale,
         color.r, color.g, color.b, color.a,
         center_aligned ? 1.0f : 0.0f
@@ -263,14 +264,14 @@ void SpatialSurfaceHost::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
 
     // Geometry depends only on size and corner radius; the texture it samples is
     // swapped through the render command, not the vertex data.
-    const Nova::MeshCache::Signature signature = {{
+    const Splash::MeshCache::Signature signature = {{
         size.x, size.y,
         1.0f, 1.0f, 1.0f, 1.0f,
         0.0f, corner_radius, TEXTURED_QUAD_MODE
     }};
 
     if (!quad_cache_.isValidFor(signature)) {
-        quad_cache_.store(signature, Nova::SpatialMeshGenerator::createPlanarQuad(
+        quad_cache_.store(signature, Splash::SpatialMeshGenerator::createPlanarQuad(
             size, glm::vec4(1.0f), 0.0f, corner_radius, TEXTURED_QUAD_MODE));
     }
 

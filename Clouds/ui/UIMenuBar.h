@@ -26,7 +26,7 @@ class UIMenuDropdown : public Splash::SpatialNode {
 public:
     UIMenuDropdown(const std::vector<MenuItem>& items,
                    float width,
-                   std::shared_ptr<Nova::SpatialFont> font_ptr,
+                   std::shared_ptr<Splash::SpatialFont> font_ptr,
                    std::function<void()> on_item_selected = nullptr);
 
     void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
@@ -39,7 +39,7 @@ private:
 class UIMenuBar : public Splash::SpatialNode {
 public:
     UIMenuBar(float bar_width,
-              std::shared_ptr<Nova::SpatialFont> font_ptr);
+              std::shared_ptr<Splash::SpatialFont> font_ptr);
 
     void addMenu(const std::string& category_name, const std::vector<MenuItem>& items);
     void setTelemetryText(const std::string& text);
@@ -48,7 +48,7 @@ public:
     void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
-    std::shared_ptr<Nova::SpatialFont> font_;
+    std::shared_ptr<Splash::SpatialFont> font_;
     std::shared_ptr<Splash::SpatialPanel> bar_panel_;
     std::shared_ptr<UILabel> brand_label_;
     std::shared_ptr<UILabel> telemetry_label_;

@@ -1,6 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "./SpatialFilesystem.h"
 #include "Splash/Primitives.h"
+#include "Splash/content/mesh_generators.h"
 #include "Nova/components/logger.h"
 #include <cmath>
 #include <iostream>
@@ -9,97 +10,13 @@
 namespace Clouds {
 
 // ---------------------------------------------------------------------------
-// 3D Pill Mesh Generator Implementation
-// ---------------------------------------------------------------------------
-Nova::MeshData PillMeshGenerator::createPill(
-    float radius,
-    float cylinder_height,
-    uint32_t radial_segments,
-    uint32_t cap_rings,
-    const glm::vec4& color,
-    float render_mode
-) {
-    Nova::MeshData mesh;
-    float half_h = cylinder_height * 0.5f;
-
-    // 1. Top Hemisphere Vertices (Z from +half_h to +half_h + radius)
-    for (uint32_t ring = 0; ring <= cap_rings; ++ring) {
-        float phi = (float(ring) / float(cap_rings)) * (glm::pi<float>() * 0.5f); // 0 to pi/2
-        float cos_phi = std::cos(phi);
-        float sin_phi = std::sin(phi);
-
-        for (uint32_t seg = 0; seg <= radial_segments; ++seg) {
-            float theta = (float(seg) / float(radial_segments)) * glm::two_pi<float>();
-            float cos_theta = std::cos(theta);
-            float sin_theta = std::sin(theta);
-
-            glm::vec3 normal(sin_phi * cos_theta, sin_phi * sin_theta, cos_phi);
-            glm::vec3 pos = normal * radius + glm::vec3(0.0f, 0.0f, half_h);
-
-            Nova::SpatialVertex v;
-            v.state_primary = Nova::Math::Hyper4(pos.x, pos.y, pos.z, 1.0f);
-            v.state_dual = Nova::Math::Hyper4(color.r, color.g, color.b, color.a);
-            v.normal = normal;
-            v.uv = glm::vec2(float(seg) / float(radial_segments), float(ring) / float(cap_rings * 2 + 1));
-            v.params = glm::vec4(0.0f, 0.0f, render_mode, 1.0f);
-            mesh.vertices.push_back(v);
-        }
-    }
-
-    // 2. Bottom Hemisphere Vertices (Z from -half_h to -half_h - radius)
-    for (uint32_t ring = 0; ring <= cap_rings; ++ring) {
-        float phi = (glm::pi<float>() * 0.5f) + (float(ring) / float(cap_rings)) * (glm::pi<float>() * 0.5f); // pi/2 to pi
-        float cos_phi = std::cos(phi);
-        float sin_phi = std::sin(phi);
-
-        for (uint32_t seg = 0; seg <= radial_segments; ++seg) {
-            float theta = (float(seg) / float(radial_segments)) * glm::two_pi<float>();
-            float cos_theta = std::cos(theta);
-            float sin_theta = std::sin(theta);
-
-            glm::vec3 normal(sin_phi * cos_theta, sin_phi * sin_theta, cos_phi);
-            glm::vec3 pos = normal * radius - glm::vec3(0.0f, 0.0f, half_h);
-
-            Nova::SpatialVertex v;
-            v.state_primary = Nova::Math::Hyper4(pos.x, pos.y, pos.z, 1.0f);
-            v.state_dual = Nova::Math::Hyper4(color.r, color.g, color.b, color.a);
-            v.normal = normal;
-            v.uv = glm::vec2(float(seg) / float(radial_segments), 0.5f + float(ring) / float(cap_rings * 2 + 1));
-            v.params = glm::vec4(0.0f, 0.0f, render_mode, 1.0f);
-            mesh.vertices.push_back(v);
-        }
-    }
-
-    // Generate Triangles
-    uint32_t ring_vertex_count = radial_segments + 1;
-    uint32_t total_rings = (cap_rings + 1) * 2;
-
-    for (uint32_t r = 0; r < total_rings - 1; ++r) {
-        for (uint32_t s = 0; s < radial_segments; ++s) {
-            uint32_t current = r * ring_vertex_count + s;
-            uint32_t next = current + ring_vertex_count;
-
-            mesh.indices.push_back(current);
-            mesh.indices.push_back(next);
-            mesh.indices.push_back(current + 1);
-
-            mesh.indices.push_back(current + 1);
-            mesh.indices.push_back(next);
-            mesh.indices.push_back(next + 1);
-        }
-    }
-
-    return mesh;
-}
-
-// ---------------------------------------------------------------------------
 // SpatialPillNode Implementation
 // ---------------------------------------------------------------------------
 SpatialPillNode::SpatialPillNode(const std::string& name,
                                  const std::string& path,
                                  bool is_dir,
                                  uintmax_t size_bytes,
-                                 std::shared_ptr<Nova::SpatialFont> font_ptr)
+                                 std::shared_ptr<Splash::SpatialFont> font_ptr)
     : item_name(name), full_path(path), is_directory(is_dir), file_size(size_bytes), font_(font_ptr) {
     this->name = "3D Pill: " + item_name;
 
@@ -204,7 +121,7 @@ const Nova::MeshData& SpatialPillNode::resolveMesh(const glm::vec4& color, float
     // Regenerated only when a value that actually feeds createPill() moves.
     // Every field in the key is public, so keying on the values rather than a
     // dirty flag keeps the cache correct under direct mutation.
-    const Nova::MeshCache::Signature signature = {{
+    const Splash::MeshCache::Signature signature = {{
         pill_radius, pill_height,
         color.r, color.g, color.b, color.a,
         render_mode,
@@ -212,7 +129,7 @@ const Nova::MeshData& SpatialPillNode::resolveMesh(const glm::vec4& color, float
     }};
 
     if (!mesh_cache_.isValidFor(signature)) {
-        mesh_cache_.store(signature, PillMeshGenerator::createPill(
+        mesh_cache_.store(signature, Splash::PillMeshGenerator::createPill(
             pill_radius, pill_height, RADIAL_SEGMENTS, CAP_RINGS, color, render_mode));
     }
 
@@ -223,7 +140,7 @@ const Nova::MeshData& SpatialPillNode::resolveMesh(const glm::vec4& color, float
 // SpatialFilesystem Implementation
 // ---------------------------------------------------------------------------
 SpatialFilesystem::SpatialFilesystem(std::shared_ptr<Splash::SpatialNode> root_scene_node,
-                                     std::shared_ptr<Nova::SpatialFont> font_ptr)
+                                     std::shared_ptr<Splash::SpatialFont> font_ptr)
     : scene_root_(root_scene_node), font_(font_ptr) {
     filesystem_3d_root_ = std::make_shared<Splash::SpatialNode>();
     filesystem_3d_root_->name = "SpatialFilesystem_Root";

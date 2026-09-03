@@ -591,10 +591,16 @@ target_compile_options(probe_offscreen PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 target_include_directories(probe_offscreen PRIVATE ${NOVA_INTEGRATION_INCLUDES})
 target_link_libraries(probe_offscreen PRIVATE Nova ${CMAKE_DL_LIBS})
 
+# Links Splash, not Nova: B1 moved SpatialFont out of the engine and into the
+# SDK's content layer, so the atlas-lifetime seam this probe drives now lives in
+# libSplash.a. Nova still arrives - PUBLIC-ly, through Splash - and it has to,
+# because the probe constructs a NovaGraphics and a TextureBridge directly. What
+# changed is which archive OWNS the class under test, and naming Nova alone here
+# would fail to link rather than quietly test nothing.
 add_executable(probe_font_leak "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/probe_font_leak.cpp")
 target_compile_options(probe_font_leak PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 target_include_directories(probe_font_leak PRIVATE ${NOVA_INTEGRATION_INCLUDES})
-target_link_libraries(probe_font_leak PRIVATE Nova ${CMAKE_DL_LIBS})
+target_link_libraries(probe_font_leak PRIVATE Splash ${CMAKE_DL_LIBS})
 
 # Present-loop defects D1-D4: multi-output sidecar bounds, frame-callback driver
 # re-election, half-decided path selection, sidecar mode change. Drives the loop

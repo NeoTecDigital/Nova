@@ -32,8 +32,7 @@ set(NOVA_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/components/obj_loader.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/pipeline/texture_bridge.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/pipeline/spatial_pipeline.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/pipeline/spatial_mesh.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/pipeline/spatial_font.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/pipeline/mesh_buffer.cpp"
 )
 
 add_library(Nova STATIC ${NOVA_SOURCES})

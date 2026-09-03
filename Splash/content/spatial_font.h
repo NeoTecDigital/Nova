@@ -1,15 +1,15 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
-#include "./spatial_mesh.h"
-#include "./texture_bridge.h"
+#include "Nova/pipeline/spatial_vertex.h"
+#include "Nova/pipeline/texture_bridge.h"
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include <unordered_map>
 #include <string>
 #include <memory>
 
-namespace Nova {
+namespace Splash {
 
 struct GlyphMetric {
     float advance_x = 0.0f;
@@ -29,7 +29,7 @@ public:
      *        released in ~SpatialFont, and a bridge destroyed first would take
      *        its VMA allocator down with the allocation still live.
      */
-    SpatialFont(Core* core, TextureBridge* texture_bridge);
+    SpatialFont(Nova::Core* core, Nova::TextureBridge* texture_bridge);
 
     /**
      * Releases the FreeType handles AND the atlas texture.
@@ -50,7 +50,7 @@ public:
     bool loadFromFile(const std::string& ttf_path, uint32_t pixel_height = 48);
 
     // Generate 3D quad mesh for a text string positioned in local coordinates
-    MeshData createTextMesh(const std::string& text,
+    Nova::MeshData createTextMesh(const std::string& text,
                             float font_scale = 0.0015f,
                             const glm::vec4& color = glm::vec4(1.0f),
                             bool center_aligned = true);
@@ -58,11 +58,11 @@ public:
     // Measure text dimensions (width, height in local units)
     glm::vec2 measureText(const std::string& text, float font_scale = 0.0015f);
 
-    std::shared_ptr<TextureHandle> getAtlasTexture() const { return atlas_texture_; }
+    std::shared_ptr<Nova::TextureHandle> getAtlasTexture() const { return atlas_texture_; }
 
 private:
-    Core* core_ = nullptr;
-    TextureBridge* texture_bridge_ = nullptr;
+    Nova::Core* core_ = nullptr;
+    Nova::TextureBridge* texture_bridge_ = nullptr;
 
     FT_Library ft_library_ = nullptr;
     FT_Face ft_face_ = nullptr;
@@ -70,10 +70,10 @@ private:
     uint32_t atlas_width_ = 1024;
     uint32_t atlas_height_ = 1024;
     std::unordered_map<char, GlyphMetric> glyphs_;
-    std::shared_ptr<TextureHandle> atlas_texture_;
+    std::shared_ptr<Nova::TextureHandle> atlas_texture_;
 
     void buildAsciiAtlas(uint32_t pixel_height);
     void buildFallbackAtlas();
 };
 
-} // namespace Nova
+} // namespace Splash

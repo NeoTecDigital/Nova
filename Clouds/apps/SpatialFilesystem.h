@@ -2,8 +2,9 @@
 #pragma once
 
 #include "Splash/SpatialNode.h"
-#include "Nova/pipeline/spatial_mesh.h"
-#include "Nova/pipeline/spatial_font.h"
+#include "Nova/pipeline/mesh_buffer.h"
+#include "Splash/content/mesh_cache.h"
+#include "Splash/content/spatial_font.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -11,21 +12,6 @@
 #include <functional>
 
 namespace Clouds {
-
-/**
- * 3D Pill Mesh Generator - Generates parametric 3D capsule geometry
- */
-class PillMeshGenerator {
-public:
-    static Nova::MeshData createPill(
-        float radius = 0.08f,
-        float cylinder_height = 0.25f,
-        uint32_t radial_segments = 24,
-        uint32_t cap_rings = 8,
-        const glm::vec4& color = glm::vec4(0.2f, 0.5f, 0.85f, 0.95f),
-        float render_mode = 0.0f
-    );
-};
 
 /**
  * SpatialPillNode - Interactive 3D Pill representing an entity in the 3D Filesystem
@@ -60,7 +46,7 @@ public:
                     const std::string& path,
                     bool is_dir,
                     uintmax_t size_bytes,
-                    std::shared_ptr<Nova::SpatialFont> font_ptr);
+                    std::shared_ptr<Splash::SpatialFont> font_ptr);
 
     void setSelected(bool sel);
     void setHovered(bool hov);
@@ -73,14 +59,14 @@ public:
     void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
-    std::shared_ptr<Nova::SpatialFont> font_;
+    std::shared_ptr<Splash::SpatialFont> font_;
     float phase_angle_ = 0.0f;
     float pulse_anim_ = 0.0f;
 
     // Pill geometry is static per (radius, height, colour, render mode). The
     // per-frame idle rotation and pulse ride on the model matrix and push
     // constants respectively, so neither touches vertex data.
-    Nova::MeshCache mesh_cache_;
+    Splash::MeshCache mesh_cache_;
 
     const Nova::MeshData& resolveMesh(const glm::vec4& color, float render_mode);
 };
@@ -91,7 +77,7 @@ private:
 class SpatialFilesystem {
 public:
     SpatialFilesystem(std::shared_ptr<Splash::SpatialNode> root_scene_node,
-                      std::shared_ptr<Nova::SpatialFont> font_ptr);
+                      std::shared_ptr<Splash::SpatialFont> font_ptr);
     ~SpatialFilesystem() = default;
 
     void scanAndBuild3DTree(const std::string& root_path, int max_depth = 2);
@@ -111,7 +97,7 @@ public:
 
 private:
     std::shared_ptr<Splash::SpatialNode> scene_root_;
-    std::shared_ptr<Nova::SpatialFont> font_;
+    std::shared_ptr<Splash::SpatialFont> font_;
     std::shared_ptr<Splash::SpatialNode> filesystem_3d_root_;
 
     std::shared_ptr<SpatialPillNode> root_pill_;

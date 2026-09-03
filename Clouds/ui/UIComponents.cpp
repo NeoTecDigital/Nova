@@ -1,4 +1,5 @@
 #include "./UIComponents.h"
+#include "Splash/content/mesh_generators.h"
 #include <algorithm>
 
 namespace Clouds::UI {
@@ -7,7 +8,7 @@ namespace Clouds::UI {
 // UILabel Implementation
 // ---------------------------------------------------------------------------
 UILabel::UILabel(const std::string& label_text,
-                 std::shared_ptr<Nova::SpatialFont> font_ptr,
+                 std::shared_ptr<Splash::SpatialFont> font_ptr,
                  float scale,
                  const glm::vec4& text_color,
                  TextAlignment align)
@@ -68,7 +69,7 @@ void UILabel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
 // ---------------------------------------------------------------------------
 UIButton::UIButton(const std::string& btn_label,
                    const glm::vec2& btn_size,
-                   std::shared_ptr<Nova::SpatialFont> font_ptr,
+                   std::shared_ptr<Splash::SpatialFont> font_ptr,
                    std::function<void()> click_handler,
                    ButtonVariant btn_variant)
     : label(btn_label), variant(btn_variant), on_click(click_handler), font_(font_ptr) {
@@ -170,7 +171,7 @@ void UIButton::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
     Nova::Math::QuatTransform world_xf = getWorldTransform();
     glm::mat4 model = world_xf.toMatrix();
 
-    auto quad_mesh = Nova::SpatialMeshGenerator::createPlanarQuad(
+    auto quad_mesh = Splash::SpatialMeshGenerator::createPlanarQuad(
         size,
         current_color,
         border_thickness,

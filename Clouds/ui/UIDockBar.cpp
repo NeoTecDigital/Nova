@@ -4,7 +4,7 @@
 namespace Clouds::UI {
 
 UIDockBar::UIDockBar(float dock_width,
-                     std::shared_ptr<Nova::SpatialFont> font_ptr)
+                     std::shared_ptr<Splash::SpatialFont> font_ptr)
     : font_(font_ptr), total_width_(dock_width) {
     name = "UIDockBar";
     size = glm::vec2(dock_width, g_Theme.dockbar_height);

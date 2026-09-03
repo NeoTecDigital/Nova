@@ -20,9 +20,9 @@
 // compositor_ is deliberately null: presentFrame guards on it, onPresent guards
 // on it, and nothing else in the loop touches it. That keeps the probe about
 // the presentation loop instead of about the compositor.
-#include "include/Clouds/SpatialPresentLoop.h"
-#include "include/Clouds/SpatialCompositor.h"
-#include "Core/components/logger.h"
+#include "Vazio/SpatialPresentLoop.h"
+#include "Vazio/SpatialCompositor.h"
+#include "Nova/components/logger.h"
 
 extern "C" {
 #include <wlr/backend/headless.h>

@@ -16,9 +16,9 @@
 
 #include "protocol_client.h"
 
-#include "Clouds/Primitives.h"
-#include "Clouds/SpatialCompositor.h"
-#include "Clouds/SpatialScene.h"
+#include "Splash/Primitives.h"
+#include "Vazio/SpatialCompositor.h"
+#include "Splash/SpatialScene.h"
 
 #include <sys/stat.h>
 #include <sys/wait.h>

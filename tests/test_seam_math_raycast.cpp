@@ -1,7 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
-#include "Core/math/spatial_cluster.h"
-#include "Core/math/input_filter.h"
-#include "Core/math/engine_physics.h"
+#include "Nova/math/spatial_cluster.h"
+#include "Nova/math/input_filter.h"
+#include "Nova/math/engine_physics.h"
 #include <iostream>
 #include <chrono>
 #include <vector>

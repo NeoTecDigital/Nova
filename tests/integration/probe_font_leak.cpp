@@ -13,10 +13,10 @@
 // Both variants must exit 0. The whole assertion is the teardown, so the exit
 // code is the result and the checks only establish that there was something
 // real to tear down.
-#include "Core/nova_graphics.h"
-#include "Core/modules/spatial_pipeline/spatial_font.h"
-#include "Core/modules/spatial_pipeline/texture_bridge.h"
-#include "Core/components/logger.h"
+#include "Nova/nova_graphics.h"
+#include "Nova/pipeline/spatial_font.h"
+#include "Nova/pipeline/texture_bridge.h"
+#include "Nova/components/logger.h"
 
 #include <cstdio>
 #include <cstring>

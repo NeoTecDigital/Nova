@@ -36,12 +36,12 @@ find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
 
 # glm and nlohmann_json are included by first-party headers
-# (include/Clouds/OatsBridge.h, src/Clouds/OatsBridge.cpp). They previously
+# (Splash/oats/OatsBridge.h, Splash/oats/OatsBridge.cpp). They previously
 # resolved only because they happen to live in /usr/include.
 find_package(glm QUIET)
 if(NOT glm_FOUND)
     message(FATAL_ERROR
-        "glm not found. It is a hard dependency of include/Clouds/OatsBridge.h.\n"
+        "glm not found. It is a hard dependency of Splash/oats/OatsBridge.h.\n"
         "Install the GLM development package (Arch: glm, Debian: libglm-dev) or\n"
         "pass -Dglm_DIR=<path containing glmConfig.cmake>.")
 endif()
@@ -49,7 +49,7 @@ endif()
 find_package(nlohmann_json QUIET)
 if(NOT nlohmann_json_FOUND)
     message(FATAL_ERROR
-        "nlohmann_json not found. It is a hard dependency of src/Clouds/OatsBridge.cpp.\n"
+        "nlohmann_json not found. It is a hard dependency of Splash/oats/OatsBridge.cpp.\n"
         "Install it (Arch: nlohmann-json, Debian: nlohmann-json3-dev) or pass\n"
         "-Dnlohmann_json_DIR=<path containing nlohmann_jsonConfig.cmake>.")
 endif()
@@ -64,7 +64,7 @@ pkg_check_modules(LIBDRM REQUIRED libdrm)
 pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
 pkg_check_modules(XKBCOMMON REQUIRED xkbcommon)
 
-# wlr/render/pixman.h is included by include/Clouds/SpatialPresentLoop.h for the
+# wlr/render/pixman.h is included by Vazio/SpatialPresentLoop.h for the
 # CPU-copy presentation path, and it includes <pixman.h> directly.
 pkg_check_modules(PIXMAN REQUIRED pixman-1)
 
@@ -201,11 +201,22 @@ target_link_libraries(nova_client_protocols PUBLIC ${WAYLAND_CLIENT_LIBRARIES})
 # The .spv files were previously committed as build *inputs* with no rule to
 # regenerate them. Sources reference them CWD-relative -- see the default
 # arguments of SpatialPipeline::build in
-# Core/modules/spatial_pipeline/spatial_pipeline.h and the pipeline->build call
-# in examples/clouds_server_main.cpp -- so output goes next to the binaries.
+# Nova/pipeline/spatial_pipeline.h and the pipeline->build call
+# in Vazio/vazio_dev_main.cpp -- so output goes next to the binaries.
 #
 # Output basenames are irregular in the existing tree (_v/_f vs _vert/_frag), so
 # the mapping is explicit rather than derived from a naming convention.
+#
+# The two halves are rewritten INDEPENDENTLY, and the asymmetry below is
+# deliberate. The left column is a source path and followed Core/ -> Nova/ in the
+# layer move. The right column is the RUNTIME layout: it is what the loader
+# opens - exe-relative through resolveAssetPath in Vazio/vazio_main.cpp,
+# CWD-relative from the dev entry, and as the default arguments of
+# SpatialPipeline::build in Nova/pipeline/spatial_pipeline.h. Renaming an output
+# is an interface change for those three call sites, so the
+# Core/components/shaders/* outputs keep their names even though their sources
+# moved. Those four have no code consumer today; when one appears, rename the
+# output and its consumers together, never the output alone.
 # ==========================================
 find_program(GLSL_COMPILER NAMES glslc glslangValidator
     HINTS "$ENV{VULKAN_SDK}/bin" ${Vulkan_GLSLC_EXECUTABLE})
@@ -220,10 +231,10 @@ set(NOVA_SHADER_MAP
     "shaders/spatial/spatial_ui.frag|shaders/spatial/spatial_ui_frag.spv"
     "shaders/Clouds/ui.vert|shaders/Clouds/ui_vert.spv"
     "shaders/Clouds/ui.frag|shaders/Clouds/ui_frag.spv"
-    "Core/components/shaders/sq1.vert|Core/components/shaders/sq1_v.spv"
-    "Core/components/shaders/sq1.frag|Core/components/shaders/sq1_f.spv"
-    "Core/components/shaders/tri.vert|Core/components/shaders/tri_vert.spv"
-    "Core/components/shaders/tri.frag|Core/components/shaders/tri_frag.spv"
+    "Nova/components/shaders/sq1.vert|Core/components/shaders/sq1_v.spv"
+    "Nova/components/shaders/sq1.frag|Core/components/shaders/sq1_f.spv"
+    "Nova/components/shaders/tri.vert|Core/components/shaders/tri_vert.spv"
+    "Nova/components/shaders/tri.frag|Core/components/shaders/tri_frag.spv"
 )
 
 set(NOVA_SPIRV_OUTPUTS "")
@@ -306,36 +317,36 @@ add_dependencies(oats_ffi oats_ffi_build)
 # ==========================================
 # Nova engine library
 # ==========================================
-# Nova.cpp is deliberately absent: `class Nova` IS the SDL application wrapper
+# Nova/Nova.cpp is deliberately absent: `class Nova` IS the SDL application wrapper
 # (SDL_Init, SDL_CreateWindow, SDL_PollEvent, SDL_Vulkan_GetDrawableSize), so it
 # belongs to the NovaSDL target below, not to the windowless engine archive.
 set(NOVA_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/core_base.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/core_device_select.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/core.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/nova_compute.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/nova_graphics.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/nova_swapchain.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/nova_offscreen.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/nova_dmabuf.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/nova_dmabuf_query.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/nova_dmabuf_import.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/device.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/management.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/presentation.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/render.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/atomic/atomic.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/pipeline/pipeline.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/pipeline/scene.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/camera/camera.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/camera/perspective.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/components/genesis.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/components/logger.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/components/obj_loader.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/spatial_pipeline/texture_bridge.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/spatial_pipeline/spatial_pipeline.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/spatial_pipeline/spatial_mesh.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/spatial_pipeline/spatial_font.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/core_base.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/core_device_select.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/core.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/nova_compute.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/nova_graphics.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/nova_swapchain.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/nova_offscreen.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/nova_dmabuf.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/nova_dmabuf_query.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/nova_dmabuf_import.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/modules/device.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/modules/management.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/modules/presentation.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/modules/render.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/modules/atomic/atomic.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/modules/pipeline/pipeline.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/modules/pipeline/scene.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/modules/camera/camera.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/modules/camera/perspective.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/components/genesis.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/components/logger.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/components/obj_loader.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/pipeline/texture_bridge.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/pipeline/spatial_pipeline.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/pipeline/spatial_mesh.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/pipeline/spatial_font.cpp"
 )
 
 add_library(Nova STATIC ${NOVA_SOURCES})
@@ -346,26 +357,26 @@ target_compile_options(Nova PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 # management.cpp is the VMA_IMPLEMENTATION carrier: it instantiates all 19,786
 # lines of AMD's VulkanMemoryAllocator. obj_loader.cpp instantiates fastgltf.
 set_source_files_properties(
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/modules/management.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/modules/management.cpp"
     PROPERTIES COMPILE_OPTIONS "${NOVA_VMA_CARRIER_SUPPRESSIONS}"
 )
 set_source_files_properties(
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/components/obj_loader.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/components/obj_loader.cpp"
     PROPERTIES COMPILE_OPTIONS "${NOVA_FASTGLTF_CARRIER_SUPPRESSIONS}"
 )
 
 target_include_directories(Nova PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
     ${Vulkan_INCLUDE_DIRS}
     ${FREETYPE_INCLUDE_DIRS}
 )
 
 # SDL2 headers - and ONLY the headers - are a compile requirement of any consumer
-# that includes Core/nova_graphics.h: that header pulls in
-# Core/modules/camera/camera.h, which includes <SDL2/SDL_events.h> for
+# that includes Nova/nova_graphics.h: that header pulls in
+# Nova/modules/camera/camera.h, which includes <SDL2/SDL_events.h> for
 # Camera::processEvents(SDL_Event&). `vazio` is such a consumer
-# (examples/vazio_main.cpp constructs an offscreen NovaGraphics), so the include
+# (Vazio/vazio_main.cpp constructs an offscreen NovaGraphics), so the include
 # path is genuinely PUBLIC. An include path is not a link edge: `vazio` compiles
 # against SDL2's headers and links none of its code. Narrowing this further means
 # taking SDL out of Camera's public interface, not out of here.
@@ -384,7 +395,7 @@ target_link_libraries(Nova PUBLIC
 # included - resolved against libSDL2 and carried it at runtime. The two members
 # that did (core_base.cpp.o: SDL_Vulkan_GetInstanceExtensions,
 # nova_graphics.cpp.o: SDL_Vulkan_CreateSurface) no longer call SDL at all; both
-# call sites now live in Core/nova_sdl.cpp, in the separate NovaSDL archive below.
+# call sites now live in Nova/nova_sdl.cpp, in the separate NovaSDL archive below.
 
 target_compile_definitions(Nova PUBLIC
     NOVA_COMPUTE_ENABLED
@@ -393,13 +404,13 @@ target_compile_definitions(Nova PUBLIC
 # ==========================================
 # NovaSDL - the window-system half of the engine
 #
-# One translation unit: Core/nova_sdl.cpp, holding NovaSDL::vulkanInstanceExtensions
+# One translation unit: Nova/nova_sdl.cpp, holding NovaSDL::vulkanInstanceExtensions
 # and the SDL_Window constructor of NovaGraphics. Kept OUT of libNova.a so that a
 # target which never opens a window cannot accidentally acquire libSDL2 through
 # the archive. Link this only from targets that do.
 #
-# Two translation units live here: Core/nova_sdl.cpp (the extension query and the
-# SDL_Window constructor of NovaGraphics) and Nova.cpp (`class Nova`, the SDL
+# Two translation units live here: Nova/nova_sdl.cpp (the extension query and the
+# SDL_Window constructor of NovaGraphics) and Nova/Nova.cpp (`class Nova`, the SDL
 # application wrapper that owns the window and the event pump). Both are
 # SDL-calling by nature; the dependency direction is strictly NovaSDL -> Nova,
 # never back, which is what keeps the two static archives acyclic on the link line.
@@ -414,8 +425,8 @@ target_compile_definitions(Nova PUBLIC
 # test at the bottom of this file.
 # ==========================================
 add_library(NovaSDL STATIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/nova_sdl.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Nova.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/nova_sdl.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Nova/Nova.cpp"
 )
 target_compile_options(NovaSDL PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 target_link_libraries(NovaSDL PUBLIC Nova ${SDL2_LIBRARIES})
@@ -428,29 +439,29 @@ target_include_directories(NovaSDL PUBLIC ${SDL2_INCLUDE_DIRS})
 # presentation and the spatial UI. Nothing here touches SDL or ImGui, which is
 # what lets the staged boot binary exist at all (plan B.3).
 set(CLOUDS_SESSION_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialNode.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/Primitives.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialScene.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialCompositor.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialBackendStack.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialPresentLoop.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialPresentSidecar.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialWindowHost.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialPopupHost.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialSeatInput.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/OatsBridge.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialFilesystem.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/DynamicSceneManager.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIComponents.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIDockBar.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIMenuBar.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIWindow.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/SpatialNode.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/Primitives.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/SpatialScene.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialCompositor.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialBackendStack.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialPresentLoop.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialPresentSidecar.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialWindowHost.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialPopupHost.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialSeatInput.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/oats/OatsBridge.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/apps/SpatialFilesystem.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/DynamicSceneManager.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIComponents.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIDockBar.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIMenuBar.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIWindow.cpp"
 )
 
 set(CLOUDS_FIRST_PARTY_SOURCES
     ${CLOUDS_SESSION_SOURCES}
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/ImGuiEngineOverlay.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/examples/clouds_server_main.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/apps/ImGuiEngineOverlay.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/vazio_dev_main.cpp"
 )
 
 set(CLOUDS_VENDOR_SOURCES
@@ -483,8 +494,7 @@ target_compile_definitions(Clouds PRIVATE
 
 target_include_directories(Clouds PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
     ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui
     ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui/backends
     ${PROTOCOL_GEN_DIR}
@@ -524,15 +534,15 @@ target_link_libraries(Clouds PRIVATE
 # It links no libSDL2: verified by `ldd vazio` and enforced by construction -
 # Nova carries no SDL link edge in any scope, and the only SDL-calling
 # translation unit lives in the separate NovaSDL archive, which this target does
-# not link. It still COMPILES against SDL2's headers, because Core/nova_graphics.h
-# reaches Core/modules/camera/camera.h and that declares
+# not link. It still COMPILES against SDL2's headers, because Nova/nova_graphics.h
+# reaches Nova/modules/camera/camera.h and that declares
 # Camera::processEvents(SDL_Event&). An include path is not a runtime dependency.
 # This distinction matters here and nowhere else: an early-userspace boot binary
 # carrying an unnecessary shared object is a boot-time fact, not a cosmetic one.
 # ==========================================
 add_executable(vazio
     ${CLOUDS_SESSION_SOURCES}
-    "${CMAKE_CURRENT_SOURCE_DIR}/examples/vazio_main.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/vazio_main.cpp"
     "${PROTOCOL_GEN_DIR}/xdg-shell-protocol.h"
 )
 add_dependencies(vazio nova_shaders)
@@ -542,8 +552,7 @@ target_compile_definitions(vazio PRIVATE WLR_USE_UNSTABLE)
 
 target_include_directories(vazio PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
     ${PROTOCOL_GEN_DIR}
     ${Vulkan_INCLUDE_DIRS}
     ${FREETYPE_INCLUDE_DIRS}
@@ -575,11 +584,11 @@ target_link_libraries(vazio PRIVATE
 # lost from the CMake build. The Makefile now delegates here; this is the single
 # definition of the Nova source set.
 # ==========================================
-# Links NovaSDL, not Nova: wavecube_compute.cpp drives `class Nova`, whose
+# Links NovaSDL, not Nova: Nova/wavecube_compute.cpp drives `class Nova`, whose
 # translation unit calls SDL_Init/SDL_CreateWindow unconditionally. Compute-only
 # at runtime, SDL-referencing at link time - stating that here rather than
 # hiding it behind a transitive dependency is the whole point of the split.
-add_executable(wavecube_compute "${CMAKE_CURRENT_SOURCE_DIR}/wavecube_compute.cpp")
+add_executable(wavecube_compute "${CMAKE_CURRENT_SOURCE_DIR}/Nova/wavecube_compute.cpp")
 target_compile_options(wavecube_compute PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 target_link_libraries(wavecube_compute PRIVATE NovaSDL)
 
@@ -592,7 +601,7 @@ add_executable(test_seam_math_raycast
 target_compile_options(test_seam_math_raycast PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 target_include_directories(test_seam_math_raycast PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
 )
 target_link_libraries(test_seam_math_raycast PRIVATE
     Nova
@@ -607,8 +616,7 @@ add_executable(test_seam_ffi_roundtrip
 target_compile_options(test_seam_ffi_roundtrip PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 target_include_directories(test_seam_ffi_roundtrip PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
 )
 target_link_libraries(test_seam_ffi_roundtrip PRIVATE
     Nova
@@ -622,19 +630,18 @@ target_link_libraries(test_seam_ffi_roundtrip PRIVATE
 # stays true.
 add_executable(test_scene_input
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_scene_input.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialNode.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialScene.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/Primitives.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIComponents.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIWindow.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIDockBar.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIMenuBar.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/SpatialNode.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/SpatialScene.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/Primitives.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIComponents.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIWindow.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIDockBar.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIMenuBar.cpp"
 )
 target_compile_options(test_scene_input PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 target_include_directories(test_scene_input PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
 )
 target_link_libraries(test_scene_input PRIVATE
     Nova
@@ -678,8 +685,7 @@ set(NOVA_INTEGRATION_SESSION_SOURCES
 
 set(NOVA_INTEGRATION_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration
     ${PROTOCOL_GEN_DIR}
     ${Vulkan_INCLUDE_DIRS}

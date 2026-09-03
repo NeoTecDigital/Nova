@@ -57,8 +57,13 @@ compile_commands.json
 *.gch
 *.pch
 
-# Committed-by-accident executables (anchored: does NOT match *.cpp sources)
+# Committed-by-accident executables (anchored: does NOT match *.cpp sources).
+# Two anchors, both load-bearing: the source moved to Nova/ with the rest of the
+# layer, so that is where an in-tree build lands now - but an untracked binary
+# from before the move still sits at the root, and dropping its rule would stage
+# it on the next `git add -A`.
 /wavecube_compute
+/Nova/wavecube_compute
 
 # ---------------------------------------------------------------------------
 # Rust (extern/OATS-rs, extern/OATS-ffi)

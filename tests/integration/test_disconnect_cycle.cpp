@@ -13,8 +13,8 @@
 #include "harness_check.h"
 #include "wl_client_kit.h"
 
-#include "Clouds/SpatialCompositor.h"
-#include "Clouds/SpatialScene.h"
+#include "Vazio/SpatialCompositor.h"
+#include "Splash/SpatialScene.h"
 
 #include <sys/stat.h>
 #include <sys/wait.h>

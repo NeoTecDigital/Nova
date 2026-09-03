@@ -1,5 +1,5 @@
 #pragma once
-#include "../Nova.h"
+#include "../Nova/Nova.h"
 
 class NovaExample {
     public:

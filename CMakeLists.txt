@@ -440,19 +440,16 @@ set(CLOUDS_SESSION_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialSeatInput.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/OatsBridge.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/SpatialFilesystem.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/CrmWorkspace.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/DynamicSceneManager.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIComponents.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIDockBar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIMenuBar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIWindow.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/WindowManager.cpp"
 )
 
 set(CLOUDS_FIRST_PARTY_SOURCES
     ${CLOUDS_SESSION_SOURCES}
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/ImGuiEngineOverlay.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/EngineHUD.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/examples/clouds_server_main.cpp"
 )
 
@@ -630,6 +627,8 @@ add_executable(test_scene_input
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/Primitives.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIComponents.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIWindow.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIDockBar.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Clouds/UI/UIMenuBar.cpp"
 )
 target_compile_options(test_scene_input PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 target_include_directories(test_scene_input PRIVATE

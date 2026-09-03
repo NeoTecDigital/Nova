@@ -1,6 +1,5 @@
 #include "include/Clouds/UI/UIWindow.h"
 #include "include/Clouds/Primitives.h"
-#include <iostream>
 
 namespace Clouds::UI {
 

@@ -58,6 +58,27 @@ public:
     void addChild(std::shared_ptr<SpatialNode> child);
     void removeChild(std::shared_ptr<SpatialNode> child);
 
+    // --- Sibling stacking ---
+    //
+    // Raise `child` above its siblings: it moves to the end of `children` and
+    // takes `front_z`, every other child takes `back_z`. False if `child` is
+    // not one of this node's children.
+    //
+    // Depth and paint order are written together on purpose. hitTest resolves
+    // by distance and falls back to sibling order only on an exact tie, while
+    // collectRender paints in sibling order outright -- so setting one without
+    // the other leaves what the pointer hits and what is drawn on top free to
+    // disagree.
+    //
+    // Both z values are the caller's. How far apart a shell separates its
+    // top-levels is that shell's layout; a node has no basis for a default.
+    //
+    // is_focused is deliberately untouched. SpatialScene already owns it and
+    // keeps it exclusive (setKeyboardFocus clears the previous holder), so a
+    // second writer here would race it. This is the z half alone -- the half
+    // the tree had nowhere else to put.
+    bool raiseChild(const std::shared_ptr<SpatialNode>& child, float front_z, float back_z);
+
     // Re-points every descendant's parent link at its actual owner. addChild
     // runs this on whatever it attaches, which is what makes a subtree built
     // inside a constructor -- where weak_from_this() is still empty and the

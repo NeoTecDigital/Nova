@@ -53,6 +53,12 @@ private:
 
 
     void syncNodesFromState();
+    // B4 seam: this is the hardcoded domain->visual mapping (pill -> panel +
+    // button + label). It becomes a registered presenter rather than a method,
+    // alongside SpatialFilesystem's extension->colour chain and
+    // SpatialWindowHost::buildWindowNodes. Left intact until the registry it
+    // registers into exists -- syncNodesFromState below is the loop that will
+    // drive it either way.
     void createNodeFor(const OatsSpatialPill& pill);
     void updateNodeFor(Active3DNode& node, const OatsSpatialPill& pill);
     void removeStaleNodes();

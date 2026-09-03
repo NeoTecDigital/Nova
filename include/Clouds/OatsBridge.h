@@ -115,6 +115,13 @@ public:
     // Ids removed by the runtime since the last drain. Callers own teardown of their views.
     std::vector<std::string> drainRemovedObjectIds();
 
+    // Empty-state contract, recovered from the deleted CrmWorkspace (commit
+    // 70673fb). Before the first step() every one of these accessors answers
+    // honestly-empty: tick 0, no objects, no events. A consumer renders that
+    // as a stated absence -- "Awaiting first runtime tick...", "No runtime
+    // events yet." -- and never as a plausible-looking zero or a sample row.
+    // The runtime not having spoken yet is a fact worth displaying; inventing
+    // a reading to fill the space is not.
     uint64_t getTick() const { return tick_; }
     size_t getObjectCount() const {
         return filesystem_entities_.size() + spatial_pills_.size() + hypergraph_nodes_.size();

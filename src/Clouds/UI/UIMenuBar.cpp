@@ -84,8 +84,13 @@ UIMenuBar::UIMenuBar(float bar_width,
         brand_label_->transform.position = glm::vec3(-bar_width * 0.5f + 0.035f, 0.0f, 0.003f);
         bar_panel_->addChild(brand_label_);
 
+        // Seeded empty, not with a sample readout. A pre-filled string here is
+        // a measurement nobody took: it renders as live telemetry from the
+        // first frame and stays wrong until setTelemetryText() is called, if
+        // it ever is. UILabel::collectRender skips empty text, so an unfed bar
+        // shows nothing rather than showing a number it invented.
         telemetry_label_ = std::make_shared<UILabel>(
-            "FPS: 60 | Mode: Quaternionic Spatial | Sync: Delta",
+            "",
             font_,
             g_Theme.scale_small,
             g_Theme.text_muted,

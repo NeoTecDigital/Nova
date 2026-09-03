@@ -16,6 +16,23 @@ void SpatialNode::addChild(std::shared_ptr<SpatialNode> child) {
     child->relinkChildren();
 }
 
+bool SpatialNode::raiseChild(const std::shared_ptr<SpatialNode>& child, float front_z, float back_z) {
+    if (!child) return false;
+
+    const auto it = std::find(children.begin(), children.end(), child);
+    if (it == children.end()) return false;
+
+    for (const std::shared_ptr<SpatialNode>& sibling : children) {
+        if (sibling) sibling->transform.position.z = back_z;
+    }
+    child->transform.position.z = front_z;
+
+    // Last in `children` is last painted and takes hitTest's tie-break, so the
+    // raised node is moved there rather than merely being marked as raised.
+    std::rotate(it, it + 1, children.end());
+    return true;
+}
+
 void SpatialNode::relinkChildren() {
     const std::weak_ptr<SpatialNode> self = weak_from_this();
 

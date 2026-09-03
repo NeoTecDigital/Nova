@@ -1,6 +1,12 @@
 #pragma once
+#include <cstdio>
 #include <string>
 #include <unordered_map>
+
+// Everything defined here is `inline`. These are definitions in a header, so
+// without it a second translation unit including this file is a duplicate-symbol
+// link error -- it links today only because exactly one TU (logger.cpp) includes
+// it, which is a property of the current file layout and not of this header.
 
 
 enum DEBUG_LEVEL {
@@ -12,7 +18,7 @@ enum DEBUG_LEVEL {
     INVALID             // Invalid debug level
 };
 
-const std::unordered_map<std::string, DEBUG_LEVEL> DEBUG_MAP = {
+inline const std::unordered_map<std::string, DEBUG_LEVEL> DEBUG_MAP = {
         { "none", DEBUG_LEVEL::SILENT },
         { "release", DEBUG_LEVEL::RELEASE },
         { "staging", DEBUG_LEVEL::STAGING },
@@ -21,7 +27,7 @@ const std::unordered_map<std::string, DEBUG_LEVEL> DEBUG_MAP = {
 };
 
 // Adds a safety check to ensure that the debug level is set to a valid value.
-DEBUG_LEVEL getDebugLevel (const char* dbg_lvl) {
+inline DEBUG_LEVEL getDebugLevel (const char* dbg_lvl) {
     printf("Logger - Debug Level set to %s ..", dbg_lvl);
     if (DEBUG_MAP.find(dbg_lvl) != DEBUG_MAP.end()) 
         { return DEBUG_MAP.at(dbg_lvl); } 
@@ -30,7 +36,7 @@ DEBUG_LEVEL getDebugLevel (const char* dbg_lvl) {
 };
 
 // This is a helper function to convert the DEBUG_LEVEL enum to a string for output.
-const char* debugString (DEBUG_LEVEL dbg_lvl) {
+inline const char* debugString (DEBUG_LEVEL dbg_lvl) {
     switch (dbg_lvl) {
         case DEBUG_LEVEL::SILENT:
             return "none";

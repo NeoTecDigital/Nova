@@ -14,12 +14,15 @@
 #include "include/Clouds/SpatialScene.h"
 #include "include/Clouds/UI/UIWindow.h"
 #include "include/Clouds/UI/UIComponents.h"
+#include "include/Clouds/UI/UIDockBar.h"
+#include "include/Clouds/UI/UIMenuBar.h"
 
 #include <cmath>
 #include <cstdio>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 // ---------------------------------------------------------------------------
 // Assertion harness. Deliberately NOT <cassert>: assert() is compiled out under
@@ -51,8 +54,11 @@ namespace {
 using Splash::SpatialNode;
 using Splash::SpatialScene;
 using Clouds::UI::UIButton;
+using Clouds::UI::UIDockBar;
 using Clouds::UI::UILabel;
+using Clouds::UI::UIMenuBar;
 using Clouds::UI::UIWindow;
+using Clouds::UI::g_Theme;
 
 constexpr float kScreenW = 1600.0f;
 constexpr float kScreenH = 1000.0f;
@@ -466,6 +472,175 @@ void testIsFocusedIsSingleSourced() {
     CHECK(!base->is_focused && !window->is_focused, "the two spellings never disagree");
 }
 
+// ---------------------------------------------------------------------------
+// 7. Sibling stacking. SpatialNode::raiseChild is the z/paint-order mechanism
+//    mined out of WindowManager::bringToFront when that class was deleted in
+//    A0 (its prior form is in commit 70673fb). Nothing else in the tree orders
+//    siblings, so this is the whole coverage of it.
+// ---------------------------------------------------------------------------
+void testRaiseChildOrdersDepthAndPaintTogether() {
+    auto root = std::make_shared<SpatialNode>();
+    auto a = makeQuad("a", glm::vec3(0.0f), glm::vec2(1.0f));
+    auto b = makeQuad("b", glm::vec3(0.0f), glm::vec2(1.0f));
+    auto c = makeQuad("c", glm::vec3(0.0f), glm::vec2(1.0f));
+    root->addChild(a);
+    root->addChild(b);
+    root->addChild(c);
+
+    CHECK(root->raiseChild(b, -0.04f, -0.12f), "raising an actual child reports success");
+    CHECK_NEAR(b->transform.position.z, -0.04f, 1e-6, "the raised child takes front_z");
+    CHECK_NEAR(a->transform.position.z, -0.12f, 1e-6, "every other child takes back_z");
+    CHECK_NEAR(c->transform.position.z, -0.12f, 1e-6, "including the one that was last");
+    CHECK(root->children.back() == b, "and it moves last, which is painted on top");
+    CHECK(root->children.size() == 3, "raising neither adds nor drops a child");
+    CHECK(root->children[0] == a && root->children[1] == c,
+          "the siblings it passed keep their relative order");
+
+    CHECK(!root->raiseChild(makeQuad("stranger", glm::vec3(0.0f), glm::vec2(1.0f)), 9.0f, -9.0f),
+          "a node that is not a child cannot be raised");
+    CHECK(!root->raiseChild(nullptr, 9.0f, -9.0f), "nor can nothing");
+    CHECK(root->children.back() == b, "a rejected raise reorders nothing");
+    CHECK_NEAR(a->transform.position.z, -0.12f, 1e-6, "and moves nothing");
+}
+
+void testRaiseChildDecidesTheHit() {
+    auto scene = makeScene();
+    auto lower = makeQuad("lower", glm::vec3(0.0f), glm::vec2(1.0f));
+    auto upper = makeQuad("upper", glm::vec3(0.0f), glm::vec2(1.0f));
+    scene->root->addChild(lower);
+    scene->root->addChild(upper);
+
+    // Coplanar, in front of the root's own quad: distance ties between the two,
+    // so only sibling order can settle it. This is the case the two halves of
+    // raiseChild have to agree on, and the reason it writes both.
+    CHECK(scene->root->raiseChild(lower, 0.5f, 0.5f), "coplanar raise succeeds");
+    aimAt(*scene, glm::vec3(0.0f, 0.0f, 0.5f));
+    CHECK(scene->getPointerFocus() == lower, "on an exact depth tie the raised node takes the hit");
+
+    CHECK(scene->root->raiseChild(upper, 0.5f, 0.5f), "raising the other one");
+    aimAt(*scene, glm::vec3(0.0f, 0.0f, 0.5f));
+    CHECK(scene->getPointerFocus() == upper, "and the tie follows the raise");
+
+    // Separated in depth: distance decides outright, and must land on the same
+    // node paint order does.
+    CHECK(scene->root->raiseChild(lower, 0.6f, 0.4f), "separated raise succeeds");
+    aimAt(*scene, glm::vec3(0.0f, 0.0f, 0.6f));
+    CHECK(scene->getPointerFocus() == lower, "the nearer node takes the hit");
+    CHECK(scene->root->children.back() == lower, "and is also the one painted last");
+    fprintf(stdout, "  raise -> hit %s, painted last %s\n",
+            nodeName(scene->getPointerFocus()), nodeName(scene->root->children.back()));
+}
+
+// ---------------------------------------------------------------------------
+// 8. Anchored flow layout. UIMenuBar and UIDockBar are the only code in the
+//    tree that packs widgets left-to-right at text-measured widths, which is
+//    the whole reason A0 kept them; nothing constructs them yet, so this is
+//    what holds them up.
+//
+//    GPU-free: SpatialFont's constructor only starts FreeType, and a font that
+//    was never loaded has an empty glyph table, so measureText falls back to a
+//    fixed advance per character. Widths are therefore exact and the layout
+//    invariants below are checked against the run itself, not against numbers
+//    copied out of the implementation.
+// ---------------------------------------------------------------------------
+std::vector<std::shared_ptr<UIButton>> buttonsUnder(const std::shared_ptr<SpatialNode>& parent) {
+    std::vector<std::shared_ptr<UIButton>> found;
+    for (const std::shared_ptr<SpatialNode>& child : parent->children) {
+        if (auto button = std::dynamic_pointer_cast<UIButton>(child)) found.push_back(button);
+    }
+    return found;
+}
+
+void checkFlowRun(const std::vector<std::shared_ptr<UIButton>>& run,
+                  float left_inset, float gap, const char* what) {
+    CHECK(run.size() >= 2, what);
+    if (run.size() < 2) return;
+
+    CHECK_NEAR(run[0]->transform.position.x - run[0]->size.x * 0.5f, left_inset, 1e-5,
+               "the run starts at the bar's left inset");
+
+    for (size_t i = 1; i < run.size(); ++i) {
+        const float prev_right = run[i - 1]->transform.position.x + run[i - 1]->size.x * 0.5f;
+        const float this_left = run[i]->transform.position.x - run[i]->size.x * 0.5f;
+        CHECK_NEAR(this_left - prev_right, gap, 1e-5,
+                   "each item is one gap past the previous one, never overlapping it");
+    }
+}
+
+void testDockBarFlowsFromItsLeftInset() {
+    auto font = std::make_shared<Nova::SpatialFont>(nullptr, nullptr);
+    const float width = 2.20f;
+    auto dock = std::make_shared<UIDockBar>(width, font);
+
+    int clicks = 0;
+    dock->addItem("A", [&clicks]() { ++clicks; });
+    dock->addItem("a much longer item", [&clicks]() { ++clicks; });
+    dock->addItem("C", [&clicks]() { ++clicks; });
+
+    CHECK(!dock->children.empty(), "the dock built its panel");
+    const std::vector<std::shared_ptr<UIButton>> items = buttonsUnder(dock->children[0]);
+    CHECK(items.size() == 3, "one button per added item");
+    if (items.size() != 3) return;
+
+    checkFlowRun(items, -width * 0.5f + 0.05f, 0.015f, "the dock laid out a run");
+    CHECK(items[1]->size.x > items[0]->size.x,
+          "a longer label measures to a wider button, which is what makes this a flow");
+
+    items[2]->on_click();
+    CHECK(clicks == 1, "the handler an item was added with is the one it carries");
+}
+
+void testMenuBarFlowsAndOpensOneDropdownAtATime() {
+    auto font = std::make_shared<Nova::SpatialFont>(nullptr, nullptr);
+    const float width = 2.60f;
+    auto bar = std::make_shared<UIMenuBar>(width, font);
+
+    int fired = 0;
+    bar->addMenu("Windows", {{ "Reset", "R", [&fired]() { ++fired; } }});
+    bar->addMenu("Physics with a long name", {{ "Toggle", "", [&fired]() { ++fired; } }});
+
+    CHECK(!bar->children.empty(), "the bar built its panel");
+    const std::vector<std::shared_ptr<UIButton>> menus = buttonsUnder(bar->children[0]);
+    CHECK(menus.size() == 2, "one button per menu");
+    if (menus.size() != 2) return;
+
+    checkFlowRun(menus, -width * 0.5f + 0.22f, 0.01f, "the menu bar laid out a run");
+    CHECK(menus[1]->size.x > menus[0]->size.x, "a longer menu title measures wider");
+
+    // Dropdowns are the bar's own children, not the panel's, so they draw over
+    // the buttons rather than under them.
+    std::vector<std::shared_ptr<SpatialNode>> dropdowns;
+    for (size_t i = 1; i < bar->children.size(); ++i) dropdowns.push_back(bar->children[i]);
+    CHECK(dropdowns.size() == 2, "one dropdown per menu");
+    if (dropdowns.size() != 2) return;
+
+    CHECK(!dropdowns[0]->visible && !dropdowns[1]->visible, "a fresh bar has nothing open");
+
+    menus[0]->on_click();
+    CHECK(dropdowns[0]->visible && !dropdowns[1]->visible, "opening one opens exactly one");
+
+    menus[1]->on_click();
+    CHECK(!dropdowns[0]->visible && dropdowns[1]->visible, "opening another closes the first");
+
+    menus[1]->on_click();
+    CHECK(!dropdowns[0]->visible && !dropdowns[1]->visible, "clicking the open one closes it");
+
+    bar->closeAllDropdowns();
+    CHECK(!dropdowns[0]->visible && !dropdowns[1]->visible, "and closing all is idempotent");
+
+    // The telemetry seed used to read "FPS: 60 | Mode: Quaternionic Spatial |
+    // Sync: Delta" -- a measurement nobody took, drawn as though it were live.
+    std::vector<std::shared_ptr<UILabel>> labels;
+    for (const std::shared_ptr<SpatialNode>& child : bar->children[0]->children) {
+        if (auto label = std::dynamic_pointer_cast<UILabel>(child)) labels.push_back(label);
+    }
+    CHECK(labels.size() == 2, "the bar carries a brand label and a telemetry label");
+    if (labels.size() != 2) return;
+    CHECK(labels[1]->text.empty(), "telemetry says nothing until something measures it");
+    bar->setTelemetryText("tick 7");
+    CHECK(labels[1]->text == "tick 7", "and says exactly what it is given");
+}
+
 } // namespace
 
 int main() {
@@ -485,6 +660,10 @@ int main() {
     testFocusTransferClearsThePreviousHolder();
     testReleaseNodeDropsEveryReference();
     testIsFocusedIsSingleSourced();
+    testRaiseChildOrdersDepthAndPaintTogether();
+    testRaiseChildDecidesTheHit();
+    testDockBarFlowsFromItsLeftInset();
+    testMenuBarFlowsAndOpensOneDropdownAtATime();
 
     if (g_failures == 0) {
         std::cout << " [SCENE INPUT STATUS] Input routing PASSED with zero failures." << std::endl;

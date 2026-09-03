@@ -14,6 +14,22 @@ enum class AccelerationMode {
 
 /**
  * EnginePhysicsConfig - Runtime Physics & Mathematical Substrate Parameters
+ *
+ * Interactive control granularity, recovered from the deleted EngineHUD (see
+ * commit 70673fb). These are the increments an editor should step these fields
+ * by; they are not defaults and nothing here reads them. Kept at the fields
+ * they edit because that is where the next settings surface will look:
+ *
+ *   phase_coupling_strength  step 0.2   clamp to [0.0, 5.0]
+ *   phase_velocity           step 0.5   clamp to [-10.0, 10.0]
+ *   accel_mode               cycle forward through the 3 AccelerationMode values
+ *   dither_enabled           toggle
+ *   (all)                    resetDefaults()
+ *
+ * The phase_velocity clamp is the documented range below, NOT what EngineHUD
+ * did: it stepped omega by 0.5 with no bound at all, so its own control could
+ * drive the field outside the range this struct declares. The range is right
+ * and the control was wrong.
  */
 struct EnginePhysicsConfig {
     // Non-linear complex phase dynamics

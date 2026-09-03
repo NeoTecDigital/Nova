@@ -9,7 +9,7 @@
 #include <string>
 #include <memory>
 
-namespace NovaSpatial {
+namespace Nova {
 
 struct GlyphMetric {
     float advance_x = 0.0f;
@@ -29,7 +29,7 @@ public:
      *        released in ~SpatialFont, and a bridge destroyed first would take
      *        its VMA allocator down with the allocation still live.
      */
-    SpatialFont(NovaCore* core, TextureBridge* texture_bridge);
+    SpatialFont(Core* core, TextureBridge* texture_bridge);
 
     /**
      * Releases the FreeType handles AND the atlas texture.
@@ -61,7 +61,7 @@ public:
     std::shared_ptr<TextureHandle> getAtlasTexture() const { return atlas_texture_; }
 
 private:
-    NovaCore* core_ = nullptr;
+    Core* core_ = nullptr;
     TextureBridge* texture_bridge_ = nullptr;
 
     FT_Library ft_library_ = nullptr;
@@ -76,4 +76,4 @@ private:
     void buildFallbackAtlas();
 };
 
-} // namespace NovaSpatial
+} // namespace Nova

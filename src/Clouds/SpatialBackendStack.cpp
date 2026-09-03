@@ -19,7 +19,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace Clouds {
+namespace Vazio {
 
 namespace {
 
@@ -367,4 +367,4 @@ void SpatialCompositor::onSessionDestroy(void*) {
     session_active_ = true;
 }
 
-} // namespace Clouds
+} // namespace Vazio

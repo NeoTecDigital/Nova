@@ -6,8 +6,8 @@
 #include "./extern/fastgltf/include/fastgltf/glm_element_traits.hpp"
 #include "./extern/fastgltf/include/fastgltf/core.hpp"
 #include "./extern/fastgltf/include/fastgltf/tools.hpp"
-
-std::optional<std::vector<std::shared_ptr<MeshType>>> loadGLTFMeshes(NovaCoreLegacy* engine, std::filesystem::path path) {
+namespace Nova {
+std::optional<std::vector<std::shared_ptr<MeshType>>> loadGLTFMeshes(CoreLegacy* engine, std::filesystem::path path) {
     report(LOGGER::ILINE, "GLTF Mesh: %s", path.c_str());
 
     // We load the data from the path
@@ -133,12 +133,12 @@ std::optional<std::vector<std::shared_ptr<MeshType>>> loadGLTFMeshes(NovaCoreLeg
     return meshes;
 }
 
-std::optional<std::vector<std::shared_ptr<MeshType>>> loadOBJMeshes(NovaCoreLegacy* engine, std::filesystem::path path) {
+std::optional<std::vector<std::shared_ptr<MeshType>>> loadOBJMeshes(CoreLegacy* engine, std::filesystem::path path) {
     // TODO: Implement tinyobjloader
     return std::nullopt;
 }
 
-std::optional<std::vector<std::shared_ptr<MeshType>>> loadMeshes(NovaCoreLegacy* engine, std::filesystem::path path) {
+std::optional<std::vector<std::shared_ptr<MeshType>>> loadMeshes(CoreLegacy* engine, std::filesystem::path path) {
     report(LOGGER::INFO, "Loading Mesh:");
     if (path.extension() == ".gltf") 
         { return loadGLTFMeshes(engine, path); } 
@@ -147,3 +147,5 @@ std::optional<std::vector<std::shared_ptr<MeshType>>> loadMeshes(NovaCoreLegacy*
     else 
         { return std::nullopt; }
 }
+
+} // namespace Nova

@@ -13,10 +13,10 @@ namespace Clouds::UI {
 
 class WindowManager {
 public:
-    WindowManager(std::shared_ptr<SpatialNode> scene_root,
-                  std::shared_ptr<NovaSpatial::SpatialFont> font_ptr,
-                  std::shared_ptr<OatsBridge> oats_bridge,
-                  NovaMath::EnginePhysicsConfig* physics_config);
+    WindowManager(std::shared_ptr<Splash::SpatialNode> scene_root,
+                  std::shared_ptr<Nova::SpatialFont> font_ptr,
+                  std::shared_ptr<Splash::OatsBridge> oats_bridge,
+                  Nova::Math::EnginePhysicsConfig* physics_config);
     ~WindowManager() = default;
 
     void initialize();
@@ -32,12 +32,12 @@ public:
     std::shared_ptr<UIDockBar> getDockBar() const { return dockbar_; }
 
 private:
-    std::shared_ptr<SpatialNode> root_;
-    std::shared_ptr<NovaSpatial::SpatialFont> font_;
-    std::shared_ptr<OatsBridge> oats_bridge_;
-    NovaMath::EnginePhysicsConfig* physics_config_ = nullptr;
+    std::shared_ptr<Splash::SpatialNode> root_;
+    std::shared_ptr<Nova::SpatialFont> font_;
+    std::shared_ptr<Splash::OatsBridge> oats_bridge_;
+    Nova::Math::EnginePhysicsConfig* physics_config_ = nullptr;
 
-    std::shared_ptr<SpatialNode> window_root_;
+    std::shared_ptr<Splash::SpatialNode> window_root_;
     std::shared_ptr<UIMenuBar> menubar_;
     std::shared_ptr<UIDockBar> dockbar_;
 

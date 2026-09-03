@@ -22,34 +22,34 @@ struct MenuCategory {
     std::vector<MenuItem> items;
 };
 
-class UIMenuDropdown : public SpatialNode {
+class UIMenuDropdown : public Splash::SpatialNode {
 public:
     UIMenuDropdown(const std::vector<MenuItem>& items,
                    float width,
-                   std::shared_ptr<NovaSpatial::SpatialFont> font_ptr,
+                   std::shared_ptr<Nova::SpatialFont> font_ptr,
                    std::function<void()> on_item_selected = nullptr);
 
-    void collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) override;
+    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
-    std::shared_ptr<SpatialPanel> panel_;
+    std::shared_ptr<Splash::SpatialPanel> panel_;
     std::vector<std::shared_ptr<UIButton>> item_buttons_;
 };
 
-class UIMenuBar : public SpatialNode {
+class UIMenuBar : public Splash::SpatialNode {
 public:
     UIMenuBar(float bar_width,
-              std::shared_ptr<NovaSpatial::SpatialFont> font_ptr);
+              std::shared_ptr<Nova::SpatialFont> font_ptr);
 
     void addMenu(const std::string& category_name, const std::vector<MenuItem>& items);
     void setTelemetryText(const std::string& text);
     void closeAllDropdowns();
 
-    void collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) override;
+    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
-    std::shared_ptr<NovaSpatial::SpatialFont> font_;
-    std::shared_ptr<SpatialPanel> bar_panel_;
+    std::shared_ptr<Nova::SpatialFont> font_;
+    std::shared_ptr<Splash::SpatialPanel> bar_panel_;
     std::shared_ptr<UILabel> brand_label_;
     std::shared_ptr<UILabel> telemetry_label_;
 

@@ -12,7 +12,7 @@
 
 using json = nlohmann::json;
 
-namespace Clouds {
+namespace Splash {
 namespace {
 
 constexpr size_t kMaxRecentEvents = 64;
@@ -450,4 +450,4 @@ bool OatsBridge::updateSpatialPose(const std::string& id, const glm::vec3& posit
     return true;
 }
 
-} // namespace Clouds
+} // namespace Splash

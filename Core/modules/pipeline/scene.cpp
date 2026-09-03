@@ -9,7 +9,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "Core/components/extern/stb_image.h"
 // TEXTURE_PATH removed - was hardcoded during development, not needed
-
+namespace Nova {
 // Do we need to move this to the graphics pipeline?
 
     ////////////////////////////
@@ -27,7 +27,7 @@ static const VkImageLayout _IMAGE_LAYOUT_UNDEFINED = VK_IMAGE_LAYOUT_UNDEFINED;
 static const VkImageLayout _IMAGE_LAYOUT_READ_ONLY = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         
 
-void NovaCoreLegacy::constructVertexBuffer() 
+void CoreLegacy::constructVertexBuffer() 
     {
         report(LOGGER::VLINE, "\t .. Creating Vertex Buffer ..");
 
@@ -51,7 +51,7 @@ void NovaCoreLegacy::constructVertexBuffer()
         return;
     }
 
-void NovaCoreLegacy::constructIndexBuffer() 
+void CoreLegacy::constructIndexBuffer() 
     {
         report(LOGGER::VLINE, "\t .. Creating Index Buffer ..");
 
@@ -74,10 +74,10 @@ void NovaCoreLegacy::constructIndexBuffer()
         return;
     }
 
-void NovaCoreLegacy::destroyVertexContext() 
+void CoreLegacy::destroyVertexContext() 
     { report(LOGGER::VERBOSE, "Scene - Destroying Vertex Context .."); destroyBuffer(&vertex); return; }
 
-void NovaCoreLegacy::destroyIndexContext() 
+void CoreLegacy::destroyIndexContext() 
     { report(LOGGER::VERBOSE, "Scene - Destroying Vertex Context .."); destroyBuffer(&index); return; }
 
     /////////////////////////////
@@ -87,7 +87,7 @@ void NovaCoreLegacy::destroyIndexContext()
 static const VkBufferUsageFlags _uniform_usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 static const VkMemoryPropertyFlags _uniform_properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
-void NovaCoreLegacy::constructUniformBuffer() 
+void CoreLegacy::constructUniformBuffer() 
     {
         report(LOGGER::VLINE, "\t .. Creating Uniform Buffer ..");
 
@@ -104,7 +104,7 @@ void NovaCoreLegacy::constructUniformBuffer()
             }
     }
 
-void NovaCoreLegacy::updateUniformBuffer(uint32_t current_frame)
+void CoreLegacy::updateUniformBuffer(uint32_t current_frame)
     {
         player_camera.update();
 
@@ -124,7 +124,7 @@ void NovaCoreLegacy::updateUniformBuffer(uint32_t current_frame)
         memcpy(uniform_data[current_frame], &_mvp, sizeof(MVP));
     }
 
-void NovaCoreLegacy::destroyUniformContext()
+void CoreLegacy::destroyUniformContext()
     {
         report(LOGGER::VERBOSE, "Scene - Destroying Uniform Context ..");
 
@@ -179,7 +179,7 @@ static inline VkImageMemoryBarrier getMemoryBarrier(VkImage& image, VkImageLayou
         };
     }
 
-inline void NovaCoreLegacy::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout) 
+inline void CoreLegacy::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout) 
     {
         report(LOGGER::VLINE, "\t .. Transitioning Image Layout ..");
         VkCommandBuffer _ephemeral_cmd = createEphemeralCommand(queues.xfr.pool);
@@ -234,7 +234,7 @@ static inline VkBufferImageCopy getImageCopyRegion(uint32_t width, uint32_t heig
         };
     }
 
-inline void NovaCoreLegacy::copyBufferToImage(VkBuffer& buffer, VkImage& image, uint32_t width, uint32_t height) 
+inline void CoreLegacy::copyBufferToImage(VkBuffer& buffer, VkImage& image, uint32_t width, uint32_t height) 
     {
         report(LOGGER::VLINE, "\t .. Copying Buffer to Image ..");
 
@@ -249,7 +249,7 @@ inline void NovaCoreLegacy::copyBufferToImage(VkBuffer& buffer, VkImage& image, 
         return;
     }
 
-void NovaCoreLegacy::createTextureImage()
+void CoreLegacy::createTextureImage()
     {
         report(LOGGER::VLINE, "\t .. Creating Texture Buffer ..");
 
@@ -257,3 +257,5 @@ void NovaCoreLegacy::createTextureImage()
         // Applications should load textures as needed
         report(LOGGER::INFO, "Scene - Texture image creation skipped (no default texture)");
     }
+
+} // namespace Nova

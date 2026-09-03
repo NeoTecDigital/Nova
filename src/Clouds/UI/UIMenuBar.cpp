@@ -8,14 +8,14 @@ namespace Clouds::UI {
 // ---------------------------------------------------------------------------
 UIMenuDropdown::UIMenuDropdown(const std::vector<MenuItem>& items,
                                float width,
-                               std::shared_ptr<NovaSpatial::SpatialFont> font_ptr,
+                               std::shared_ptr<Nova::SpatialFont> font_ptr,
                                std::function<void()> on_item_selected) {
     name = "UIMenuDropdown";
     float item_h = 0.045f;
     float total_h = items.size() * item_h + 0.02f;
     size = glm::vec2(width, total_h);
 
-    panel_ = std::make_shared<SpatialPanel>(
+    panel_ = std::make_shared<Splash::SpatialPanel>(
         size,
         g_Theme.surface_elevated
     );
@@ -47,23 +47,23 @@ UIMenuDropdown::UIMenuDropdown(const std::vector<MenuItem>& items,
     }
 }
 
-void UIMenuDropdown::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
-                                   std::vector<SpatialRenderCommand>& out_commands) {
+void UIMenuDropdown::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+                                   std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible) return;
-    SpatialNode::collectRender(mesh_buf, out_commands);
+    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 // ---------------------------------------------------------------------------
 // UIMenuBar Implementation
 // ---------------------------------------------------------------------------
 UIMenuBar::UIMenuBar(float bar_width,
-                     std::shared_ptr<NovaSpatial::SpatialFont> font_ptr)
+                     std::shared_ptr<Nova::SpatialFont> font_ptr)
     : font_(font_ptr) {
     name = "UIMenuBar";
     size = glm::vec2(bar_width, g_Theme.menubar_height);
 
     // Bar Panel Background
-    bar_panel_ = std::make_shared<SpatialPanel>(
+    bar_panel_ = std::make_shared<Splash::SpatialPanel>(
         size,
         g_Theme.bg_dark
     );
@@ -168,10 +168,10 @@ void UIMenuBar::setTelemetryText(const std::string& text) {
     }
 }
 
-void UIMenuBar::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
-                              std::vector<SpatialRenderCommand>& out_commands) {
+void UIMenuBar::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+                              std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible) return;
-    SpatialNode::collectRender(mesh_buf, out_commands);
+    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 } // namespace Clouds::UI

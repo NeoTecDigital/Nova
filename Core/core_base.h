@@ -6,9 +6,9 @@
 #include "./components/lexicon.h"
 #include <functional>
 #include <vector>
-
+namespace Nova {
 /**
- * NovaCore - Base class for all Nova modes (Compute and Graphics)
+ * Core - Base class for all Nova modes (Compute and Graphics)
  *
  * Provides shared Vulkan resources:
  * - Instance, physical device, logical device
@@ -18,10 +18,10 @@
  * - Resource registry for cleanup
  *
  * Derived classes:
- * - NovaCompute: Compute-only mode (no surface/swapchain)
- * - NovaGraphics: Traditional rendering pipeline
+ * - Compute: Compute-only mode (no surface/swapchain)
+ * - Graphics: Traditional rendering pipeline
  */
-class NovaCore {
+class Core {
 protected:
     // Core Vulkan resources (shared by all modes)
     VkInstance instance = VK_NULL_HANDLE;
@@ -34,7 +34,7 @@ protected:
         VkQueue compute = VK_NULL_HANDLE;
         VkQueue transfer = VK_NULL_HANDLE;
         // Engaged only when the selected device exposes a graphics family; the
-        // same handle NovaGraphics submits its frames on (family, index 0).
+        // same handle Graphics submits its frames on (family, index 0).
         VkQueue graphics = VK_NULL_HANDLE;
         QueueFamilyIndices indices;
         std::vector<VkQueueFamilyProperties> families;
@@ -73,7 +73,7 @@ protected:
     VkCommandPool transfer_pool = VK_NULL_HANDLE;
 
     // Resource cleanup registry
-    NovaRAII::ResourceRegistry resource_registry;
+    Nova::RAII::ResourceRegistry resource_registry;
 
     // Window extent (may be unused in compute mode)
     VkExtent2D window_extent;
@@ -83,17 +83,17 @@ protected:
     std::vector<std::string> enabled_device_extensions;
 
     // Protected constructor (only derived classes can instantiate)
-    NovaCore(const std::string& debug_level);
+    Core(const std::string& debug_level);
 
     // Virtual destructor (required for polymorphism)
-    virtual ~NovaCore();
+    virtual ~Core();
 
     /**
      * Create the VkInstance from a caller-supplied extension list.
      *
-     * The list is DATA, not a mode flag: NovaCore has no window system and must
+     * The list is DATA, not a mode flag: Core has no window system and must
      * not acquire one. A surface-backed mode passes the WSI extensions its
-     * platform reports (see NovaSDL::vulkanInstanceExtensions in
+     * platform reports (see Nova::SDL::vulkanInstanceExtensions in
      * Core/nova_sdl.h); compute and offscreen modes pass an empty list. This is
      * what keeps libSDL2 out of every binary that never opens a window.
      *
@@ -108,7 +108,7 @@ protected:
      * DISCRETE > VIRTUAL > INTEGRATED > CPU, tie-broken by a DRM-node match
      * against request.drm_fd. Every candidate is reported at INFO.
      */
-    void createPhysicalDevice(const NovaDeviceRequest& request);
+    void createPhysicalDevice(const DeviceRequest& request);
     void createLogicalDevice(bool need_swapchain_extension);
     void createImmediateContext();
     void createSharedCommandPools();
@@ -126,10 +126,10 @@ protected:
     bool checkValidationLayerSupport();
     void getQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface, bool need_presentation);
     bool deviceProvisioned(VkPhysicalDevice device, VkSurfaceKHR surface, bool need_swapchain);
-    bool deviceProvisioned(VkPhysicalDevice device, const NovaDeviceRequest& request);
+    bool deviceProvisioned(VkPhysicalDevice device, const DeviceRequest& request);
 
     // Re-scan the winner, resolve its optional extensions, emit the D.3 report.
-    void finalizeDeviceSelection(const NovaDeviceRequest& request);
+    void finalizeDeviceSelection(const DeviceRequest& request);
     std::vector<std::string> resolveOptionalExtensions(VkPhysicalDevice device,
                                                        const std::vector<const char*>& wanted);
     /**
@@ -195,3 +195,5 @@ public:
     // True when `name` was resolved and enabled on the logical device.
     bool hasDeviceExtension(const char* name) const;
 };
+
+} // namespace Nova

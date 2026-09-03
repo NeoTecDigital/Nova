@@ -14,10 +14,10 @@ static void check_vk_result(VkResult err) {
     report(LOGGER::ERROR, "[ImGui Vulkan Error] VkResult = %d", err);
 }
 
-ImGuiEngineOverlay::ImGuiEngineOverlay(NovaGraphics* graphics,
+ImGuiEngineOverlay::ImGuiEngineOverlay(Nova::Graphics* graphics,
                                        SDL_Window* window,
-                                       NovaMath::EnginePhysicsConfig* physics_config,
-                                       std::shared_ptr<OatsBridge> oats_bridge,
+                                       Nova::Math::EnginePhysicsConfig* physics_config,
+                                       std::shared_ptr<Splash::OatsBridge> oats_bridge,
                                        std::shared_ptr<SpatialFilesystem> filesystem_3d)
     : graphics_(graphics), window_(window), physics_config_(physics_config),
       oats_bridge_(oats_bridge), filesystem_3d_(filesystem_3d) {
@@ -189,10 +189,10 @@ void ImGuiEngineOverlay::renderMainMenuBar() {
 
         if (ImGui::BeginMenu("Physics")) {
             if (physics_config_) {
-                bool laser = (physics_config_->accel_mode == NovaMath::AccelerationMode::LaserFocus);
+                bool laser = (physics_config_->accel_mode == Nova::Math::AccelerationMode::LaserFocus);
                 if (ImGui::MenuItem("LaserFocus Acceleration", nullptr, laser)) {
                     physics_config_->accel_mode = laser ?
-                        NovaMath::AccelerationMode::ClusteredDither : NovaMath::AccelerationMode::LaserFocus;
+                        Nova::Math::AccelerationMode::ClusteredDither : Nova::Math::AccelerationMode::LaserFocus;
                 }
                 if (ImGui::MenuItem("Temporal Sub-pixel Dithering", nullptr, physics_config_->dither_enabled)) {
                     physics_config_->dither_enabled = !physics_config_->dither_enabled;
@@ -262,7 +262,7 @@ void ImGuiEngineOverlay::renderMetricsWindow() {
             int mode_idx = static_cast<int>(physics_config_->accel_mode);
             const char* modes[] = { "LaserFocus (Pinpoint)", "ClusteredDither (Hierarchical)", "LazyUniform (Grid)" };
             if (ImGui::Combo("Acceleration Mode", &mode_idx, modes, IM_ARRAYSIZE(modes))) {
-                physics_config_->accel_mode = static_cast<NovaMath::AccelerationMode>(mode_idx);
+                physics_config_->accel_mode = static_cast<Nova::Math::AccelerationMode>(mode_idx);
             }
 
             ImGui::SliderFloat("Laser Precision", &physics_config_->laser_precision, 0.1f, 2.0f, "%.2f");

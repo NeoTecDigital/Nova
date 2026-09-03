@@ -4,12 +4,12 @@
 namespace Clouds::UI {
 
 UIDockBar::UIDockBar(float dock_width,
-                     std::shared_ptr<NovaSpatial::SpatialFont> font_ptr)
+                     std::shared_ptr<Nova::SpatialFont> font_ptr)
     : font_(font_ptr), total_width_(dock_width) {
     name = "UIDockBar";
     size = glm::vec2(dock_width, g_Theme.dockbar_height);
 
-    dock_panel_ = std::make_shared<SpatialPanel>(
+    dock_panel_ = std::make_shared<Splash::SpatialPanel>(
         size,
         g_Theme.bg_dark
     );
@@ -59,10 +59,10 @@ void UIDockBar::setStatusText(const std::string& status) {
     }
 }
 
-void UIDockBar::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
-                              std::vector<SpatialRenderCommand>& out_commands) {
+void UIDockBar::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+                              std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible) return;
-    SpatialNode::collectRender(mesh_buf, out_commands);
+    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 } // namespace Clouds::UI

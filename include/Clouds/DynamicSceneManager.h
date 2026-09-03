@@ -10,7 +10,7 @@
 #include <string>
 #include <functional>
 
-namespace Clouds {
+namespace Splash {
 
 struct Active3DNode {
     std::string id;
@@ -29,7 +29,7 @@ struct Active3DNode {
 class DynamicSceneManager {
 public:
     DynamicSceneManager(std::shared_ptr<SpatialNode> root_node,
-                        std::shared_ptr<NovaSpatial::SpatialFont> font,
+                        std::shared_ptr<Nova::SpatialFont> font,
                         std::shared_ptr<OatsBridge> oats_bridge);
     ~DynamicSceneManager() = default;
 
@@ -45,7 +45,7 @@ public:
 
 private:
     std::shared_ptr<SpatialNode> root_;
-    std::shared_ptr<NovaSpatial::SpatialFont> font_;
+    std::shared_ptr<Nova::SpatialFont> font_;
     std::shared_ptr<OatsBridge> oats_bridge_;
 
     std::shared_ptr<SpatialNode> dynamic_root_;
@@ -59,4 +59,4 @@ private:
     void destroyNode(const std::string& id);
 };
 
-} // namespace Clouds
+} // namespace Splash

@@ -1,7 +1,7 @@
 #include "include/Clouds/SpatialNode.h"
 #include <algorithm>
 
-namespace Clouds {
+namespace Splash {
 
 void SpatialNode::addChild(std::shared_ptr<SpatialNode> child) {
     if (!child) return;
@@ -38,7 +38,7 @@ void SpatialNode::removeChild(std::shared_ptr<SpatialNode> child) {
     children.erase(it, children.end());
 }
 
-NovaMath::QuatTransform SpatialNode::getWorldTransform() const {
+Nova::Math::QuatTransform SpatialNode::getWorldTransform() const {
     if (auto p = parent.lock()) {
         return p->getWorldTransform().combine(transform);
     }
@@ -53,11 +53,11 @@ void SpatialNode::onUpdate(float dt) {
     }
 }
 
-void SpatialNode::onRayEnter(const NovaMath::RayHit&) {
+void SpatialNode::onRayEnter(const Nova::Math::RayHit&) {
     is_hovered = true;
 }
 
-void SpatialNode::onRayMove(const NovaMath::RayHit&) {
+void SpatialNode::onRayMove(const Nova::Math::RayHit&) {
 }
 
 void SpatialNode::onRayLeave() {
@@ -65,7 +65,7 @@ void SpatialNode::onRayLeave() {
     is_pressed = false;
 }
 
-void SpatialNode::onRayButton(const NovaMath::RayHit&, uint32_t button, bool pressed) {
+void SpatialNode::onRayButton(const Nova::Math::RayHit&, uint32_t button, bool pressed) {
     if (button == 1) { // Left mouse button
         is_pressed = pressed;
         if (pressed) {
@@ -77,11 +77,11 @@ void SpatialNode::onRayButton(const NovaMath::RayHit&, uint32_t button, bool pre
 void SpatialNode::onKey(uint32_t, bool) {
 }
 
-bool SpatialNode::hitTest(const NovaMath::Ray3D& world_ray, NovaMath::RayHit& out_hit, std::shared_ptr<SpatialNode>& out_node) {
+bool SpatialNode::hitTest(const Nova::Math::Ray3D& world_ray, Nova::Math::RayHit& out_hit, std::shared_ptr<SpatialNode>& out_node) {
     if (!visible) return false;
 
     // Seeded at infinity, so the first real intersection always wins.
-    NovaMath::RayHit best;
+    Nova::Math::RayHit best;
     std::shared_ptr<SpatialNode> best_node;
 
     // Self first, and on equal terms with the children rather than after them:
@@ -89,8 +89,8 @@ bool SpatialNode::hitTest(const NovaMath::Ray3D& world_ray, NovaMath::RayHit& ou
     // the depths were. A non-interactable node still hosts its children; it
     // just has no surface of its own to be hit.
     if (interactable) {
-        NovaMath::RayHit self_hit;
-        if (NovaMath::intersectOrientedQuad(world_ray, getWorldTransform(), size, self_hit)) {
+        Nova::Math::RayHit self_hit;
+        if (Nova::Math::intersectOrientedQuad(world_ray, getWorldTransform(), size, self_hit)) {
             best = self_hit;
             best_node = shared_from_this();
         }
@@ -101,7 +101,7 @@ bool SpatialNode::hitTest(const NovaMath::Ray3D& world_ray, NovaMath::RayHit& ou
     for (const std::shared_ptr<SpatialNode>& child : children) {
         if (!child) continue;
 
-        NovaMath::RayHit child_hit;
+        Nova::Math::RayHit child_hit;
         std::shared_ptr<SpatialNode> child_node;
         if (!child->hitTest(world_ray, child_hit, child_node)) continue;
         if (child_hit.distance > best.distance) continue;
@@ -117,7 +117,7 @@ bool SpatialNode::hitTest(const NovaMath::Ray3D& world_ray, NovaMath::RayHit& ou
     return true;
 }
 
-void SpatialNode::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) {
+void SpatialNode::collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) {
     if (!visible) return;
 
     for (auto& child : children) {
@@ -127,4 +127,4 @@ void SpatialNode::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf, std::v
     }
 }
 
-} // namespace Clouds
+} // namespace Splash

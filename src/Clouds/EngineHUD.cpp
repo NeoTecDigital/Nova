@@ -5,9 +5,9 @@
 
 namespace Clouds {
 
-EngineHUD::EngineHUD(std::shared_ptr<SpatialNode> root_node,
-                     std::shared_ptr<NovaSpatial::SpatialFont> spatial_font,
-                     NovaMath::EnginePhysicsConfig* physics_config)
+EngineHUD::EngineHUD(std::shared_ptr<Splash::SpatialNode> root_node,
+                     std::shared_ptr<Nova::SpatialFont> spatial_font,
+                     Nova::Math::EnginePhysicsConfig* physics_config)
     : root_(root_node), font_(spatial_font), config_(physics_config) {
 }
 
@@ -17,7 +17,7 @@ void EngineHUD::initialize() {
     // -------------------------------------------------------------
     // 1. Bottom Telemetry & Control Pill Button
     // -------------------------------------------------------------
-    pill_panel_ = std::make_shared<SpatialPanel>(
+    pill_panel_ = std::make_shared<Splash::SpatialPanel>(
         glm::vec2(0.95f, 0.10f),
         glm::vec4(0.06f, 0.08f, 0.14f, 0.90f)
     );
@@ -26,7 +26,7 @@ void EngineHUD::initialize() {
     pill_panel_->border_color = glm::vec4(0.25f, 0.45f, 0.75f, 0.90f);
     pill_panel_->transform.position = glm::vec3(0.0f, -0.78f, 0.15f);
 
-    pill_button_ = std::make_shared<SpatialButton>(
+    pill_button_ = std::make_shared<Splash::SpatialButton>(
         "Config",
         glm::vec2(0.92f, 0.08f),
         font_,
@@ -39,7 +39,7 @@ void EngineHUD::initialize() {
     pill_button_->press_color = glm::vec4(0.12f, 0.20f, 0.40f, 1.0f);
     pill_button_->corner_radius = 0.035f;
 
-    pill_label_ = std::make_shared<SpatialLabel>(
+    pill_label_ = std::make_shared<Splash::SpatialLabel>(
         "⚡ 60 FPS | λ=1.0 | LaserFocus",
         font_,
         0.00095f,
@@ -54,7 +54,7 @@ void EngineHUD::initialize() {
     // -------------------------------------------------------------
     // 2. Interactive Physics & Monitoring Config Menu
     // -------------------------------------------------------------
-    menu_panel_ = std::make_shared<SpatialPanel>(
+    menu_panel_ = std::make_shared<Splash::SpatialPanel>(
         glm::vec2(1.20f, 0.95f),
         glm::vec4(0.05f, 0.07f, 0.12f, 0.95f)
     );
@@ -64,7 +64,7 @@ void EngineHUD::initialize() {
     menu_panel_->transform.position = glm::vec3(0.0f, 0.0f, 0.25f);
     menu_panel_->visible = false;
 
-    menu_title_ = std::make_shared<SpatialLabel>(
+    menu_title_ = std::make_shared<Splash::SpatialLabel>(
         ":: ENGINE PHYSICS & INPUT ACCELERATOR ::",
         font_,
         0.0012f,
@@ -73,7 +73,7 @@ void EngineHUD::initialize() {
     menu_title_->transform.position = glm::vec3(0.0f, 0.40f, 0.002f);
     menu_panel_->addChild(menu_title_);
 
-    telemetry_label_ = std::make_shared<SpatialLabel>(
+    telemetry_label_ = std::make_shared<Splash::SpatialLabel>(
         "Metrics: FPS=60.0 | Nodes=0 | Tests=0 | Dither=ON",
         font_,
         0.0009f,
@@ -83,7 +83,7 @@ void EngineHUD::initialize() {
     menu_panel_->addChild(telemetry_label_);
 
     // Non-linear Phase Coupling Lambda controls
-    lambda_label_ = std::make_shared<SpatialLabel>(
+    lambda_label_ = std::make_shared<Splash::SpatialLabel>(
         "Phase Coupling (λ): 1.00",
         font_,
         0.0010f,
@@ -92,7 +92,7 @@ void EngineHUD::initialize() {
     lambda_label_->transform.position = glm::vec3(-0.15f, 0.20f, 0.002f);
     menu_panel_->addChild(lambda_label_);
 
-    lambda_dec_btn_ = std::make_shared<SpatialButton>(
+    lambda_dec_btn_ = std::make_shared<Splash::SpatialButton>(
         " - λ ",
         glm::vec2(0.18f, 0.07f),
         font_,
@@ -104,7 +104,7 @@ void EngineHUD::initialize() {
     lambda_dec_btn_->transform.position = glm::vec3(0.22f, 0.20f, 0.005f);
     menu_panel_->addChild(lambda_dec_btn_);
 
-    lambda_inc_btn_ = std::make_shared<SpatialButton>(
+    lambda_inc_btn_ = std::make_shared<Splash::SpatialButton>(
         " + λ ",
         glm::vec2(0.18f, 0.07f),
         font_,
@@ -117,7 +117,7 @@ void EngineHUD::initialize() {
     menu_panel_->addChild(lambda_inc_btn_);
 
     // Phase Velocity Omega controls
-    omega_label_ = std::make_shared<SpatialLabel>(
+    omega_label_ = std::make_shared<Splash::SpatialLabel>(
         "Phase Velocity (ω): 2.00 rad/s",
         font_,
         0.0010f,
@@ -126,7 +126,7 @@ void EngineHUD::initialize() {
     omega_label_->transform.position = glm::vec3(-0.15f, 0.08f, 0.002f);
     menu_panel_->addChild(omega_label_);
 
-    omega_dec_btn_ = std::make_shared<SpatialButton>(
+    omega_dec_btn_ = std::make_shared<Splash::SpatialButton>(
         " - ω ",
         glm::vec2(0.18f, 0.07f),
         font_,
@@ -138,7 +138,7 @@ void EngineHUD::initialize() {
     omega_dec_btn_->transform.position = glm::vec3(0.22f, 0.08f, 0.005f);
     menu_panel_->addChild(omega_dec_btn_);
 
-    omega_inc_btn_ = std::make_shared<SpatialButton>(
+    omega_inc_btn_ = std::make_shared<Splash::SpatialButton>(
         " + ω ",
         glm::vec2(0.18f, 0.07f),
         font_,
@@ -151,13 +151,13 @@ void EngineHUD::initialize() {
     menu_panel_->addChild(omega_inc_btn_);
 
     // Acceleration Mode Selector
-    mode_toggle_btn_ = std::make_shared<SpatialButton>(
+    mode_toggle_btn_ = std::make_shared<Splash::SpatialButton>(
         "Mode: LaserFocus",
         glm::vec2(0.50f, 0.08f),
         font_,
         [this]() {
             int current = static_cast<int>(config_->accel_mode);
-            config_->accel_mode = static_cast<NovaMath::AccelerationMode>((current + 1) % 3);
+            config_->accel_mode = static_cast<Nova::Math::AccelerationMode>((current + 1) % 3);
             onPhysicsChanged();
         }
     );
@@ -165,7 +165,7 @@ void EngineHUD::initialize() {
     menu_panel_->addChild(mode_toggle_btn_);
 
     // Sub-pixel Dither Toggle
-    dither_toggle_btn_ = std::make_shared<SpatialButton>(
+    dither_toggle_btn_ = std::make_shared<Splash::SpatialButton>(
         "Dither: ON",
         glm::vec2(0.40f, 0.08f),
         font_,
@@ -178,7 +178,7 @@ void EngineHUD::initialize() {
     menu_panel_->addChild(dither_toggle_btn_);
 
     // Reset Defaults
-    reset_btn_ = std::make_shared<SpatialButton>(
+    reset_btn_ = std::make_shared<Splash::SpatialButton>(
         "Reset Defaults",
         glm::vec2(0.42f, 0.08f),
         font_,

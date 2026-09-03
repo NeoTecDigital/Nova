@@ -10,7 +10,7 @@
 #include <glm/gtx/transform.hpp>
 #include <cmath>
 
-namespace NovaMath {
+namespace Nova::Math {
 
 /**
  * Dual Quaternion representing rigid 3D spatial transformation (SE(3))
@@ -142,4 +142,4 @@ struct QuatTransform {
     }
 };
 
-} // namespace NovaMath
+} // namespace Nova::Math

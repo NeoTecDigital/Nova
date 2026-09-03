@@ -1,9 +1,9 @@
 #pragma once
 #include "./core_base.h"
 #include <mutex>
-
+namespace Nova {
 /**
- * NovaCompute - Compute-only mode
+ * Compute - Compute-only mode
  *
  * Lightweight Vulkan context for GPU compute operations:
  * - No surface/swapchain
@@ -15,7 +15,7 @@
  * - Triplanar projections
  * - General GPU compute tasks
  */
-class NovaCompute : public NovaCore {
+class Compute : public Core {
 private:
     // Serializes all command buffer access — held from submit through wait.
     // submitCompute() acquires, waitCompute() releases.
@@ -32,12 +32,12 @@ public:
      * Constructor - Initialize compute-only mode
      * @param debug_level Logging level (INFO, DEBUG, VERBOSE, etc.)
      */
-    NovaCompute(const std::string& debug_level);
+    Compute(const std::string& debug_level);
 
     /**
      * Destructor - Cleanup compute resources
      */
-    ~NovaCompute() override;
+    ~Compute() override;
 
     /**
      * Execute compute commands and wait for completion
@@ -71,3 +71,5 @@ public:
      */
     VkCommandBuffer getComputeCommandBuffer() const { return compute_cmd; }
 };
+
+} // namespace Nova

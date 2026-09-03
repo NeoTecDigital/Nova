@@ -7,7 +7,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace NovaSpatial {
+namespace Nova {
 
 MeshData SpatialMeshGenerator::createPlanarQuad(const glm::vec2& size,
                                                 const glm::vec4& color,
@@ -23,10 +23,10 @@ MeshData SpatialMeshGenerator::createPlanarQuad(const glm::vec2& size,
 
     // Top-left, Top-right, Bottom-right, Bottom-left
     mesh.vertices = {
-        { NovaMath::Hyper4(-half_w,  half_h, 0.0f, 1.0f), NovaMath::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(0.0f, 0.0f), params },
-        { NovaMath::Hyper4( half_w,  half_h, 0.0f, 1.0f), NovaMath::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(1.0f, 0.0f), params },
-        { NovaMath::Hyper4( half_w, -half_h, 0.0f, 1.0f), NovaMath::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(1.0f, 1.0f), params },
-        { NovaMath::Hyper4(-half_w, -half_h, 0.0f, 1.0f), NovaMath::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(0.0f, 1.0f), params },
+        { Nova::Math::Hyper4(-half_w,  half_h, 0.0f, 1.0f), Nova::Math::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(0.0f, 0.0f), params },
+        { Nova::Math::Hyper4( half_w,  half_h, 0.0f, 1.0f), Nova::Math::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(1.0f, 0.0f), params },
+        { Nova::Math::Hyper4( half_w, -half_h, 0.0f, 1.0f), Nova::Math::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(1.0f, 1.0f), params },
+        { Nova::Math::Hyper4(-half_w, -half_h, 0.0f, 1.0f), Nova::Math::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(0.0f, 1.0f), params },
     };
 
     mesh.indices = {
@@ -92,9 +92,9 @@ MeshData SpatialMeshGenerator::createCurvedArc(const glm::vec2& size,
         glm::vec3 normal(-std::sin(theta), 0.0f, std::cos(theta));
 
         // Top vertex (v=0)
-        mesh.vertices.push_back({ NovaMath::Hyper4(x,  half_h, z, 1.0f), NovaMath::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(u, 0.0f), params });
+        mesh.vertices.push_back({ Nova::Math::Hyper4(x,  half_h, z, 1.0f), Nova::Math::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(u, 0.0f), params });
         // Bottom vertex (v=1)
-        mesh.vertices.push_back({ NovaMath::Hyper4(x, -half_h, z, 1.0f), NovaMath::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(u, 1.0f), params });
+        mesh.vertices.push_back({ Nova::Math::Hyper4(x, -half_h, z, 1.0f), Nova::Math::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(u, 1.0f), params });
     }
 
     appendQuadStripIndices(mesh, segments);
@@ -125,16 +125,16 @@ MeshData SpatialMeshGenerator::createReticle(const glm::vec4& circle_color,
         glm::vec3 pos_out(r_out * cos_t, r_out * sin_t, 0.0f);
 
         mesh.vertices.push_back({
-            NovaMath::Hyper4(pos_in.x, pos_in.y, pos_in.z, 1.0f),
-            NovaMath::Hyper4(circle_color.r, circle_color.g, circle_color.b, circle_color.a),
+            Nova::Math::Hyper4(pos_in.x, pos_in.y, pos_in.z, 1.0f),
+            Nova::Math::Hyper4(circle_color.r, circle_color.g, circle_color.b, circle_color.a),
             normal,
             glm::vec2(0.0f),
             circle_params
         });
 
         mesh.vertices.push_back({
-            NovaMath::Hyper4(pos_out.x, pos_out.y, pos_out.z, 1.0f),
-            NovaMath::Hyper4(circle_color.r, circle_color.g, circle_color.b, circle_color.a),
+            Nova::Math::Hyper4(pos_out.x, pos_out.y, pos_out.z, 1.0f),
+            Nova::Math::Hyper4(circle_color.r, circle_color.g, circle_color.b, circle_color.a),
             normal,
             glm::vec2(1.0f),
             circle_params
@@ -162,10 +162,10 @@ MeshData SpatialMeshGenerator::createReticle(const glm::vec4& circle_color,
     uint32_t h_start = static_cast<uint32_t>(mesh.vertices.size());
     glm::vec4 ch_params(0.0f, 0.0f, 0.0f, 0.0f);
 
-    mesh.vertices.push_back({ NovaMath::Hyper4(-hx,  hy, 0.001f, 1.0f), NovaMath::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(0.0f), ch_params });
-    mesh.vertices.push_back({ NovaMath::Hyper4( hx,  hy, 0.001f, 1.0f), NovaMath::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(1.0f), ch_params });
-    mesh.vertices.push_back({ NovaMath::Hyper4( hx, -hy, 0.001f, 1.0f), NovaMath::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(1.0f), ch_params });
-    mesh.vertices.push_back({ NovaMath::Hyper4(-hx, -hy, 0.001f, 1.0f), NovaMath::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(0.0f), ch_params });
+    mesh.vertices.push_back({ Nova::Math::Hyper4(-hx,  hy, 0.001f, 1.0f), Nova::Math::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(0.0f), ch_params });
+    mesh.vertices.push_back({ Nova::Math::Hyper4( hx,  hy, 0.001f, 1.0f), Nova::Math::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(1.0f), ch_params });
+    mesh.vertices.push_back({ Nova::Math::Hyper4( hx, -hy, 0.001f, 1.0f), Nova::Math::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(1.0f), ch_params });
+    mesh.vertices.push_back({ Nova::Math::Hyper4(-hx, -hy, 0.001f, 1.0f), Nova::Math::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(0.0f), ch_params });
 
     mesh.indices.push_back(h_start + 0);
     mesh.indices.push_back(h_start + 1);
@@ -179,10 +179,10 @@ MeshData SpatialMeshGenerator::createReticle(const glm::vec4& circle_color,
     float vy = crosshair_length * 0.5f;
     uint32_t v_start = static_cast<uint32_t>(mesh.vertices.size());
 
-    mesh.vertices.push_back({ NovaMath::Hyper4(-vx,  vy, 0.001f, 1.0f), NovaMath::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(0.0f), ch_params });
-    mesh.vertices.push_back({ NovaMath::Hyper4( vx,  vy, 0.001f, 1.0f), NovaMath::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(1.0f), ch_params });
-    mesh.vertices.push_back({ NovaMath::Hyper4( vx, -vy, 0.001f, 1.0f), NovaMath::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(1.0f), ch_params });
-    mesh.vertices.push_back({ NovaMath::Hyper4(-vx, -vy, 0.001f, 1.0f), NovaMath::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(0.0f), ch_params });
+    mesh.vertices.push_back({ Nova::Math::Hyper4(-vx,  vy, 0.001f, 1.0f), Nova::Math::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(0.0f), ch_params });
+    mesh.vertices.push_back({ Nova::Math::Hyper4( vx,  vy, 0.001f, 1.0f), Nova::Math::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(1.0f), ch_params });
+    mesh.vertices.push_back({ Nova::Math::Hyper4( vx, -vy, 0.001f, 1.0f), Nova::Math::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(1.0f), ch_params });
+    mesh.vertices.push_back({ Nova::Math::Hyper4(-vx, -vy, 0.001f, 1.0f), Nova::Math::Hyper4(crosshair_color.r, crosshair_color.g, crosshair_color.b, crosshair_color.a), normal, glm::vec2(0.0f), ch_params });
 
     mesh.indices.push_back(v_start + 0);
     mesh.indices.push_back(v_start + 1);
@@ -209,7 +209,7 @@ size_t grownCapacity(size_t demand) {
 
 } // namespace
 
-SpatialMeshBuffer::SpatialMeshBuffer(NovaCore* core, size_t initial_vertex_count, size_t initial_index_count)
+SpatialMeshBuffer::SpatialMeshBuffer(Core* core, size_t initial_vertex_count, size_t initial_index_count)
     : core_(core) {
     if (!core_) {
         throw std::runtime_error("SpatialMeshBuffer requires a valid NovaCore");
@@ -222,7 +222,7 @@ SpatialMeshBuffer::SpatialMeshBuffer(NovaCore* core, size_t initial_vertex_count
     // Resolved once: the graphics core is the only honest source for the index
     // of the frame slot currently being recorded. A non-graphics core keeps
     // graphics_ null and must drive slots through beginFrame(frame_slot).
-    graphics_ = dynamic_cast<NovaGraphics*>(core_);
+    graphics_ = dynamic_cast<Graphics*>(core_);
 
     target_vertices_ = initial_vertex_count;
     target_indices_ = initial_index_count;
@@ -476,4 +476,4 @@ void SpatialMeshBuffer::draw(VkCommandBuffer cmd, uint32_t first_index, uint32_t
     vkCmdDrawIndexed(cmd, index_count, 1, first_index, 0, 0);
 }
 
-} // namespace NovaSpatial
+} // namespace Nova

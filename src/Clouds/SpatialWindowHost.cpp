@@ -11,18 +11,18 @@
 #include <drm_fourcc.h>
 #include <algorithm>
 
-namespace Clouds {
+namespace Vazio {
 
 namespace {
 
 // wl_shm's two mandatory formats. Both are little-endian 32-bit words with the
 // alpha/ignored byte highest, so their in-memory byte order is B,G,R,A - which
-// is what NovaSpatial::PixelLayout names. Anything else is refused rather than
+// is what Nova::PixelLayout names. Anything else is refused rather than
 // silently drawn with swapped channels.
-bool drmFormatToPixelLayout(uint32_t drm_format, NovaSpatial::PixelLayout& out) {
+bool drmFormatToPixelLayout(uint32_t drm_format, Nova::PixelLayout& out) {
     switch (drm_format) {
-        case DRM_FORMAT_ARGB8888: out = NovaSpatial::PixelLayout::BGRA8; return true;
-        case DRM_FORMAT_XRGB8888: out = NovaSpatial::PixelLayout::BGRX8; return true;
+        case DRM_FORMAT_ARGB8888: out = Nova::PixelLayout::BGRA8; return true;
+        case DRM_FORMAT_XRGB8888: out = Nova::PixelLayout::BGRX8; return true;
         default: return false;
     }
 }
@@ -270,7 +270,7 @@ void SpatialCompositor::bindWindowListeners(SpatialXdgWindow& window,
 }
 
 void SpatialCompositor::attachWindowToPortal(SpatialXdgWindow& win) {
-    const std::shared_ptr<SpatialNode>& root = portalRoot();
+    const std::shared_ptr<Splash::SpatialNode>& root = portalRoot();
     if (!root || !win.frame_panel) return;
 
     root->addChild(win.frame_panel);
@@ -279,7 +279,7 @@ void SpatialCompositor::attachWindowToPortal(SpatialXdgWindow& win) {
 }
 
 void SpatialCompositor::detachWindowFromPortal(SpatialXdgWindow& win) {
-    const std::shared_ptr<SpatialNode>& root = portalRoot();
+    const std::shared_ptr<Splash::SpatialNode>& root = portalRoot();
     if (!root || !win.frame_panel) return;
 
     root->removeChild(win.frame_panel);
@@ -287,7 +287,7 @@ void SpatialCompositor::detachWindowFromPortal(SpatialXdgWindow& win) {
 }
 
 void SpatialCompositor::buildWindowNodes(SpatialXdgWindow& win, struct wlr_xdg_toplevel* toplevel) {
-    win.frame_panel = std::make_shared<SpatialPanel>(
+    win.frame_panel = std::make_shared<Splash::SpatialPanel>(
         glm::vec2(1.26f, 0.92f),
         glm::vec4(0.08f, 0.10f, 0.16f, 0.92f)
     );
@@ -306,14 +306,14 @@ void SpatialCompositor::buildWindowNodes(SpatialXdgWindow& win, struct wlr_xdg_t
     float offset_z = -0.08f * static_cast<float>(windows_.size());
     win.frame_panel->transform.position = glm::vec3(offset_x, offset_y, offset_z);
 
-    std::shared_ptr<NovaSpatial::TextureHandle> fallback_texture;
+    std::shared_ptr<Nova::TextureHandle> fallback_texture;
     if (texture_bridge_) {
         fallback_texture = texture_bridge_->getFallbackTexture();
     } else {
         report(LOGGER::ERROR, "SpatialCompositor - Texture bridge unavailable; surface hosted without fallback texture");
     }
 
-    win.surface_host = std::make_shared<SpatialSurfaceHost>(glm::vec2(1.20f, 0.80f), fallback_texture);
+    win.surface_host = std::make_shared<Splash::SpatialSurfaceHost>(glm::vec2(1.20f, 0.80f), fallback_texture);
     win.surface_host->transform.position = glm::vec3(0.0f, -0.04f, 0.002f);
     // Stated rather than inherited: this is the node the frame's capture must
     // not take, and the default that makes it so is one edit away from anyone.
@@ -325,7 +325,7 @@ void SpatialCompositor::buildWindowNodes(SpatialXdgWindow& win, struct wlr_xdg_t
         return;
     }
 
-    win.title_label = std::make_shared<SpatialLabel>(resolveWindowTitle(toplevel), scene_->font,
+    win.title_label = std::make_shared<Splash::SpatialLabel>(resolveWindowTitle(toplevel), scene_->font,
                                                      0.0011f, glm::vec4(0.85f, 0.92f, 1.0f, 1.0f));
     win.title_label->transform.position = glm::vec3(0.0f, 0.42f, 0.003f);
     win.title_label->claims_pointer_input = false;   // text is not a grab handle
@@ -340,8 +340,8 @@ void SpatialCompositor::importSurfaceBuffer(SpatialXdgWindow& win) {
 }
 
 void SpatialCompositor::importSurfaceContent(struct wlr_surface* surface,
-                                             const std::shared_ptr<SpatialSurfaceHost>& host,
-                                             std::shared_ptr<NovaSpatial::TextureHandle>& texture,
+                                             const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
+                                             std::shared_ptr<Nova::TextureHandle>& texture,
                                              uint32_t& unsupported_format,
                                              WindowHandle handle) {
     if (!texture_bridge_ || !surface || !host) return;
@@ -360,7 +360,7 @@ void SpatialCompositor::importSurfaceContent(struct wlr_surface* surface,
 }
 
 bool SpatialCompositor::uploadClientPixels(struct wlr_buffer* source,
-                                           std::shared_ptr<NovaSpatial::TextureHandle>& texture,
+                                           std::shared_ptr<Nova::TextureHandle>& texture,
                                            uint32_t& unsupported_format,
                                            WindowHandle handle) {
     void* data = nullptr;
@@ -374,7 +374,7 @@ bool SpatialCompositor::uploadClientPixels(struct wlr_buffer* source,
         return false;
     }
 
-    NovaSpatial::PixelLayout layout = NovaSpatial::PixelLayout::BGRA8;
+    Nova::PixelLayout layout = Nova::PixelLayout::BGRA8;
     bool supported = drmFormatToPixelLayout(drm_format, layout);
     bool uploaded = false;
 
@@ -481,4 +481,4 @@ void SpatialCompositor::releaseWindows() {
     drainDestroyedWindows();
 }
 
-} // namespace Clouds
+} // namespace Vazio

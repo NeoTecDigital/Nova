@@ -1,6 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
-
+namespace Nova {
 // Used to switch between different camera perspectives
 enum CameraPerspective {
     FIRST_PERSON,
@@ -19,3 +19,5 @@ class Perspective {
     private:
         CameraPerspective perspective;
 };
+
+} // namespace Nova

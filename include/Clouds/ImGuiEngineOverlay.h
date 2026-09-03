@@ -14,10 +14,10 @@ namespace Clouds {
 
 class ImGuiEngineOverlay {
 public:
-    ImGuiEngineOverlay(NovaGraphics* graphics,
+    ImGuiEngineOverlay(Nova::Graphics* graphics,
                        SDL_Window* window,
-                       NovaMath::EnginePhysicsConfig* physics_config,
-                       std::shared_ptr<OatsBridge> oats_bridge,
+                       Nova::Math::EnginePhysicsConfig* physics_config,
+                       std::shared_ptr<Splash::OatsBridge> oats_bridge,
                        std::shared_ptr<SpatialFilesystem> filesystem_3d);
     ~ImGuiEngineOverlay();
 
@@ -34,10 +34,10 @@ public:
     void toggleHypergraphWindow() { show_hypergraph_window_ = !show_hypergraph_window_; }
 
 private:
-    NovaGraphics* graphics_ = nullptr;
+    Nova::Graphics* graphics_ = nullptr;
     SDL_Window* window_ = nullptr;
-    NovaMath::EnginePhysicsConfig* physics_config_ = nullptr;
-    std::shared_ptr<OatsBridge> oats_bridge_;
+    Nova::Math::EnginePhysicsConfig* physics_config_ = nullptr;
+    std::shared_ptr<Splash::OatsBridge> oats_bridge_;
     std::shared_ptr<SpatialFilesystem> filesystem_3d_;
 
     VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;

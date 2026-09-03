@@ -2,13 +2,13 @@
 //
 // p1-class protocol and seat harness, now in-repo and under CTest.
 //
-// Server half: a real Clouds::SpatialCompositor on the wlroots headless
+// Server half: a real Vazio::SpatialCompositor on the wlroots headless
 // backend, driven by this process's own event loop. Client half: a forked
 // process running the raw wayland-client script in protocol_client_*.cpp.
 // Neither half mocks the other - the only thing between them is a Wayland
 // socket in a private XDG_RUNTIME_DIR that this harness creates and removes.
 //
-// No Vulkan: the compositor is constructed with a null NovaCore and a null
+// No Vulkan: the compositor is constructed with a null Core and a null
 // TextureBridge, which is the configuration in which it hosts surfaces, routes
 // the seat and answers the protocol without ever touching a GPU. The one thing
 // that configuration cannot assert is the pixel-level upload into a texture -
@@ -42,8 +42,8 @@ constexpr uint32_t kBtnLeft = 0x110;
 constexpr int kScanStep = 8;
 
 struct Server {
-    std::shared_ptr<Clouds::SpatialScene> scene;
-    std::unique_ptr<Clouds::SpatialCompositor> compositor;
+    std::shared_ptr<Splash::SpatialScene> scene;
+    std::unique_ptr<Vazio::SpatialCompositor> compositor;
     std::string socket_name;
 
     // Frame callbacks are the compositor's obligation once per presented frame.
@@ -56,10 +56,10 @@ struct Server {
     }
 };
 
-std::shared_ptr<Clouds::SpatialSurfaceHost> findSurfaceHost(
-    const std::shared_ptr<Clouds::SpatialNode>& node) {
+std::shared_ptr<Splash::SpatialSurfaceHost> findSurfaceHost(
+    const std::shared_ptr<Splash::SpatialNode>& node) {
     if (!node) return nullptr;
-    if (auto host = std::dynamic_pointer_cast<Clouds::SpatialSurfaceHost>(node)) return host;
+    if (auto host = std::dynamic_pointer_cast<Splash::SpatialSurfaceHost>(node)) return host;
     for (const auto& child : node->children) {
         if (auto found = findSurfaceHost(child)) return found;
     }
@@ -74,7 +74,7 @@ std::shared_ptr<Clouds::SpatialSurfaceHost> findSurfaceHost(
  * which this test is about. Hard-coding a pixel would make an unrelated layout
  * change look like a seat regression.
  */
-bool findPixelHitting(Server& server, const std::shared_ptr<Clouds::SpatialNode>& target,
+bool findPixelHitting(Server& server, const std::shared_ptr<Splash::SpatialNode>& target,
                       double& out_x, double& out_y) {
     const struct wlr_box& box = server.compositor->outputBox();
     for (int y = kScanStep; y < box.height; y += kScanStep) {
@@ -159,7 +159,7 @@ struct Script {
     Server& server;
     PhaseChannel& channel;
     CheckLog& log;
-    std::shared_ptr<Clouds::SpatialSurfaceHost> host;
+    std::shared_ptr<Splash::SpatialSurfaceHost> host;
 };
 
 bool serverToplevelPhase(Script& s, size_t portal_children_before) {
@@ -298,7 +298,7 @@ bool serverChildSurfacePhases(Script& s) {
 }
 
 int runServer(Server& server, PhaseChannel& channel, CheckLog& log) {
-    log.check(server.compositor->stage() == Clouds::SessionStage::Open,
+    log.check(server.compositor->stage() == Vazio::SessionStage::Open,
               "server: session reached SessionStage::Open");
     log.check(server.compositor->outputCount() == 1,
               "server: exactly one output (%zu) - the two-output regression stays fixed",
@@ -327,12 +327,12 @@ namespace {
 // compositor with no GPU, on the headless backend, opened on its own socket.
 bool buildServer(Server& server, CheckLog& log) {
     server.socket_name = "wayland-vzt-" + std::to_string(getpid());
-    server.scene = std::make_shared<Clouds::SpatialScene>(nullptr, nullptr);
+    server.scene = std::make_shared<Splash::SpatialScene>(nullptr, nullptr);
 
-    const Clouds::SpatialCompositorConfig config = {
+    const Vazio::SpatialCompositorConfig config = {
         .headless = true, .virtual_width = kOutputWidth, .virtual_height = kOutputHeight
     };
-    server.compositor = std::make_unique<Clouds::SpatialCompositor>(
+    server.compositor = std::make_unique<Vazio::SpatialCompositor>(
         nullptr, nullptr, server.scene, server.scene->root, config);
 
     return log.check(server.compositor->startServer(server.socket_name),
@@ -354,7 +354,7 @@ void tearDownServer(Server& server, CheckLog& log) {
     // calling it twice must be a no-op, not a double free.
     server.compositor->stop();
     server.compositor->stop();
-    log.check(server.compositor->stage() == Clouds::SessionStage::Down,
+    log.check(server.compositor->stage() == Vazio::SessionStage::Down,
               "server: stop() is idempotent and leaves the session Down");
 
     server.compositor.reset();

@@ -17,19 +17,19 @@ struct DockItem {
     std::function<void()> on_click;
 };
 
-class UIDockBar : public SpatialNode {
+class UIDockBar : public Splash::SpatialNode {
 public:
     UIDockBar(float dock_width,
-              std::shared_ptr<NovaSpatial::SpatialFont> font_ptr);
+              std::shared_ptr<Nova::SpatialFont> font_ptr);
 
     void addItem(const std::string& label, std::function<void()> click_handler);
     void setStatusText(const std::string& status);
 
-    void collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) override;
+    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
-    std::shared_ptr<NovaSpatial::SpatialFont> font_;
-    std::shared_ptr<SpatialPanel> dock_panel_;
+    std::shared_ptr<Nova::SpatialFont> font_;
+    std::shared_ptr<Splash::SpatialPanel> dock_panel_;
     std::shared_ptr<UILabel> status_label_;
     std::vector<std::shared_ptr<UIButton>> buttons_;
 

@@ -13,7 +13,7 @@
 //   DmabufImport   - the acquired wlr_buffer is a DMA-BUF, Nova imports it as a
 //                    VkImage and renders straight into scanout storage. Zero
 //                    copy. Requires the queue-family-foreign release, which
-//                    NovaImportedImage::asRenderTarget sets: a DCC-compressed
+//                    ImportedImage::asRenderTarget sets: a DCC-compressed
 //                    radv image read back without it comes out wrong, measured.
 //   PixmanSidecar  - the buffer cannot be imported, so this loop runs its own
 //                    pixman renderer + allocator + mappable shm swapchain
@@ -49,7 +49,7 @@ extern "C" {
 #include <memory>
 #include <vector>
 
-namespace Clouds {
+namespace Vazio {
 
 class SpatialCompositor;
 
@@ -59,7 +59,7 @@ class SpatialCompositor;
  * A single-plane 32-bit BGRA-order buffer: what wl_shm mandates, and what
  * wlroots' allocators negotiate for a primary swapchain on this hardware.
  */
-constexpr uint32_t kPresentFallbackDrmFormat = NOVA_DRM_FORMAT_XRGB8888;
+constexpr uint32_t kPresentFallbackDrmFormat = Nova::NOVA_DRM_FORMAT_XRGB8888;
 
 enum class PresentPath {
     Undecided,
@@ -77,7 +77,7 @@ public:
      */
     using SceneRenderer = std::function<void(VkCommandBuffer cmd, const VkExtent2D& extent)>;
 
-    SpatialPresentLoop(NovaGraphics* graphics, SpatialCompositor* compositor);
+    SpatialPresentLoop(Nova::Graphics* graphics, SpatialCompositor* compositor);
     ~SpatialPresentLoop();
 
     SpatialPresentLoop(const SpatialPresentLoop&) = delete;
@@ -137,10 +137,10 @@ public:
         // holder is destroyed; see electFrameCallbackDriver().
         bool drives_frame_callbacks = false;
 
-        WaylandListener<Output> frame_listener;
-        WaylandListener<Output> present_listener;
-        WaylandListener<Output> commit_listener;
-        WaylandListener<Output> destroy_listener;
+        Splash::WaylandListener<Output> frame_listener;
+        Splash::WaylandListener<Output> present_listener;
+        Splash::WaylandListener<Output> commit_listener;
+        Splash::WaylandListener<Output> destroy_listener;
 
         bool live() const { return output != nullptr; }
 
@@ -164,8 +164,8 @@ private:
     struct ImportedBuffer {
         SpatialPresentLoop* loop = nullptr;
         struct wlr_buffer* buffer = nullptr;
-        NovaImportedImage image;
-        WaylandListener<ImportedBuffer> destroy_listener;
+        Nova::ImportedImage image;
+        Splash::WaylandListener<ImportedBuffer> destroy_listener;
 
         void onDestroy(void* data);
     };
@@ -176,9 +176,9 @@ private:
         VkImage image = VK_NULL_HANDLE;
         VmaAllocation allocation = VK_NULL_HANDLE;
         VkImageView view = VK_NULL_HANDLE;
-        Buffer_T readback;
+        Nova::Buffer_T readback;
 
-        // NovaCore::createEphemeralBuffer does not set VMA's MAPPED bit
+        // Core::createEphemeralBuffer does not set VMA's MAPPED bit
         // (core_base.cpp:399), so the mapping is this loop's to make and to
         // drop - once, not per frame.
         void* readback_mapped = nullptr;
@@ -210,7 +210,7 @@ private:
     void noteOutputCommit(Output& bound, const struct wlr_output_state& state);
 
     // Nova's VkImage for `buffer`, imported on first sight and cached after.
-    const NovaImportedImage* importedImageFor(struct wlr_buffer* buffer);
+    const Nova::ImportedImage* importedImageFor(struct wlr_buffer* buffer);
     void releaseImport(ImportedBuffer* entry);
 
     bool presentImported(Output& bound, struct wlr_buffer* buffer);
@@ -229,7 +229,7 @@ private:
     // Acquire, render, set_buffer, commit, unlock. One frame, one output.
     void presentFrame(Output& bound);
 
-    NovaGraphics* graphics_ = nullptr;
+    Nova::Graphics* graphics_ = nullptr;
     SpatialCompositor* compositor_ = nullptr;
     SceneRenderer scene_renderer_;
 
@@ -256,4 +256,4 @@ private:
     uint64_t failures_ = 0;
 };
 
-} // namespace Clouds
+} // namespace Vazio

@@ -4,11 +4,11 @@
 #include "./components/lexicon.h"
 #include "./components/resource_registry.h"
 #include <span>
-
-// DEPRECATED: This is the old monolithic NovaCore class
-// Use NovaCompute or NovaGraphics instead
-// Renamed to NovaCoreLegacy to avoid conflicts with new architecture
-class NovaCoreLegacy {
+namespace Nova {
+// DEPRECATED: This is the old monolithic Core class
+// Use Compute or Graphics instead
+// Renamed to CoreLegacy to avoid conflicts with new architecture
+class CoreLegacy {
     public:
         VkInstance instance;
         VkPhysicalDevice physical_device;
@@ -22,10 +22,10 @@ class NovaCoreLegacy {
         bool compute_only = false;  // Track if running in compute-only mode
 
         // Resource registry for proper cleanup injection
-        NovaRAII::ResourceRegistry resource_registry;
+        Nova::RAII::ResourceRegistry resource_registry;
 
-        NovaCoreLegacy(VkExtent2D, std::string&, bool compute_only = false);
-        ~NovaCoreLegacy();
+        CoreLegacy(VkExtent2D, std::string&, bool compute_only = false);
+        ~CoreLegacy();
 
         void log();
 
@@ -67,8 +67,8 @@ class NovaCoreLegacy {
         VkRenderPass render_pass;
         QueuePresentContext present;
         DescriptorContext descriptor;
-        Pipeline *graphics_pipeline;
-        Pipeline *compute_pipeline;
+        Builder *graphics_pipeline;
+        Builder *compute_pipeline;
         BufferContext vertex;
         BufferContext index;
         std::vector<BufferContext> uniform;
@@ -100,7 +100,7 @@ class NovaCoreLegacy {
         VkRenderPassBeginInfo getRenderPassInfo(size_t);
         VkAttachmentDescription colorAttachment();
 
-        void constructPipeline(Pipeline*);
+        void constructPipeline(Builder*);
 
         VkCommandBufferBeginInfo createBeginInfo();
         VkCommandBufferAllocateInfo createCommandBuffersInfo(VkCommandPool&, char*);
@@ -125,6 +125,8 @@ class NovaCoreLegacy {
         void destroyVertexContext();
         void destroyIndexContext();
         void destroyUniformContext();
-        void destroyPipeline(Pipeline*);
+        void destroyPipeline(Builder*);
 };
 
+
+} // namespace Nova

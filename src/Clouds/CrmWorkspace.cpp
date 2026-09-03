@@ -6,16 +6,16 @@
 
 namespace Clouds {
 
-CrmWorkspace::CrmWorkspace(std::shared_ptr<SpatialNode> root_node,
-                           std::shared_ptr<NovaSpatial::SpatialFont> font,
-                           std::shared_ptr<OatsBridge> oats_bridge)
+CrmWorkspace::CrmWorkspace(std::shared_ptr<Splash::SpatialNode> root_node,
+                           std::shared_ptr<Nova::SpatialFont> font,
+                           std::shared_ptr<Splash::OatsBridge> oats_bridge)
     : root_(root_node), font_(font), oats_bridge_(oats_bridge) {
 }
 
 void CrmWorkspace::initialize() {
     if (!root_ || !font_ || !oats_bridge_) return;
 
-    main_container_ = std::make_shared<SpatialPanel>(
+    main_container_ = std::make_shared<Splash::SpatialPanel>(
         glm::vec2(2.8f, 0.55f),
         glm::vec4(0.04f, 0.06f, 0.10f, 0.75f)
     );
@@ -24,7 +24,7 @@ void CrmWorkspace::initialize() {
     main_container_->border_color = glm::vec4(0.20f, 0.35f, 0.60f, 0.85f);
     main_container_->transform.position = glm::vec3(0.0f, 0.10f, -0.20f);
 
-    header_title_ = std::make_shared<SpatialLabel>(
+    header_title_ = std::make_shared<Splash::SpatialLabel>(
         ":: OATS-rs RUNTIME ::",
         font_,
         0.0013f,
@@ -33,7 +33,7 @@ void CrmWorkspace::initialize() {
     header_title_->transform.position = glm::vec3(0.0f, 0.18f, 0.003f);
     main_container_->addChild(header_title_);
 
-    orchestrator_status_ = std::make_shared<SpatialLabel>(
+    orchestrator_status_ = std::make_shared<Splash::SpatialLabel>(
         "Awaiting first runtime tick...",
         font_,
         0.00095f,
@@ -50,7 +50,7 @@ void CrmWorkspace::initialize() {
 }
 
 void CrmWorkspace::buildEventLogPanel() {
-    log_panel_ = std::make_shared<SpatialPanel>(
+    log_panel_ = std::make_shared<Splash::SpatialPanel>(
         glm::vec2(2.65f, 0.14f),
         glm::vec4(0.03f, 0.05f, 0.08f, 0.92f)
     );
@@ -58,7 +58,7 @@ void CrmWorkspace::buildEventLogPanel() {
     log_panel_->border_thickness = 0.002f;
     log_panel_->transform.position = glm::vec3(0.0f, -0.12f, 0.005f);
 
-    log_label_ = std::make_shared<SpatialLabel>(
+    log_label_ = std::make_shared<Splash::SpatialLabel>(
         "No runtime events yet.",
         font_,
         0.00085f,

@@ -30,7 +30,7 @@ extern "C" {
 #include <functional>
 #include <memory>
 
-namespace Clouds {
+namespace Vazio {
 
 class SpatialCompositor;
 
@@ -98,20 +98,20 @@ struct SpatialXdgWindow {
     WindowHandle handle = INVALID_WINDOW_HANDLE;
     struct wlr_xdg_toplevel* toplevel = nullptr;
     struct wlr_surface* surface = nullptr;
-    std::shared_ptr<SpatialPanel> frame_panel;
-    std::shared_ptr<SpatialSurfaceHost> surface_host;
-    std::shared_ptr<SpatialLabel> title_label;
+    std::shared_ptr<Splash::SpatialPanel> frame_panel;
+    std::shared_ptr<Splash::SpatialSurfaceHost> surface_host;
+    std::shared_ptr<Splash::SpatialLabel> title_label;
 
     // Live client pixels. Allocated on the first commit that carries a buffer
     // and reused in place until the client resizes; owned by the texture bridge.
-    std::shared_ptr<NovaSpatial::TextureHandle> client_texture;
+    std::shared_ptr<Nova::TextureHandle> client_texture;
 
-    WaylandListener<SpatialXdgWindow> commit_listener;
-    WaylandListener<SpatialXdgWindow> map_listener;
-    WaylandListener<SpatialXdgWindow> unmap_listener;
-    WaylandListener<SpatialXdgWindow> surface_destroy_listener;
-    WaylandListener<SpatialXdgWindow> destroy_listener;
-    WaylandListener<SpatialXdgWindow> new_subsurface_listener;
+    Splash::WaylandListener<SpatialXdgWindow> commit_listener;
+    Splash::WaylandListener<SpatialXdgWindow> map_listener;
+    Splash::WaylandListener<SpatialXdgWindow> unmap_listener;
+    Splash::WaylandListener<SpatialXdgWindow> surface_destroy_listener;
+    Splash::WaylandListener<SpatialXdgWindow> destroy_listener;
+    Splash::WaylandListener<SpatialXdgWindow> new_subsurface_listener;
 
     /**
      * zxdg_toplevel_decoration_v1 for this toplevel, when the client asked who
@@ -121,8 +121,8 @@ struct SpatialXdgWindow {
      * the decoration while keeping the window.
      */
     struct wlr_xdg_toplevel_decoration_v1* decoration = nullptr;
-    WaylandListener<SpatialXdgWindow> decoration_mode_listener;
-    WaylandListener<SpatialXdgWindow> decoration_destroy_listener;
+    Splash::WaylandListener<SpatialXdgWindow> decoration_mode_listener;
+    Splash::WaylandListener<SpatialXdgWindow> decoration_destroy_listener;
 
     // A mode requested before the xdg_surface was initialised cannot be
     // answered yet - scheduling a configure on one is a wlroots assertion, and
@@ -134,11 +134,11 @@ struct SpatialXdgWindow {
     // one of them to be answered with a configure - even when the answer is
     // "nothing changed" - and because a title that is only read once at
     // creation is a label that lies for the rest of the window's life.
-    WaylandListener<SpatialXdgWindow> request_maximize_listener;
-    WaylandListener<SpatialXdgWindow> request_fullscreen_listener;
-    WaylandListener<SpatialXdgWindow> request_minimize_listener;
-    WaylandListener<SpatialXdgWindow> set_title_listener;
-    WaylandListener<SpatialXdgWindow> set_app_id_listener;
+    Splash::WaylandListener<SpatialXdgWindow> request_maximize_listener;
+    Splash::WaylandListener<SpatialXdgWindow> request_fullscreen_listener;
+    Splash::WaylandListener<SpatialXdgWindow> request_minimize_listener;
+    Splash::WaylandListener<SpatialXdgWindow> set_title_listener;
+    Splash::WaylandListener<SpatialXdgWindow> set_app_id_listener;
 
     // True between wlr_surface.events.map and .unmap. Only mapped windows are in
     // the scene and only mapped windows are sent frame callbacks.
@@ -246,16 +246,16 @@ struct SpatialXdgPopup {
     // another popup's, which is how nested menus stack.
     struct wlr_surface* parent_surface = nullptr;
 
-    std::shared_ptr<SpatialSurfaceHost> surface_host;
-    std::shared_ptr<NovaSpatial::TextureHandle> client_texture;
+    std::shared_ptr<Splash::SpatialSurfaceHost> surface_host;
+    std::shared_ptr<Nova::TextureHandle> client_texture;
 
-    WaylandListener<SpatialXdgPopup> commit_listener;
-    WaylandListener<SpatialXdgPopup> map_listener;
-    WaylandListener<SpatialXdgPopup> unmap_listener;
-    WaylandListener<SpatialXdgPopup> surface_destroy_listener;
-    WaylandListener<SpatialXdgPopup> destroy_listener;
-    WaylandListener<SpatialXdgPopup> reposition_listener;
-    WaylandListener<SpatialXdgPopup> new_subsurface_listener;
+    Splash::WaylandListener<SpatialXdgPopup> commit_listener;
+    Splash::WaylandListener<SpatialXdgPopup> map_listener;
+    Splash::WaylandListener<SpatialXdgPopup> unmap_listener;
+    Splash::WaylandListener<SpatialXdgPopup> surface_destroy_listener;
+    Splash::WaylandListener<SpatialXdgPopup> destroy_listener;
+    Splash::WaylandListener<SpatialXdgPopup> reposition_listener;
+    Splash::WaylandListener<SpatialXdgPopup> new_subsurface_listener;
 
     bool mapped = false;
     uint32_t unsupported_format = 0;
@@ -322,15 +322,15 @@ struct SpatialSubsurface {
     // session hosts - a toplevel, a popup, or another subsurface.
     struct wlr_surface* parent_surface = nullptr;
 
-    std::shared_ptr<SpatialSurfaceHost> surface_host;
-    std::shared_ptr<NovaSpatial::TextureHandle> client_texture;
+    std::shared_ptr<Splash::SpatialSurfaceHost> surface_host;
+    std::shared_ptr<Nova::TextureHandle> client_texture;
 
-    WaylandListener<SpatialSubsurface> commit_listener;
-    WaylandListener<SpatialSubsurface> map_listener;
-    WaylandListener<SpatialSubsurface> unmap_listener;
-    WaylandListener<SpatialSubsurface> surface_destroy_listener;
-    WaylandListener<SpatialSubsurface> destroy_listener;
-    WaylandListener<SpatialSubsurface> new_subsurface_listener;
+    Splash::WaylandListener<SpatialSubsurface> commit_listener;
+    Splash::WaylandListener<SpatialSubsurface> map_listener;
+    Splash::WaylandListener<SpatialSubsurface> unmap_listener;
+    Splash::WaylandListener<SpatialSubsurface> surface_destroy_listener;
+    Splash::WaylandListener<SpatialSubsurface> destroy_listener;
+    Splash::WaylandListener<SpatialSubsurface> new_subsurface_listener;
 
     bool mapped = false;
     uint32_t unsupported_format = 0;
@@ -372,13 +372,13 @@ struct SpatialSeatDevice {
     struct wlr_keyboard* keyboard = nullptr;
     struct wlr_pointer* pointer = nullptr;
 
-    WaylandListener<SpatialSeatDevice> key_listener;
-    WaylandListener<SpatialSeatDevice> modifiers_listener;
-    WaylandListener<SpatialSeatDevice> motion_listener;
-    WaylandListener<SpatialSeatDevice> motion_absolute_listener;
-    WaylandListener<SpatialSeatDevice> button_listener;
-    WaylandListener<SpatialSeatDevice> frame_listener;
-    WaylandListener<SpatialSeatDevice> destroy_listener;
+    Splash::WaylandListener<SpatialSeatDevice> key_listener;
+    Splash::WaylandListener<SpatialSeatDevice> modifiers_listener;
+    Splash::WaylandListener<SpatialSeatDevice> motion_listener;
+    Splash::WaylandListener<SpatialSeatDevice> motion_absolute_listener;
+    Splash::WaylandListener<SpatialSeatDevice> button_listener;
+    Splash::WaylandListener<SpatialSeatDevice> frame_listener;
+    Splash::WaylandListener<SpatialSeatDevice> destroy_listener;
 
     bool destroy_scheduled = false;
 
@@ -418,7 +418,7 @@ struct SpatialOutput {
     SpatialCompositor* compositor = nullptr;
     struct wlr_output* output = nullptr;
 
-    WaylandListener<SpatialOutput> destroy_listener;
+    Splash::WaylandListener<SpatialOutput> destroy_listener;
 
     bool destroy_scheduled = false;
 
@@ -431,4 +431,4 @@ struct SpatialOutput {
     void beginDestruction();
 };
 
-} // namespace Clouds
+} // namespace Vazio

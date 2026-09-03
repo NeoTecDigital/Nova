@@ -3,9 +3,9 @@
 #include <fstream>
 #include <stdexcept>
 
-namespace NovaSpatial {
+namespace Nova {
 
-SpatialPipeline::SpatialPipeline(NovaCore* core, VkRenderPass render_pass, TextureBridge* texture_bridge)
+SpatialPipeline::SpatialPipeline(Core* core, VkRenderPass render_pass, TextureBridge* texture_bridge)
     : core_(core), render_pass_(render_pass), texture_bridge_(texture_bridge) {
     if (!core_) {
         throw std::runtime_error("SpatialPipeline requires a valid NovaCore");
@@ -206,4 +206,4 @@ void SpatialPipeline::bindTexture(VkCommandBuffer cmd, VkDescriptorSet descripto
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout_, 0, 1, &descriptor_set, 0, nullptr);
 }
 
-} // namespace NovaSpatial
+} // namespace Nova

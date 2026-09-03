@@ -4,7 +4,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace NovaSpatial {
+namespace Nova {
 
 namespace {
 
@@ -49,7 +49,7 @@ VkBufferImageCopy wholeImageCopy(uint32_t width, uint32_t height) {
 
 } // namespace
 
-TextureBridge::TextureBridge(NovaCore* core)
+TextureBridge::TextureBridge(Core* core)
     : core_(core) {
     if (!core_) {
         throw std::runtime_error("TextureBridge requires a valid NovaCore instance");
@@ -464,4 +464,4 @@ std::shared_ptr<TextureHandle> TextureBridge::registerExternalImageView(VkImageV
     return handle;
 }
 
-} // namespace NovaSpatial
+} // namespace Nova

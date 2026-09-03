@@ -4,7 +4,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 
-namespace Clouds {
+namespace Splash {
 namespace {
 
 // World-space half-extents handed to the shader for each reticle.
@@ -27,8 +27,8 @@ glm::mat4 billboardRotation(const glm::vec3& camera_pos,
     );
 }
 
-void appendReticle(NovaSpatial::SpatialMeshBuffer* mesh_buffer,
-                   const NovaSpatial::MeshData& mesh,
+void appendReticle(Nova::SpatialMeshBuffer* mesh_buffer,
+                   const Nova::MeshData& mesh,
                    const glm::mat4& model,
                    float extent,
                    std::vector<SpatialRenderCommand>& out_commands) {
@@ -51,8 +51,8 @@ void appendReticle(NovaSpatial::SpatialMeshBuffer* mesh_buffer,
     });
 }
 
-void recordDrawCommands(NovaSpatial::SpatialPipeline* pipeline,
-                        NovaSpatial::SpatialMeshBuffer* mesh_buffer,
+void recordDrawCommands(Nova::SpatialPipeline* pipeline,
+                        Nova::SpatialMeshBuffer* mesh_buffer,
                         VkCommandBuffer cmd,
                         const std::vector<SpatialRenderCommand>& commands,
                         const glm::mat4& view_proj,
@@ -62,7 +62,7 @@ void recordDrawCommands(NovaSpatial::SpatialPipeline* pipeline,
         VkDescriptorSet tex = rcmd.texture ? rcmd.texture->descriptor_set : fallback_texture;
         pipeline->bindTexture(cmd, tex);
 
-        const NovaSpatial::SpatialPushConstants push = {
+        const Nova::SpatialPushConstants push = {
             .view_proj = view_proj,
             .model = rcmd.model,
             .camera_pos = glm::vec4(camera_pos, 1.0f),
@@ -90,9 +90,9 @@ glm::vec2 surfaceUv(const glm::vec2& size, const glm::vec3& local_point) {
 // is what a capture redirect and a drag past the quad's edge both need. uv is
 // still clamped, so a hosted surface never receives an off-surface coordinate.
 bool projectRayOntoNodePlane(const SpatialNode& node,
-                             const NovaMath::Ray3D& ray,
-                             NovaMath::RayHit& out_hit) {
-    const NovaMath::QuatTransform world_xf = node.getWorldTransform();
+                             const Nova::Math::Ray3D& ray,
+                             Nova::Math::RayHit& out_hit) {
+    const Nova::Math::QuatTransform world_xf = node.getWorldTransform();
     const glm::vec3 local_orig = world_xf.inverseTransformPoint(ray.origin);
     const glm::vec3 local_dir = glm::normalize(glm::conjugate(world_xf.orientation) * ray.direction);
 
@@ -127,7 +127,7 @@ std::shared_ptr<SpatialNode> resolveInputTarget(const std::shared_ptr<SpatialNod
 
 } // namespace
 
-SpatialScene::SpatialScene(NovaCore* core, NovaSpatial::TextureBridge* texture_bridge)
+SpatialScene::SpatialScene(Nova::Core* core, Nova::TextureBridge* texture_bridge)
     : core_(core), texture_bridge_(texture_bridge) {
     root = std::make_shared<SpatialNode>();
     root->name = "SceneRoot";
@@ -157,20 +157,20 @@ SpatialScene::~SpatialScene() {
 }
 
 void SpatialScene::initialize(const std::string& font_path) {
-    mesh_buffer_ = std::make_unique<NovaSpatial::SpatialMeshBuffer>(core_, 65536, 131072);
+    mesh_buffer_ = std::make_unique<Nova::SpatialMeshBuffer>(core_, 65536, 131072);
 
-    font = std::make_shared<NovaSpatial::SpatialFont>(core_, texture_bridge_);
+    font = std::make_shared<Nova::SpatialFont>(core_, texture_bridge_);
     font->loadFromFile(font_path, 48);
 
     // Lookat Reticle: Green circle around a dark grey crosshair
-    lookat_reticle_mesh_ = NovaSpatial::SpatialMeshGenerator::createReticle(
+    lookat_reticle_mesh_ = Nova::SpatialMeshGenerator::createReticle(
         glm::vec4(0.12f, 0.92f, 0.35f, 0.95f), // Green ring
         glm::vec4(0.22f, 0.25f, 0.28f, 0.95f), // Dark grey crosshair
         0.055f, 0.005f, 0.075f, 0.004f
     );
 
     // Cursor Reticle: Blue circle around a red crosshair
-    cursor_reticle_mesh_ = NovaSpatial::SpatialMeshGenerator::createReticle(
+    cursor_reticle_mesh_ = Nova::SpatialMeshGenerator::createReticle(
         glm::vec4(0.15f, 0.60f, 1.0f, 0.95f),  // Blue ring
         glm::vec4(0.95f, 0.20f, 0.25f, 0.95f), // Red crosshair
         0.045f, 0.005f, 0.065f, 0.004f
@@ -191,10 +191,10 @@ void SpatialScene::rebuildSpatialIndex(std::shared_ptr<SpatialNode> node, uint32
     if (!node || !node->visible) return;
 
     out_node_count++;
-    NovaMath::QuatTransform world_xf = node->getWorldTransform();
+    Nova::Math::QuatTransform world_xf = node->getWorldTransform();
     glm::vec3 half_extents(node->size.x * 0.5f, node->size.y * 0.5f, 0.05f);
 
-    NovaMath::ClusterAABB bounds;
+    Nova::Math::ClusterAABB bounds;
     bounds.min_pt = world_xf.position - half_extents;
     bounds.max_pt = world_xf.position + half_extents;
 
@@ -205,7 +205,7 @@ void SpatialScene::rebuildSpatialIndex(std::shared_ptr<SpatialNode> node, uint32
     }
 }
 
-NovaMath::Ray3D SpatialScene::buildPointerRay(const glm::vec2& screen_pixel, const glm::vec2& screen_size) {
+Nova::Math::Ray3D SpatialScene::buildPointerRay(const glm::vec2& screen_pixel, const glm::vec2& screen_size) {
     const float aspect = screen_size.x / std::max(screen_size.y, 1.0f);
     const glm::mat4 inv_view_proj = glm::inverse(getProjectionMatrix(aspect) * getViewMatrix());
 
@@ -213,14 +213,14 @@ NovaMath::Ray3D SpatialScene::buildPointerRay(const glm::vec2& screen_pixel, con
     return input_filter.filterScreenRay(screen_pixel, screen_size, inv_view_proj, physics_config, frame_index_);
 }
 
-bool SpatialScene::castPointerRay(const NovaMath::Ray3D& world_ray,
-                                  NovaMath::RayHit& out_hit,
+bool SpatialScene::castPointerRay(const Nova::Math::Ray3D& world_ray,
+                                  Nova::Math::RayHit& out_hit,
                                   std::shared_ptr<SpatialNode>& out_target) {
-    NovaMath::RayHit hit;
+    Nova::Math::RayHit hit;
     std::shared_ptr<SpatialNode> hit_node;
 
     // Focused laser check first if LaserFocus mode is active
-    if (physics_config.accel_mode == NovaMath::AccelerationMode::LaserFocus && keyboard_focus_) {
+    if (physics_config.accel_mode == Nova::Math::AccelerationMode::LaserFocus && keyboard_focus_) {
         keyboard_focus_->hitTest(world_ray, hit, hit_node);
     }
 
@@ -241,7 +241,7 @@ bool SpatialScene::castPointerRay(const NovaMath::Ray3D& world_ray,
     return true;
 }
 
-void SpatialScene::setPointerFocus(std::shared_ptr<SpatialNode> node, const NovaMath::RayHit& enter_hit) {
+void SpatialScene::setPointerFocus(std::shared_ptr<SpatialNode> node, const Nova::Math::RayHit& enter_hit) {
     if (pointer_focus_ == node) return;
 
     if (pointer_focus_) {
@@ -299,8 +299,8 @@ void SpatialScene::releasePointer() {
     pressed_button_mask_ = 0;
 }
 
-void SpatialScene::updateHover(const NovaMath::Ray3D& world_ray) {
-    NovaMath::RayHit hit;
+void SpatialScene::updateHover(const Nova::Math::Ray3D& world_ray) {
+    Nova::Math::RayHit hit;
     std::shared_ptr<SpatialNode> target;
 
     if (!castPointerRay(world_ray, hit, target)) {
@@ -320,12 +320,12 @@ void SpatialScene::updateHover(const NovaMath::Ray3D& world_ray) {
     physics_config.last_ray_depth = hit.distance;
 }
 
-void SpatialScene::deliverGrabMotion(const NovaMath::Ray3D& world_ray) {
+void SpatialScene::deliverGrabMotion(const Nova::Math::Ray3D& world_ray) {
     // The grabbed node's plane, not its quad: a drag that has left the quad
     // still has a well-defined position on the surface it started from. The
     // plane is invariant under the drag it drives -- the delta it produces
     // lies inside it -- so this does not feed back on itself.
-    NovaMath::RayHit hit = last_hit_;
+    Nova::Math::RayHit hit = last_hit_;
     if (projectRayOntoNodePlane(*pointer_grab_, world_ray, hit)) {
         last_hit_ = hit;
         cursor_3d_pos = hit.world_point + hit.normal * 0.008f;
@@ -334,7 +334,7 @@ void SpatialScene::deliverGrabMotion(const NovaMath::Ray3D& world_ray) {
     pointer_grab_->onRayMove(last_hit_);
 }
 
-void SpatialScene::placeCursorOnMissedRay(const NovaMath::Ray3D& world_ray) {
+void SpatialScene::placeCursorOnMissedRay(const Nova::Math::Ray3D& world_ray) {
     // Unprojected point on the view-aligned plane through camera_target.
     const glm::vec3 cam_fwd = glm::normalize(camera_target - camera_pos);
     const float denom = glm::dot(world_ray.direction, cam_fwd);
@@ -351,7 +351,7 @@ void SpatialScene::processPointerMotion(const glm::vec2& screen_pixel, const glm
     last_screen_pixel_ = screen_pixel;
     last_screen_size_ = screen_size;
 
-    const NovaMath::Ray3D world_ray = buildPointerRay(screen_pixel, screen_size);
+    const Nova::Math::Ray3D world_ray = buildPointerRay(screen_pixel, screen_size);
     last_pointer_ray_ = world_ray;
     has_pointer_sample_ = true;
 
@@ -435,7 +435,7 @@ void SpatialScene::update(float dt) {
     }
 }
 
-void SpatialScene::render(NovaSpatial::SpatialPipeline* pipeline, VkCommandBuffer cmd, const glm::vec2& screen_size) {
+void SpatialScene::render(Nova::SpatialPipeline* pipeline, VkCommandBuffer cmd, const glm::vec2& screen_size) {
     if (!root || !pipeline || !mesh_buffer_) return;
 
     const float aspect = screen_size.x / std::max(screen_size.y, 1.0f);
@@ -483,4 +483,4 @@ void SpatialScene::render(NovaSpatial::SpatialPipeline* pipeline, VkCommandBuffe
                        texture_bridge_->getFallbackTexture()->descriptor_set);
 }
 
-} // namespace Clouds
+} // namespace Splash

@@ -11,12 +11,12 @@
 #include <memory>
 #include <vector>
 
-namespace Clouds {
+namespace Splash {
 
 class SpatialScene {
 public:
     std::shared_ptr<SpatialNode> root;
-    std::shared_ptr<NovaSpatial::SpatialFont> font;
+    std::shared_ptr<Nova::SpatialFont> font;
 
     glm::vec3 camera_pos{0.0f, 0.0f, 2.5f};
     glm::vec3 camera_target{0.0f, 0.0f, 0.0f};
@@ -25,11 +25,11 @@ public:
     float near_plane = 0.01f;
     float far_plane = 100.0f;
 
-    NovaMath::EnginePhysicsConfig physics_config;
-    NovaMath::InputRayFilter input_filter;
-    NovaMath::SpatialClusterIndex spatial_cluster_index{1.0f, 4};
+    Nova::Math::EnginePhysicsConfig physics_config;
+    Nova::Math::InputRayFilter input_filter;
+    Nova::Math::SpatialClusterIndex spatial_cluster_index{1.0f, 4};
 
-    SpatialScene(NovaCore* core, NovaSpatial::TextureBridge* texture_bridge);
+    SpatialScene(Nova::Core* core, Nova::TextureBridge* texture_bridge);
     ~SpatialScene();
 
     void initialize(const std::string& font_path = "/usr/share/fonts/TTF/SpaceMonoNerdFont-Regular.ttf");
@@ -43,7 +43,7 @@ public:
     void update(float dt);
 
     // Render 3D spatial scene to Vulkan command buffer
-    void render(NovaSpatial::SpatialPipeline* pipeline, VkCommandBuffer cmd, const glm::vec2& screen_size);
+    void render(Nova::SpatialPipeline* pipeline, VkCommandBuffer cmd, const glm::vec2& screen_size);
 
     glm::vec3 cursor_3d_pos{0.0f, 0.0f, 0.0f};
     bool show_lookat_reticle = true;
@@ -57,7 +57,7 @@ public:
     // Pointer focus follows the pointer; keyboard focus follows activation.
     // Conflating them means moving the pointer off a window steals its typing,
     // which is neither what a seat does nor what anyone expects.
-    void setPointerFocus(std::shared_ptr<SpatialNode> node, const NovaMath::RayHit& enter_hit);
+    void setPointerFocus(std::shared_ptr<SpatialNode> node, const Nova::Math::RayHit& enter_hit);
     void setPointerFocus(std::shared_ptr<SpatialNode> node) { setPointerFocus(std::move(node), last_hit_); }
     void setKeyboardFocus(std::shared_ptr<SpatialNode> node);
 
@@ -83,15 +83,15 @@ public:
     // Retained spelling of getKeyboardFocus(): this always returned the node
     // set on press, which is keyboard focus.
     std::shared_ptr<SpatialNode> getFocusedNode() const { return keyboard_focus_; }
-    const NovaMath::RayHit& getLastHit() const { return last_hit_; }
+    const Nova::Math::RayHit& getLastHit() const { return last_hit_; }
 
 private:
-    NovaCore* core_ = nullptr;
-    NovaSpatial::TextureBridge* texture_bridge_ = nullptr;
-    std::unique_ptr<NovaSpatial::SpatialMeshBuffer> mesh_buffer_;
+    Nova::Core* core_ = nullptr;
+    Nova::TextureBridge* texture_bridge_ = nullptr;
+    std::unique_ptr<Nova::SpatialMeshBuffer> mesh_buffer_;
 
-    NovaSpatial::MeshData lookat_reticle_mesh_;
-    NovaSpatial::MeshData cursor_reticle_mesh_;
+    Nova::MeshData lookat_reticle_mesh_;
+    Nova::MeshData cursor_reticle_mesh_;
 
     std::shared_ptr<SpatialNode> pointer_focus_;
     std::shared_ptr<SpatialNode> keyboard_focus_;
@@ -101,8 +101,8 @@ private:
     // releasing one of two held buttons does not drop the drag.
     uint32_t pressed_button_mask_ = 0;
 
-    NovaMath::RayHit last_hit_;
-    NovaMath::Ray3D last_pointer_ray_;
+    Nova::Math::RayHit last_hit_;
+    Nova::Math::Ray3D last_pointer_ray_;
     bool has_pointer_sample_ = false;
     glm::vec2 last_screen_pixel_{0.0f};
     glm::vec2 last_screen_size_{1.0f};
@@ -113,13 +113,13 @@ private:
 
     void rebuildSpatialIndex(std::shared_ptr<SpatialNode> node, uint32_t& out_node_count);
 
-    NovaMath::Ray3D buildPointerRay(const glm::vec2& screen_pixel, const glm::vec2& screen_size);
-    bool castPointerRay(const NovaMath::Ray3D& world_ray,
-                        NovaMath::RayHit& out_hit,
+    Nova::Math::Ray3D buildPointerRay(const glm::vec2& screen_pixel, const glm::vec2& screen_size);
+    bool castPointerRay(const Nova::Math::Ray3D& world_ray,
+                        Nova::Math::RayHit& out_hit,
                         std::shared_ptr<SpatialNode>& out_target);
-    void updateHover(const NovaMath::Ray3D& world_ray);
-    void deliverGrabMotion(const NovaMath::Ray3D& world_ray);
-    void placeCursorOnMissedRay(const NovaMath::Ray3D& world_ray);
+    void updateHover(const Nova::Math::Ray3D& world_ray);
+    void deliverGrabMotion(const Nova::Math::Ray3D& world_ray);
+    void placeCursorOnMissedRay(const Nova::Math::Ray3D& world_ray);
 };
 
-} // namespace Clouds
+} // namespace Splash

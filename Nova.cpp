@@ -5,13 +5,13 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
-
+namespace Nova {
     ///////////////////
     // INSTANTIATION //
     ///////////////////
 
 
-Nova::Nova(NovaConfig config)
+App::App(Config config)
     {
         report(LOGGER::INFO, "Nova - Instantiating ..");
 
@@ -24,7 +24,7 @@ Nova::Nova(NovaConfig config)
             _window = nullptr;
             report(LOGGER::INFO, "Nova - Compute mode: creating NovaCompute instance ..");
 
-            _architect_compute = new NovaCompute(config.debug_level);
+            _architect_compute = new Compute(config.debug_level);
             _architect = _architect_compute;  // Legacy compatibility
 
             report(LOGGER::INFO, "Nova - Compute mode initialized");
@@ -51,7 +51,7 @@ Nova::Nova(NovaConfig config)
             }
 
             report(LOGGER::INFO, "Nova - Graphics mode: creating NovaGraphics instance ..");
-            _architect_graphics = new NovaGraphics(config.screen, config.debug_level, _window);
+            _architect_graphics = new Graphics(config.screen, config.debug_level, _window);
             _architect = _architect_graphics;  // Legacy compatibility
 
             // Initialize graphics pipeline
@@ -64,7 +64,7 @@ Nova::Nova(NovaConfig config)
         report(LOGGER::INFO, "Nova - Initialized ..");
     }
 
-Nova::~Nova()
+App::~App()
     {
         report(LOGGER::INFO, "Nova - Deconstructing ..");
 
@@ -103,12 +103,12 @@ Nova::~Nova()
     }
 
 // Mode getters
-NovaCore* Nova::getCore() {
+Core* App::getCore() {
     if (_mode == Mode::Compute) return _architect_compute;
     else return _architect_graphics;
 }
 
-NovaCompute* Nova::getCompute() {
+Compute* App::getCompute() {
     if (_mode != Mode::Compute) {
         report(LOGGER::ERROR, "Attempted to get compute interface in non-compute mode");
         return nullptr;
@@ -116,7 +116,7 @@ NovaCompute* Nova::getCompute() {
     return _architect_compute;
 }
 
-NovaGraphics* Nova::getGraphics() {
+Graphics* App::getGraphics() {
     if (_mode != Mode::Graphics) {
         report(LOGGER::ERROR, "Attempted to get graphics interface in non-graphics mode");
         return nullptr;
@@ -129,8 +129,8 @@ NovaGraphics* Nova::getGraphics() {
     // TOP LEVEL FUNCTIONS //
     /////////////////////////
 
-void Nova::illuminate()
-//void Nova::illuminate(fnManifest fnManifest)
+void App::illuminate()
+//void App::illuminate(fnManifest fnManifest)
     {
         report(LOGGER::INFO, "Nova - Illuminating ..");
 
@@ -183,46 +183,46 @@ void Nova::illuminate()
     // INITIALIZERS //
     //////////////////
 
-void Nova::_initGraphicsPipeline()
+void App::_initGraphicsPipeline()
     {
         report(LOGGER::INFO, "Nova - Initializing Graphics Pipeline ..");
 
-        // NovaGraphics already initialized swapchain, render pass, etc.
+        // Graphics already initialized swapchain, render pass, etc.
         // This is for any additional graphics setup if needed
 
         // TODO: Move any remaining graphics initialization here
-        // For now, NovaGraphics constructor handles everything
+        // For now, Graphics constructor handles everything
 
         report(LOGGER::INFO, "Nova - Graphics pipeline ready");
     }
 
 // DEPRECATED: These methods are no longer needed
-// NovaGraphics handles all initialization in its constructor
-void Nova::_initSwapChain(std::promise<void>& startPipeline, std::future<void>& waitingForPipeline, std::promise<void>& waitForFrameBuffer)
+// Graphics handles all initialization in its constructor
+void App::_initSwapChain(std::promise<void>& startPipeline, std::future<void>& waitingForPipeline, std::promise<void>& waitForFrameBuffer)
     {
         report(LOGGER::INFO, "Nova - _initSwapChain deprecated (handled by NovaGraphics) ..");
-        // Deprecated - NovaGraphics constructor handles this
+        // Deprecated - Graphics constructor handles this
         return;
     }
 
-void Nova::_initPipeline(std::future<void>& startingPipeline, std::promise<void>& waitForPipeline)
+void App::_initPipeline(std::future<void>& startingPipeline, std::promise<void>& waitForPipeline)
     {
         report(LOGGER::INFO, "Nova - _initPipeline deprecated (handled by NovaGraphics) ..");
-        // Deprecated - NovaGraphics constructor handles this
+        // Deprecated - Graphics constructor handles this
         return;
     }
 
-void Nova::_initBuffers()
+void App::_initBuffers()
     {
         report(LOGGER::INFO, "Nova - _initBuffers deprecated (handled by NovaGraphics) ..");
-        // Deprecated - NovaGraphics constructor handles this
+        // Deprecated - Graphics constructor handles this
         return;
     }
 
-void Nova::_initSyncStructures()
+void App::_initSyncStructures()
     {
         report(LOGGER::INFO, "Nova - _initSyncStructures deprecated (handled by NovaGraphics) ..");
-        // Deprecated - NovaGraphics constructor handles this
+        // Deprecated - Graphics constructor handles this
         return;
     }
 
@@ -231,7 +231,7 @@ void Nova::_initSyncStructures()
     // RESIZE WINDOW //
     ///////////////////
 
-inline void Nova::_resizeWindow()
+inline void App::_resizeWindow()
     {
         report(LOGGER::VERBOSE, "Nova - Resizing Window ..");
 
@@ -248,3 +248,5 @@ inline void Nova::_resizeWindow()
         return;
     }   
 
+
+} // namespace Nova

@@ -20,9 +20,9 @@ namespace Clouds {
  */
 class CrmWorkspace {
 public:
-    CrmWorkspace(std::shared_ptr<SpatialNode> root_node,
-                 std::shared_ptr<NovaSpatial::SpatialFont> font,
-                 std::shared_ptr<OatsBridge> oats_bridge);
+    CrmWorkspace(std::shared_ptr<Splash::SpatialNode> root_node,
+                 std::shared_ptr<Nova::SpatialFont> font,
+                 std::shared_ptr<Splash::OatsBridge> oats_bridge);
     ~CrmWorkspace() = default;
 
     void initialize();
@@ -33,19 +33,19 @@ public:
     void toggleVisible() { setVisible(!visible_); }
 
 private:
-    std::shared_ptr<SpatialNode> root_;
-    std::shared_ptr<NovaSpatial::SpatialFont> font_;
-    std::shared_ptr<OatsBridge> oats_bridge_;
+    std::shared_ptr<Splash::SpatialNode> root_;
+    std::shared_ptr<Nova::SpatialFont> font_;
+    std::shared_ptr<Splash::OatsBridge> oats_bridge_;
 
     bool visible_ = true;
 
-    std::shared_ptr<SpatialPanel> main_container_;
-    std::shared_ptr<SpatialLabel> header_title_;
-    std::shared_ptr<SpatialLabel> orchestrator_status_;
+    std::shared_ptr<Splash::SpatialPanel> main_container_;
+    std::shared_ptr<Splash::SpatialLabel> header_title_;
+    std::shared_ptr<Splash::SpatialLabel> orchestrator_status_;
 
     // Event Log Banner
-    std::shared_ptr<SpatialPanel> log_panel_;
-    std::shared_ptr<SpatialLabel> log_label_;
+    std::shared_ptr<Splash::SpatialPanel> log_panel_;
+    std::shared_ptr<Splash::SpatialLabel> log_label_;
 
     void buildEventLogPanel();
     void refreshDisplay();

@@ -9,14 +9,14 @@
 #include <cstring>
 #include "./Nova.h"
 
-// SMFTEngine friend class for accessing private NovaCore
+namespace Nova {  // SMFTEngine is a friend of Nova::App (Nova.h:23)
 class SMFTEngine {
 public:
-    static NovaCore* getCore(Nova* nova) {
+    static Core* getCore(App* nova) {
         return nova->_architect;
     }
 };
-
+} // namespace Nova
 int main(int argc, char** argv) {
     if (argc != 3) {
         std::cerr << "Usage: wavecube_compute <input_wavetable.raw> <output_volume.raw>\n";
@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
     // Initialize Nova in compute-only mode
     std::cout << "  Initializing Nova compute context...\n";
 
-    NovaConfig config = {
+    Nova::Config config = {
         .name = "WaveCube Compute",
         .screen = {64, 64},  // Minimal extent for compute-only
         .debug_level = "INFO",
@@ -43,8 +43,8 @@ int main(int argc, char** argv) {
     };
 
     try {
-        Nova* nova = new Nova(config);
-        NovaCore* core = SMFTEngine::getCore(nova);
+        Nova::App* nova = new Nova::App(config);
+        Nova::Core* core = Nova::SMFTEngine::getCore(nova);
 
         if (!nova->initialized) {
             std::cerr << "  ERROR: Nova initialization failed\n";

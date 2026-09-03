@@ -48,7 +48,7 @@ extern "C" {
 #include <type_traits>
 #include <vector>
 
-namespace Clouds {
+namespace Vazio {
 
 class SpatialCompositor {
 public:
@@ -58,10 +58,10 @@ public:
      *        later without rewiring a single listener. Falls back to the scene
      *        root when null, which is what a single-Desktop session wants.
      */
-    SpatialCompositor(NovaCore* core,
-                      NovaSpatial::TextureBridge* texture_bridge,
-                      std::shared_ptr<SpatialScene> scene,
-                      std::shared_ptr<SpatialNode> portal_root = nullptr,
+    SpatialCompositor(Nova::Core* core,
+                      Nova::TextureBridge* texture_bridge,
+                      std::shared_ptr<Splash::SpatialScene> scene,
+                      std::shared_ptr<Splash::SpatialNode> portal_root = nullptr,
                       SpatialCompositorConfig config = {});
     ~SpatialCompositor();
 
@@ -294,7 +294,7 @@ public:
     void notifySeatPointerFrame();
 
     // Node mapped surfaces are parented to. Never null once a scene exists.
-    const std::shared_ptr<SpatialNode>& portalRoot() const;
+    const std::shared_ptr<Splash::SpatialNode>& portalRoot() const;
 
 private:
     bool initDisplay();
@@ -337,21 +337,21 @@ private:
     // Copy one SHM client buffer into the window texture. Split out so the
     // pointer-access window stays as narrow as the wlroots contract requires.
     bool uploadClientPixels(struct wlr_buffer* source,
-                            std::shared_ptr<NovaSpatial::TextureHandle>& texture,
+                            std::shared_ptr<Nova::TextureHandle>& texture,
                             uint32_t& unsupported_format,
                             WindowHandle handle);
 
     // Import the committed buffer of any hosted surface into its host node.
     // Toplevels and popups differ in placement, never in how pixels arrive.
     void importSurfaceContent(struct wlr_surface* surface,
-                              const std::shared_ptr<SpatialSurfaceHost>& host,
-                              std::shared_ptr<NovaSpatial::TextureHandle>& texture,
+                              const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
+                              std::shared_ptr<Nova::TextureHandle>& texture,
                               uint32_t& unsupported_format,
                               WindowHandle handle);
 
     // The scene node a hosted surface is drawn on, or null when the surface is
     // not one this session hosts. Popups anchor to the node this returns.
-    std::shared_ptr<SpatialSurfaceHost> hostNodeForSurface(struct wlr_surface* surface) const;
+    std::shared_ptr<Splash::SpatialSurfaceHost> hostNodeForSurface(struct wlr_surface* surface) const;
 
     // Release everything on the kill lists. Must never be called from inside a
     // wl_listener callback.
@@ -363,14 +363,14 @@ private:
 
     // Release the scene-side half of a hosted surface: out of the tree, out of
     // every focus and grab that names it, texture returned to the bridge.
-    void releaseChildHost(const std::shared_ptr<SpatialSurfaceHost>& host,
-                          std::shared_ptr<NovaSpatial::TextureHandle>& texture);
+    void releaseChildHost(const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
+                          std::shared_ptr<Nova::TextureHandle>& texture);
 
     // Place a hosted child quad on its parent's quad from surface-local pixels.
     // The parent's quad spans its local [-w/2, w/2] x [-h/2, h/2] and maps onto
     // the parent surface's pixels, y down; this is that one change of basis.
-    void placeChildOnParentQuad(SpatialSurfaceHost& child,
-                                const SpatialSurfaceHost& anchor,
+    void placeChildOnParentQuad(Splash::SpatialSurfaceHost& child,
+                                const Splash::SpatialSurfaceHost& anchor,
                                 const struct wlr_surface& parent_surface,
                                 const struct wlr_box& child_box,
                                 float depth_bias);
@@ -399,7 +399,7 @@ private:
 
     // Input routing for a hosted child surface: popups and subsurfaces route
     // identically, so the wiring is written once.
-    void bindChildSurfaceInput(const std::shared_ptr<SpatialSurfaceHost>& host,
+    void bindChildSurfaceInput(const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
                                struct wlr_surface* surface);
 
     // Popups and subsurfaces are one hosted-child lifetime with two placement
@@ -410,10 +410,10 @@ private:
     void releaseHostedChildren(std::vector<std::shared_ptr<Child>>& live,
                                std::vector<std::shared_ptr<Child>>& pending);
 
-    NovaCore* core_ = nullptr;
-    NovaSpatial::TextureBridge* texture_bridge_ = nullptr;
-    std::shared_ptr<SpatialScene> scene_;
-    std::shared_ptr<SpatialNode> portal_root_;
+    Nova::Core* core_ = nullptr;
+    Nova::TextureBridge* texture_bridge_ = nullptr;
+    std::shared_ptr<Splash::SpatialScene> scene_;
+    std::shared_ptr<Splash::SpatialNode> portal_root_;
     SpatialCompositorConfig config_;
 
     std::string socket_name_;
@@ -460,17 +460,17 @@ private:
     // has started is what the virtual-output bridge keys on.
     size_t outputs_seen_ = 0;
 
-    WaylandListener<SpatialCompositor> new_xdg_toplevel_listener_;
-    WaylandListener<SpatialCompositor> new_xdg_popup_listener_;
-    WaylandListener<SpatialCompositor> new_output_listener_;
-    WaylandListener<SpatialCompositor> new_input_listener_;
-    WaylandListener<SpatialCompositor> fallback_modifiers_listener_;
-    WaylandListener<SpatialCompositor> session_active_listener_;
-    WaylandListener<SpatialCompositor> session_destroy_listener_;
-    WaylandListener<SpatialCompositor> new_toplevel_decoration_listener_;
-    WaylandListener<SpatialCompositor> request_set_selection_listener_;
-    WaylandListener<SpatialCompositor> request_set_primary_selection_listener_;
-    WaylandListener<SpatialCompositor> request_set_cursor_listener_;
+    Splash::WaylandListener<SpatialCompositor> new_xdg_toplevel_listener_;
+    Splash::WaylandListener<SpatialCompositor> new_xdg_popup_listener_;
+    Splash::WaylandListener<SpatialCompositor> new_output_listener_;
+    Splash::WaylandListener<SpatialCompositor> new_input_listener_;
+    Splash::WaylandListener<SpatialCompositor> fallback_modifiers_listener_;
+    Splash::WaylandListener<SpatialCompositor> session_active_listener_;
+    Splash::WaylandListener<SpatialCompositor> session_destroy_listener_;
+    Splash::WaylandListener<SpatialCompositor> new_toplevel_decoration_listener_;
+    Splash::WaylandListener<SpatialCompositor> request_set_selection_listener_;
+    Splash::WaylandListener<SpatialCompositor> request_set_primary_selection_listener_;
+    Splash::WaylandListener<SpatialCompositor> request_set_cursor_listener_;
 
     std::vector<std::shared_ptr<SpatialXdgWindow>> windows_;
     std::vector<std::shared_ptr<SpatialXdgWindow>> pending_destroy_;
@@ -495,4 +495,4 @@ private:
     WindowHandle next_window_handle_ = 1;
 };
 
-} // namespace Clouds
+} // namespace Vazio

@@ -1,12 +1,12 @@
 #include "./nova_graphics.h"
-
+namespace Nova {
 // No window-system header belongs in this translation unit. The SDL-window
 // constructor lives in Core/nova_sdl.cpp, which is the one place in Nova that
 // links libSDL2; everything here is surface-agnostic.
 
-NovaGraphics::NovaGraphics(VkExtent2D extent, const std::string& debug_level, VkSurfaceKHR surf,
+Graphics::Graphics(VkExtent2D extent, const std::string& debug_level, VkSurfaceKHR surf,
                            const std::vector<const char*>& instance_extensions)
-    : NovaCore(debug_level), surface(surf)
+    : Core(debug_level), surface(surf)
 {
     report(LOGGER::INFO, "NovaGraphics - Initializing graphics mode ..");
 
@@ -21,7 +21,7 @@ NovaGraphics::NovaGraphics(VkExtent2D extent, const std::string& debug_level, Vk
 // Second half of every surface-backed bring-up, from device selection through
 // frame sync. Both surface constructors call it with `surface` already live, so
 // the SDL path and the external-surface path stay one code path.
-void NovaGraphics::completeSurfaceBackedInit()
+void Graphics::completeSurfaceBackedInit()
 {
     createPhysicalDevice(true, surface);   // Need presentation support
     createLogicalDevice(true);             // Need swapchain extension
@@ -40,14 +40,14 @@ void NovaGraphics::completeSurfaceBackedInit()
     createFrameSyncObjects();
 }
 
-NovaGraphics::~NovaGraphics()
+Graphics::~Graphics()
 {
     report(LOGGER::INFO, "NovaGraphics - Destroying");
     vkDeviceWaitIdle(logical_device);
 
-    // offscreen_targets and imported_images are NovaGraphics members, so their
+    // offscreen_targets and imported_images are Graphics members, so their
     // release belongs HERE, in the derived destructor body, before any member
-    // of this object has been destroyed. NovaCore::resource_registry cannot do
+    // of this object has been destroyed. Core::resource_registry cannot do
     // it: the base destructor drains the registry after both members are gone,
     // which is a use-after-free that -O0 survives by accident and -O2 turns
     // into `double free or corruption`. release() rather than run_and_release()
@@ -75,7 +75,7 @@ NovaGraphics::~NovaGraphics()
 
 // Framebuffers, image views and the swapchain itself. All three collections are
 // empty in offscreen mode, which is what makes this callable unconditionally.
-void NovaGraphics::destroySwapchainResources()
+void Graphics::destroySwapchainResources()
 {
     for (auto framebuffer : swapchain.framebuffers) {
         if (framebuffer != VK_NULL_HANDLE) {
@@ -97,7 +97,7 @@ void NovaGraphics::destroySwapchainResources()
 // The per-frame-in-flight slots. Offscreen mode populates the fence and the
 // command pool but leaves both semaphore vectors empty, so the same walk covers
 // either construction path.
-void NovaGraphics::destroyFrameSyncObjects()
+void Graphics::destroyFrameSyncObjects()
 {
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         for (auto semaphore : frames[i].image_available) {
@@ -119,7 +119,7 @@ void NovaGraphics::destroyFrameSyncObjects()
     }
 }
 
-void NovaGraphics::createRenderPass()
+void Graphics::createRenderPass()
 {
     report(LOGGER::VLINE, "\t .. Creating Render Pass ..");
 
@@ -158,7 +158,7 @@ void NovaGraphics::createRenderPass()
     report(LOGGER::INFO, "Render pass created");
 }
 
-void NovaGraphics::createFrameSyncObjects()
+void Graphics::createFrameSyncObjects()
 {
     report(LOGGER::VLINE, "\t .. Creating Frame Sync Objects ..");
 
@@ -205,12 +205,12 @@ void NovaGraphics::createFrameSyncObjects()
     report(LOGGER::INFO, "Frame sync objects created");
 }
 
-void NovaGraphics::drawFrame()
+void Graphics::drawFrame()
 {
     renderFrame([](VkCommandBuffer, uint32_t){});
 }
 
-void NovaGraphics::renderFrame(std::function<void(VkCommandBuffer, uint32_t)>&& render_callback)
+void Graphics::renderFrame(std::function<void(VkCommandBuffer, uint32_t)>&& render_callback)
 {
     // Offscreen mode has no swapchain to acquire from; renderToImage() is its
     // presentation path. Saying so beats dereferencing a null swapchain.
@@ -328,13 +328,15 @@ void NovaGraphics::renderFrame(std::function<void(VkCommandBuffer, uint32_t)>&& 
     frame_ct++;
 }
 
-void NovaGraphics::setWindowExtent(VkExtent2D extent)
+void Graphics::setWindowExtent(VkExtent2D extent)
 {
     window_extent = extent;
 }
 
-void NovaGraphics::constructGraphicsPipeline(const std::string& vert, const std::string& frag)
+void Graphics::constructGraphicsPipeline(const std::string& vert, const std::string& frag)
 {
     report(LOGGER::DEBUG, "NovaGraphics::constructGraphicsPipeline() - not yet implemented");
     // Placeholder - will migrate from existing code
 }
+
+} // namespace Nova

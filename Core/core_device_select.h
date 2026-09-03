@@ -3,7 +3,7 @@
 
 #include <vulkan/vulkan.h>
 #include <vector>
-
+namespace Nova {
 /**
  * What a mode needs from a physical device, and what it would like.
  *
@@ -11,7 +11,7 @@
  * `drm_fd` and `optional_extensions` are preferences: they steer the choice
  * between candidates that already passed, and never reject one.
  */
-struct NovaDeviceRequest {
+struct DeviceRequest {
     // Requires a present family against `surface` and VK_KHR_swapchain.
     bool need_presentation = false;
 
@@ -37,7 +37,7 @@ struct NovaDeviceRequest {
 };
 
 // "Discrete GPU", "Virtual GPU", ... - stable spelling for the INFO report.
-const char* novaDeviceTypeName(VkPhysicalDeviceType type);
+const char* deviceTypeName(VkPhysicalDeviceType type);
 
 /**
  * Preference order of the D.3 report: DISCRETE > VIRTUAL > INTEGRATED > CPU.
@@ -45,10 +45,12 @@ const char* novaDeviceTypeName(VkPhysicalDeviceType type);
  * Spaced so a DRM-node match can only break a tie between equal types and can
  * never promote a CPU rasterizer over a real GPU.
  */
-uint32_t novaDeviceTypeScore(VkPhysicalDeviceType type);
+uint32_t deviceTypeScore(VkPhysicalDeviceType type);
 
 // Major/minor of the node behind `drm_fd`, or false when it is not a device fd.
-bool novaDrmNodeOf(int drm_fd, int64_t& major, int64_t& minor);
+bool drmNodeOf(int drm_fd, int64_t& major, int64_t& minor);
 
 // True when `device` reports VK_EXT_physical_device_drm nodes matching major/minor.
-bool novaDeviceOwnsDrmNode(VkPhysicalDevice device, int64_t major, int64_t minor);
+bool deviceOwnsDrmNode(VkPhysicalDevice device, int64_t major, int64_t minor);
+
+} // namespace Nova

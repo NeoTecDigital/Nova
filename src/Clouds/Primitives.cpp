@@ -1,7 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "include/Clouds/Primitives.h"
 
-namespace Clouds {
+namespace Splash {
 namespace {
 
 // Render modes consumed by the spatial fragment shader.
@@ -20,22 +20,22 @@ SpatialPanel::SpatialPanel(const glm::vec2& panel_size, const glm::vec4& bg_col)
     name = "SpatialPanel";
 }
 
-void SpatialPanel::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
+void SpatialPanel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
                                  std::vector<SpatialRenderCommand>& out_commands) {
     if (!visible) return;
 
-    NovaMath::QuatTransform world_xf = getWorldTransform();
+    Nova::Math::QuatTransform world_xf = getWorldTransform();
     glm::mat4 model = world_xf.toMatrix();
 
     // Procedural panel quad (mode 0.0), rebuilt only when its inputs move.
-    const NovaSpatial::MeshCache::Signature signature = {{
+    const Nova::MeshCache::Signature signature = {{
         size.x, size.y,
         background_color.r, background_color.g, background_color.b, background_color.a,
         border_thickness, corner_radius, PROCEDURAL_SDF_MODE
     }};
 
     if (!quad_cache_.isValidFor(signature)) {
-        quad_cache_.store(signature, NovaSpatial::SpatialMeshGenerator::createPlanarQuad(
+        quad_cache_.store(signature, Nova::SpatialMeshGenerator::createPlanarQuad(
             size, background_color, border_thickness, corner_radius, PROCEDURAL_SDF_MODE));
     }
 
@@ -56,14 +56,14 @@ void SpatialPanel::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
 
 SpatialButton::SpatialButton(const std::string& btn_label,
                              const glm::vec2& btn_size,
-                             std::shared_ptr<NovaSpatial::SpatialFont> spatial_font,
+                             std::shared_ptr<Nova::SpatialFont> spatial_font,
                              std::function<void()> click_handler)
     : label(btn_label), on_click(click_handler), font(spatial_font) {
     size = btn_size;
     name = "SpatialButton: " + label;
 }
 
-void SpatialButton::onRayEnter(const NovaMath::RayHit& hit) {
+void SpatialButton::onRayEnter(const Nova::Math::RayHit& hit) {
     SpatialNode::onRayEnter(hit);
 }
 
@@ -71,7 +71,7 @@ void SpatialButton::onRayLeave() {
     SpatialNode::onRayLeave();
 }
 
-void SpatialButton::onRayButton(const NovaMath::RayHit& hit, uint32_t button, bool pressed) {
+void SpatialButton::onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) {
     SpatialNode::onRayButton(hit, button, pressed);
     if (button == 1 && !pressed && is_hovered) { // Button release
         if (on_click) {
@@ -80,11 +80,11 @@ void SpatialButton::onRayButton(const NovaMath::RayHit& hit, uint32_t button, bo
     }
 }
 
-void SpatialButton::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
+void SpatialButton::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
                                   std::vector<SpatialRenderCommand>& out_commands) {
     if (!visible) return;
 
-    NovaMath::QuatTransform world_xf = getWorldTransform();
+    Nova::Math::QuatTransform world_xf = getWorldTransform();
     glm::mat4 model = world_xf.toMatrix();
 
     // Determine current visual color based on interaction state
@@ -127,25 +127,25 @@ void SpatialButton::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
     SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
-const NovaSpatial::MeshData& SpatialButton::resolveBoxMesh(const glm::vec4& color) {
+const Nova::MeshData& SpatialButton::resolveBoxMesh(const glm::vec4& color) {
     // Only the colour moves under interaction, so the cache turns over on state
     // change rather than every frame.
-    const NovaSpatial::MeshCache::Signature signature = {{
+    const Nova::MeshCache::Signature signature = {{
         size.x, size.y,
         color.r, color.g, color.b, color.a,
         border_thickness, corner_radius, PROCEDURAL_SDF_MODE
     }};
 
     if (!box_cache_.isValidFor(signature)) {
-        box_cache_.store(signature, NovaSpatial::SpatialMeshGenerator::createPlanarQuad(
+        box_cache_.store(signature, Nova::SpatialMeshGenerator::createPlanarQuad(
             size, color, border_thickness, corner_radius, PROCEDURAL_SDF_MODE));
     }
 
     return box_cache_.mesh();
 }
 
-const NovaSpatial::MeshData& SpatialButton::resolveTextMesh(float font_scale) {
-    const NovaSpatial::MeshCache::Signature signature = {{
+const Nova::MeshData& SpatialButton::resolveTextMesh(float font_scale) {
+    const Nova::MeshCache::Signature signature = {{
         font_scale,
         text_color.r, text_color.g, text_color.b, text_color.a,
         1.0f // centre-aligned
@@ -160,7 +160,7 @@ const NovaSpatial::MeshData& SpatialButton::resolveTextMesh(float font_scale) {
 }
 
 SpatialLabel::SpatialLabel(const std::string& label_text,
-                           std::shared_ptr<NovaSpatial::SpatialFont> spatial_font,
+                           std::shared_ptr<Nova::SpatialFont> spatial_font,
                            float scale,
                            const glm::vec4& col)
     : text(label_text), color(col), font_scale(scale), font(spatial_font) {
@@ -177,14 +177,14 @@ void SpatialLabel::setText(const std::string& new_text) {
     }
 }
 
-void SpatialLabel::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
+void SpatialLabel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
                                  std::vector<SpatialRenderCommand>& out_commands) {
     if (!visible || !font || text.empty()) return;
 
-    NovaMath::QuatTransform world_xf = getWorldTransform();
+    Nova::Math::QuatTransform world_xf = getWorldTransform();
     glm::mat4 model = world_xf.toMatrix();
 
-    const NovaSpatial::MeshCache::Signature signature = {{
+    const Nova::MeshCache::Signature signature = {{
         font_scale,
         color.r, color.g, color.b, color.a,
         center_aligned ? 1.0f : 0.0f
@@ -209,24 +209,24 @@ void SpatialLabel::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
     SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
-SpatialSurfaceHost::SpatialSurfaceHost(const glm::vec2& surface_size, std::shared_ptr<NovaSpatial::TextureHandle> tex)
+SpatialSurfaceHost::SpatialSurfaceHost(const glm::vec2& surface_size, std::shared_ptr<Nova::TextureHandle> tex)
     : texture(tex) {
     size = surface_size;
     name = "SpatialSurfaceHost";
 }
 
-void SpatialSurfaceHost::setTexture(std::shared_ptr<NovaSpatial::TextureHandle> tex) {
+void SpatialSurfaceHost::setTexture(std::shared_ptr<Nova::TextureHandle> tex) {
     texture = tex;
 }
 
-void SpatialSurfaceHost::onRayEnter(const NovaMath::RayHit& hit) {
+void SpatialSurfaceHost::onRayEnter(const Nova::Math::RayHit& hit) {
     SpatialNode::onRayEnter(hit);
     if (on_surface_pointer_enter) {
         on_surface_pointer_enter(hit.uv.x, hit.uv.y);
     }
 }
 
-void SpatialSurfaceHost::onRayMove(const NovaMath::RayHit& hit) {
+void SpatialSurfaceHost::onRayMove(const Nova::Math::RayHit& hit) {
     SpatialNode::onRayMove(hit);
     if (on_surface_pointer_motion) {
         on_surface_pointer_motion(hit.uv.x, hit.uv.y);
@@ -240,7 +240,7 @@ void SpatialSurfaceHost::onRayLeave() {
     }
 }
 
-void SpatialSurfaceHost::onRayButton(const NovaMath::RayHit& hit, uint32_t button, bool pressed) {
+void SpatialSurfaceHost::onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) {
     SpatialNode::onRayButton(hit, button, pressed);
     if (on_surface_button) {
         on_surface_button(button, pressed);
@@ -254,23 +254,23 @@ void SpatialSurfaceHost::onKey(uint32_t key, bool pressed) {
     }
 }
 
-void SpatialSurfaceHost::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
+void SpatialSurfaceHost::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
                                        std::vector<SpatialRenderCommand>& out_commands) {
     if (!visible) return;
 
-    NovaMath::QuatTransform world_xf = getWorldTransform();
+    Nova::Math::QuatTransform world_xf = getWorldTransform();
     glm::mat4 model = world_xf.toMatrix();
 
     // Geometry depends only on size and corner radius; the texture it samples is
     // swapped through the render command, not the vertex data.
-    const NovaSpatial::MeshCache::Signature signature = {{
+    const Nova::MeshCache::Signature signature = {{
         size.x, size.y,
         1.0f, 1.0f, 1.0f, 1.0f,
         0.0f, corner_radius, TEXTURED_QUAD_MODE
     }};
 
     if (!quad_cache_.isValidFor(signature)) {
-        quad_cache_.store(signature, NovaSpatial::SpatialMeshGenerator::createPlanarQuad(
+        quad_cache_.store(signature, Nova::SpatialMeshGenerator::createPlanarQuad(
             size, glm::vec4(1.0f), 0.0f, corner_radius, TEXTURED_QUAD_MODE));
     }
 
@@ -288,4 +288,4 @@ void SpatialSurfaceHost::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
     SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
-} // namespace Clouds
+} // namespace Splash

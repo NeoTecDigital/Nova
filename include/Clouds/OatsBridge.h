@@ -10,7 +10,7 @@
 
 struct OatsRuntime;
 
-namespace Clouds {
+namespace Splash {
 
 // Object type names emitted by the Rust runtime (extern/OATS-ffi/src/runtime.rs:57,71,90).
 inline constexpr const char* kOatsTypeFileSystemEntity = "FileSystemEntity";
@@ -166,4 +166,4 @@ private:
     void pushEvent(OatsSystemEvent&& event);
 };
 
-} // namespace Clouds
+} // namespace Splash

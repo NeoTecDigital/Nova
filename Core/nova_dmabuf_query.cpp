@@ -5,8 +5,8 @@
 #include "./nova_dmabuf_query.h"
 
 #include <sys/stat.h>
-
-VkImageAspectFlagBits novaMemoryPlaneAspect(int plane)
+namespace Nova {
+VkImageAspectFlagBits memoryPlaneAspect(int plane)
 {
     static constexpr VkImageAspectFlagBits ASPECTS[NOVA_DMABUF_MAX_PLANES] = {
         VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT,
@@ -20,7 +20,7 @@ VkImageAspectFlagBits novaMemoryPlaneAspect(int plane)
 
 // vkGetMemoryFdPropertiesKHR ships with VK_KHR_external_memory_fd and is not in
 // the loader's exported set, so it is resolved per device on first use.
-PFN_vkGetMemoryFdPropertiesKHR novaLoadGetMemoryFdProperties(VkDevice device)
+PFN_vkGetMemoryFdPropertiesKHR loadGetMemoryFdProperties(VkDevice device)
 {
     static PFN_vkGetMemoryFdPropertiesKHR cached = nullptr;
     static VkDevice cached_for = VK_NULL_HANDLE;
@@ -35,7 +35,7 @@ PFN_vkGetMemoryFdPropertiesKHR novaLoadGetMemoryFdProperties(VkDevice device)
 }
 
 // Every modifier the device reports for `format`. Two-call idiom: count, then fill.
-std::vector<VkDrmFormatModifierPropertiesEXT> novaQueryModifiers(VkPhysicalDevice device, VkFormat format)
+std::vector<VkDrmFormatModifierPropertiesEXT> queryModifiers(VkPhysicalDevice device, VkFormat format)
 {
     VkDrmFormatModifierPropertiesListEXT list = {
         .sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT
@@ -56,9 +56,9 @@ std::vector<VkDrmFormatModifierPropertiesEXT> novaQueryModifiers(VkPhysicalDevic
 
 // The modifier's own plane count, and whether the device knows the modifier at
 // all. `format` is the Vulkan format the fourcc mapped to.
-bool novaModifierPlaneCount(VkPhysicalDevice device, VkFormat format, uint64_t modifier, uint32_t& planes_out)
+bool modifierPlaneCount(VkPhysicalDevice device, VkFormat format, uint64_t modifier, uint32_t& planes_out)
 {
-    for (const auto& entry : novaQueryModifiers(device, format)) {
+    for (const auto& entry : queryModifiers(device, format)) {
         if (entry.drmFormatModifier != modifier) {
             continue;
         }
@@ -78,7 +78,7 @@ bool novaModifierPlaneCount(VkPhysicalDevice device, VkFormat format, uint64_t m
 
 // The device has to say it can import this exact (format, modifier, usage) as a
 // dmabuf before an image is created, or vkCreateImage failure is the first news.
-bool novaImportableAsDmabuf(VkPhysicalDevice device, VkFormat format, uint64_t modifier)
+bool importableAsDmabuf(VkPhysicalDevice device, VkFormat format, uint64_t modifier)
 {
     VkPhysicalDeviceImageDrmFormatModifierInfoEXT modifier_info = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
@@ -134,7 +134,7 @@ bool novaImportableAsDmabuf(VkPhysicalDevice device, VkFormat format, uint64_t m
  * fails. When identity cannot be established the shared case is assumed - it
  * is what every allocator on this path produces.
  */
-bool novaPlanesShareOneBuffer(const NovaDmabufAttributes& attrs)
+bool planesShareOneBuffer(const DmabufAttributes& attrs)
 {
     struct stat first = {};
     if (fstat(attrs.planes[0].fd, &first) != 0) {
@@ -159,7 +159,7 @@ bool novaPlanesShareOneBuffer(const NovaDmabufAttributes& attrs)
 
 // Plane layouts, verbatim from the exporter. size/arrayPitch/depthPitch must be
 // zero for a modifier import: the driver derives them from the modifier.
-void novaFillPlaneLayouts(const NovaDmabufAttributes& attrs, std::vector<VkSubresourceLayout>& layouts)
+void fillPlaneLayouts(const DmabufAttributes& attrs, std::vector<VkSubresourceLayout>& layouts)
 {
     layouts.resize(static_cast<size_t>(attrs.plane_count));
 
@@ -175,19 +175,19 @@ void novaFillPlaneLayouts(const NovaDmabufAttributes& attrs, std::vector<VkSubre
 }
 
 
-std::vector<uint64_t> NovaGraphics::supportedDmabufModifiers(uint32_t drm_format) const
+std::vector<uint64_t> Graphics::supportedDmabufModifiers(uint32_t drm_format) const
 {
     std::vector<uint64_t> modifiers;
 
-    const VkFormat format = novaVulkanFormatFromDrm(drm_format);
+    const VkFormat format = vulkanFormatFromDrm(drm_format);
     if (!supportsDmabufImport() || format == VK_FORMAT_UNDEFINED) {
         return modifiers;
     }
 
-    for (const auto& entry : novaQueryModifiers(physical_device, format)) {
+    for (const auto& entry : queryModifiers(physical_device, format)) {
         const bool renderable =
             (entry.drmFormatModifierTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) != 0;
-        if (renderable && novaImportableAsDmabuf(physical_device, format, entry.drmFormatModifier)) {
+        if (renderable && importableAsDmabuf(physical_device, format, entry.drmFormatModifier)) {
             modifiers.push_back(entry.drmFormatModifier);
         }
     }
@@ -195,7 +195,7 @@ std::vector<uint64_t> NovaGraphics::supportedDmabufModifiers(uint32_t drm_format
     return modifiers;
 }
 
-bool NovaGraphics::supportsDmabufImport() const
+bool Graphics::supportsDmabufImport() const
 {
     return hasDeviceExtension(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME) &&
            hasDeviceExtension(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME) &&
@@ -203,7 +203,7 @@ bool NovaGraphics::supportsDmabufImport() const
 }
 
 // Gates that do not need the device: shape of the request, then the table.
-bool novaValidateDmabufRequest(const NovaDmabufAttributes& attrs, VkFormat& format_out)
+bool validateDmabufRequest(const DmabufAttributes& attrs, VkFormat& format_out)
 {
     if (attrs.width == 0 || attrs.height == 0) {
         report(LOGGER::ERROR, "dmabuf import: zero extent");
@@ -230,17 +230,17 @@ bool novaValidateDmabufRequest(const NovaDmabufAttributes& attrs, VkFormat& form
         return false;
     }
 
-    format_out = novaVulkanFormatFromDrm(attrs.drm_format);
+    format_out = vulkanFormatFromDrm(attrs.drm_format);
     if (format_out == VK_FORMAT_UNDEFINED) {
         report(LOGGER::ERROR, "dmabuf import: DRM format %s is not in Nova's format table",
-               novaDrmFormatName(attrs.drm_format));
+               drmFormatName(attrs.drm_format));
         return false;
     }
 
     return true;
 }
 
-uint32_t novaFirstAllowedMemoryType(VkPhysicalDevice physical, uint32_t allowed_bits)
+uint32_t firstAllowedMemoryType(VkPhysicalDevice physical, uint32_t allowed_bits)
 {
     VkPhysicalDeviceMemoryProperties memory = {};
     vkGetPhysicalDeviceMemoryProperties(physical, &memory);
@@ -254,3 +254,5 @@ uint32_t novaFirstAllowedMemoryType(VkPhysicalDevice physical, uint32_t allowed_
     return UINT32_MAX;
 }
 
+
+} // namespace Nova

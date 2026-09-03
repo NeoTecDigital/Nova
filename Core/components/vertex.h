@@ -2,7 +2,7 @@
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <array>
-
+namespace Nova {
 struct Vertex {
     glm::vec3 position;
     glm::vec3 color;
@@ -32,3 +32,5 @@ struct Vertex {
         return attributeDescriptions;
     }
 };
+
+} // namespace Nova

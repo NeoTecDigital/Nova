@@ -4,7 +4,7 @@
 #include <string>
 #include <algorithm>
 
-namespace NovaMath {
+namespace Nova::Math {
 
 enum class AccelerationMode {
     LaserFocus = 0,    // Pinpoint sub-pixel raycast laser on active focal node
@@ -63,4 +63,4 @@ struct EnginePhysicsConfig {
     }
 };
 
-} // namespace NovaMath
+} // namespace Nova::Math

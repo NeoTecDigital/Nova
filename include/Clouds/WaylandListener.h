@@ -16,7 +16,7 @@ extern "C" {
 #include <cstddef>
 #include <type_traits>
 
-namespace Clouds {
+namespace Splash {
 
 /**
  * RAII binding between a wl_signal and a C++ member function.
@@ -88,4 +88,4 @@ struct WaylandListener {
     bool isBound() const { return bound; }
 };
 
-} // namespace Clouds
+} // namespace Splash

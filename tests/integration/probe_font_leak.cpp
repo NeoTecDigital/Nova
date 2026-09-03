@@ -41,30 +41,30 @@ int main(int argc, char** argv) {
     const bool explicit_release = (argc > 1 && std::strcmp(argv[1], "release") == 0);
     std::printf("probe_font_leak: variant = %s\n", explicit_release ? "release" : "implicit");
 
-    NovaOffscreenConfig config = {};
+    Nova::OffscreenConfig config = {};
     config.extent = { 320, 200 };
     config.request_dmabuf_import = false;
 
     {
-        auto nova = std::make_unique<NovaGraphics>(config, std::string("ERROR"));
+        auto nova = std::make_unique<Nova::Graphics>(config, std::string("ERROR"));
         check(nova->getAllocator() != VK_NULL_HANDLE, "offscreen Nova has an allocator");
 
         // Declaration order IS the contract: the bridge must outlive the font,
         // because the font returns its atlas to the bridge in ~SpatialFont.
         // Reversing these two lines is the bug the header warns about.
-        auto bridge = std::make_unique<NovaSpatial::TextureBridge>(nova.get());
+        auto bridge = std::make_unique<Nova::TextureBridge>(nova.get());
         bridge->initialize();
         check(bridge->getDescriptorSetLayout() != VK_NULL_HANDLE,
               "TextureBridge initialized its descriptor pool and layout");
 
-        auto font = std::make_unique<NovaSpatial::SpatialFont>(nova.get(), bridge.get());
+        auto font = std::make_unique<Nova::SpatialFont>(nova.get(), bridge.get());
 
         // No TTF path is given on purpose: the fallback atlas is a real VMA
         // image allocation, which is all this probe needs, and it removes any
         // dependency on a font being installed.
         font->loadFromFile("/nonexistent/vazio-probe-font.ttf", 32);
 
-        std::shared_ptr<NovaSpatial::TextureHandle> atlas = font->getAtlasTexture();
+        std::shared_ptr<Nova::TextureHandle> atlas = font->getAtlasTexture();
         check(atlas != nullptr, "fallback atlas was built");
         check(atlas && atlas->image != VK_NULL_HANDLE, "atlas holds a live VkImage");
 
@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
         // shared_ptr that outlives both the font and the release. releaseTexture
         // must zero the handle in place so this copy points at a null
         // TextureHandle rather than at destroyed Vulkan objects.
-        std::shared_ptr<NovaSpatial::TextureHandle> survivor = atlas;
+        std::shared_ptr<Nova::TextureHandle> survivor = atlas;
 
         if (explicit_release) {
             // releaseTexture takes the caller's shared_ptr by reference and

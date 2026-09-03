@@ -10,7 +10,7 @@
 #include <string>
 #include <utility>
 
-namespace Clouds {
+namespace Splash {
 
 /**
  * OATS-ffi exposes trait payloads through two different encodings.
@@ -392,4 +392,4 @@ inline void applyOatsNodeTrait(OatsHypergraphNode& node, const std::string& name
     else if (name == "parents") node.parents_json = data.get<std::string>();
 }
 
-} // namespace Clouds
+} // namespace Splash

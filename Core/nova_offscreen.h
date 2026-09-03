@@ -1,6 +1,6 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 //
-// Offscreen presentation mode (plan §D.2). NovaGraphics renders into an image
+// Offscreen presentation mode (plan §D.2). Graphics renders into an image
 // it was handed instead of a swapchain image it acquired, which is what lets
 // Vazio draw into a wlroots output buffer, a boot-splash target, or a probe's
 // readback image with no SDL window anywhere in the process.
@@ -10,15 +10,15 @@
 
 #include <vulkan/vulkan.h>
 #include <unordered_map>
-
+namespace Nova {
 /**
- * What an offscreen NovaGraphics needs to come up without a surface.
+ * What an offscreen Graphics needs to come up without a surface.
  *
  * No window, no VkSurfaceKHR, no swapchain: instance creation skips the SDL
  * surface extensions entirely and device selection asks for a graphics family
  * without asking for a present family.
  */
-struct NovaOffscreenConfig {
+struct OffscreenConfig {
     // Default render extent. Individual targets carry their own; this is what
     // window_extent reports and what a caller-supplied camera is sized against.
     VkExtent2D extent = { 0, 0 };
@@ -44,7 +44,7 @@ struct NovaOffscreenConfig {
  * `format`. Nova creates no view for a caller-supplied target and destroys
  * none; imported dmabufs are the exception and carry their own.
  */
-struct NovaRenderTarget {
+struct RenderTarget {
     VkImage image = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
     VkExtent2D extent = { 0, 0 };
@@ -71,7 +71,7 @@ struct NovaRenderTarget {
      * after the pass, which is what makes a driver flush any private
      * representation - on radv a DCC-compressed modifier image read back
      * WITHOUT this release comes out wrong, measured. Set automatically by
-     * NovaImportedImage::asRenderTarget(); an owned image needs it only if its
+     * ImportedImage::asRenderTarget(); an owned image needs it only if its
      * memory is exported.
      *
      * Requires VK_EXT_queue_family_foreign. Without it the release is skipped
@@ -99,7 +99,7 @@ struct NovaRenderTarget {
  * has nothing to discard. renderToImage() needs no such barrier - its render
  * pass already starts from UNDEFINED and clears.
  */
-struct NovaImportedImage {
+struct ImportedImage {
     VkImage image = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
     VkDeviceMemory memory[NOVA_DMABUF_MAX_PLANES] = {};
@@ -114,7 +114,7 @@ struct NovaImportedImage {
 
     // Ready to hand straight to renderToImage, with external_consumer set: an
     // imported buffer exists precisely to be read by someone outside Vulkan.
-    NovaRenderTarget asRenderTarget(VkImageLayout final_layout) const;
+    RenderTarget asRenderTarget(VkImageLayout final_layout) const;
 };
 
 /**
@@ -125,19 +125,19 @@ struct NovaImportedImage {
  * an imported output buffer is re-rendered every frame for the life of the
  * output and must not churn objects at that rate.
  */
-class NovaOffscreenTargets {
+class OffscreenTargets {
 public:
-    explicit NovaOffscreenTargets(VkDevice device) : device_(device) {}
-    ~NovaOffscreenTargets();
+    explicit OffscreenTargets(VkDevice device) : device_(device) {}
+    ~OffscreenTargets();
 
-    NovaOffscreenTargets(const NovaOffscreenTargets&) = delete;
-    NovaOffscreenTargets& operator=(const NovaOffscreenTargets&) = delete;
+    OffscreenTargets(const OffscreenTargets&) = delete;
+    OffscreenTargets& operator=(const OffscreenTargets&) = delete;
 
     // VK_NULL_HANDLE when the pass could not be created.
     VkRenderPass renderPass(VkFormat format, VkImageLayout final_layout);
 
     // VK_NULL_HANDLE when the framebuffer could not be created.
-    VkFramebuffer framebuffer(VkRenderPass pass, const NovaRenderTarget& target);
+    VkFramebuffer framebuffer(VkRenderPass pass, const RenderTarget& target);
 
     /**
      * Drop the framebuffer built over `view`.
@@ -160,3 +160,5 @@ private:
     std::unordered_map<uint64_t, VkRenderPass> passes_;
     std::unordered_map<VkImageView, FramebufferEntry> framebuffers_;
 };
+
+} // namespace Nova

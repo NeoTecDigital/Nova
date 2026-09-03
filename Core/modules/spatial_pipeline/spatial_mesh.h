@@ -9,9 +9,9 @@
 #include <vector>
 #include <memory>
 
-class NovaGraphics;
+namespace Nova {
 
-namespace NovaSpatial {
+class Graphics;
 
 struct MeshData {
     std::vector<SpatialVertex> vertices;
@@ -124,7 +124,7 @@ public:
     static constexpr size_t DEFAULT_VERTEX_CAPACITY = 65536;
     static constexpr size_t DEFAULT_INDEX_CAPACITY = 131072;
 
-    SpatialMeshBuffer(NovaCore* core,
+    SpatialMeshBuffer(Core* core,
                       size_t initial_vertex_count = DEFAULT_VERTEX_CAPACITY,
                       size_t initial_index_count = DEFAULT_INDEX_CAPACITY);
     ~SpatialMeshBuffer();
@@ -133,7 +133,7 @@ public:
     SpatialMeshBuffer& operator=(const SpatialMeshBuffer&) = delete;
 
     // Begin the frame-in-flight slot the graphics core is currently recording.
-    // Requires the core to be a NovaGraphics; throws otherwise.
+    // Requires the core to be a Graphics; throws otherwise.
     void beginFrame();
 
     // Begin an explicit frame-in-flight slot. The caller guarantees the GPU has
@@ -168,8 +168,8 @@ private:
         bool growth_pending = false;
     };
 
-    NovaCore* core_ = nullptr;
-    NovaGraphics* graphics_ = nullptr;
+    Core* core_ = nullptr;
+    Graphics* graphics_ = nullptr;
     VmaAllocator allocator_ = VK_NULL_HANDLE;
 
     std::vector<SpatialVertex> vertices_;
@@ -195,4 +195,4 @@ private:
     void copyToBuffer(const Buffer_T& buffer, const void* source, size_t byte_size);
 };
 
-} // namespace NovaSpatial
+} // namespace Nova

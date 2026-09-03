@@ -10,7 +10,7 @@
 
 namespace Clouds::UI {
 
-class UIWindow : public SpatialNode {
+class UIWindow : public Splash::SpatialNode {
 public:
     std::string title;
     glm::vec2 window_size; // Total window size including titlebar
@@ -19,11 +19,11 @@ public:
     std::function<void(UIWindow*)> on_focus_gained;
     std::function<void(UIWindow*)> on_close;
 
-    std::shared_ptr<SpatialNode> content_area;
+    std::shared_ptr<Splash::SpatialNode> content_area;
 
     UIWindow(const std::string& window_title,
              const glm::vec2& content_size,
-             std::shared_ptr<NovaSpatial::SpatialFont> font_ptr);
+             std::shared_ptr<Nova::SpatialFont> font_ptr);
     virtual ~UIWindow() = default;
 
     void setTitle(const std::string& new_title);
@@ -36,20 +36,20 @@ public:
     void close();
 
     // Interaction overrides
-    void onRayMove(const NovaMath::RayHit& hit) override;
-    void onRayButton(const NovaMath::RayHit& hit, uint32_t button, bool pressed) override;
+    void onRayMove(const Nova::Math::RayHit& hit) override;
+    void onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) override;
 
-    void collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) override;
+    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
-    std::shared_ptr<NovaSpatial::SpatialFont> font_;
+    std::shared_ptr<Nova::SpatialFont> font_;
 
     // Window chrome
-    std::shared_ptr<SpatialPanel> titlebar_panel_;
+    std::shared_ptr<Splash::SpatialPanel> titlebar_panel_;
     std::shared_ptr<UILabel> title_label_;
     std::shared_ptr<UIButton> min_button_;
     std::shared_ptr<UIButton> close_button_;
-    std::shared_ptr<SpatialPanel> body_panel_;
+    std::shared_ptr<Splash::SpatialPanel> body_panel_;
 
     // Dragging state
     bool is_dragging_ = false;
@@ -60,7 +60,7 @@ private:
     void buildBody(float body_h, float tb_h);
     void buildTitlebar(float body_h, float tb_h);
     void buildWindowControls();
-    void onLeftPress(const NovaMath::RayHit& hit);
+    void onLeftPress(const Nova::Math::RayHit& hit);
 };
 
 } // namespace Clouds::UI

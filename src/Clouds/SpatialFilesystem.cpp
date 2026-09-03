@@ -11,7 +11,7 @@ namespace Clouds {
 // ---------------------------------------------------------------------------
 // 3D Pill Mesh Generator Implementation
 // ---------------------------------------------------------------------------
-NovaSpatial::MeshData PillMeshGenerator::createPill(
+Nova::MeshData PillMeshGenerator::createPill(
     float radius,
     float cylinder_height,
     uint32_t radial_segments,
@@ -19,7 +19,7 @@ NovaSpatial::MeshData PillMeshGenerator::createPill(
     const glm::vec4& color,
     float render_mode
 ) {
-    NovaSpatial::MeshData mesh;
+    Nova::MeshData mesh;
     float half_h = cylinder_height * 0.5f;
 
     // 1. Top Hemisphere Vertices (Z from +half_h to +half_h + radius)
@@ -36,9 +36,9 @@ NovaSpatial::MeshData PillMeshGenerator::createPill(
             glm::vec3 normal(sin_phi * cos_theta, sin_phi * sin_theta, cos_phi);
             glm::vec3 pos = normal * radius + glm::vec3(0.0f, 0.0f, half_h);
 
-            NovaSpatial::SpatialVertex v;
-            v.state_primary = NovaMath::Hyper4(pos.x, pos.y, pos.z, 1.0f);
-            v.state_dual = NovaMath::Hyper4(color.r, color.g, color.b, color.a);
+            Nova::SpatialVertex v;
+            v.state_primary = Nova::Math::Hyper4(pos.x, pos.y, pos.z, 1.0f);
+            v.state_dual = Nova::Math::Hyper4(color.r, color.g, color.b, color.a);
             v.normal = normal;
             v.uv = glm::vec2(float(seg) / float(radial_segments), float(ring) / float(cap_rings * 2 + 1));
             v.params = glm::vec4(0.0f, 0.0f, render_mode, 1.0f);
@@ -60,9 +60,9 @@ NovaSpatial::MeshData PillMeshGenerator::createPill(
             glm::vec3 normal(sin_phi * cos_theta, sin_phi * sin_theta, cos_phi);
             glm::vec3 pos = normal * radius - glm::vec3(0.0f, 0.0f, half_h);
 
-            NovaSpatial::SpatialVertex v;
-            v.state_primary = NovaMath::Hyper4(pos.x, pos.y, pos.z, 1.0f);
-            v.state_dual = NovaMath::Hyper4(color.r, color.g, color.b, color.a);
+            Nova::SpatialVertex v;
+            v.state_primary = Nova::Math::Hyper4(pos.x, pos.y, pos.z, 1.0f);
+            v.state_dual = Nova::Math::Hyper4(color.r, color.g, color.b, color.a);
             v.normal = normal;
             v.uv = glm::vec2(float(seg) / float(radial_segments), 0.5f + float(ring) / float(cap_rings * 2 + 1));
             v.params = glm::vec4(0.0f, 0.0f, render_mode, 1.0f);
@@ -99,7 +99,7 @@ SpatialPillNode::SpatialPillNode(const std::string& name,
                                  const std::string& path,
                                  bool is_dir,
                                  uintmax_t size_bytes,
-                                 std::shared_ptr<NovaSpatial::SpatialFont> font_ptr)
+                                 std::shared_ptr<Nova::SpatialFont> font_ptr)
     : item_name(name), full_path(path), is_directory(is_dir), file_size(size_bytes), font_(font_ptr) {
     this->name = "3D Pill: " + item_name;
 
@@ -125,7 +125,7 @@ SpatialPillNode::SpatialPillNode(const std::string& name,
     size = glm::vec2(pill_radius * 2.0f, pill_height + pill_radius * 2.0f);
 
     if (font_) {
-        auto label_node = std::make_shared<SpatialLabel>(
+        auto label_node = std::make_shared<Splash::SpatialLabel>(
             item_name,
             font_,
             0.00045f,
@@ -144,7 +144,7 @@ void SpatialPillNode::setHovered(bool hov) {
     is_hovered = hov;
 }
 
-void SpatialPillNode::onRayEnter(const NovaMath::RayHit&) {
+void SpatialPillNode::onRayEnter(const Nova::Math::RayHit&) {
     setHovered(true);
 }
 
@@ -152,7 +152,7 @@ void SpatialPillNode::onRayLeave() {
     setHovered(false);
 }
 
-void SpatialPillNode::onRayButton(const NovaMath::RayHit&, uint32_t button, bool pressed) {
+void SpatialPillNode::onRayButton(const Nova::Math::RayHit&, uint32_t button, bool pressed) {
     if (button == 1 && pressed) {
         setSelected(true);
         if (on_select) {
@@ -170,8 +170,8 @@ void SpatialPillNode::update(float dt) {
     transform.orientation = idle_rot;
 }
 
-void SpatialPillNode::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
-                                   std::vector<SpatialRenderCommand>& out_commands) {
+void SpatialPillNode::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+                                   std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible) return;
 
     glm::vec4 active_color = base_color;
@@ -181,7 +181,7 @@ void SpatialPillNode::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
         active_color = base_color + glm::vec4(0.2f, 0.2f, 0.2f, 0.0f);
     }
 
-    NovaMath::QuatTransform world_xf = getWorldTransform();
+    Nova::Math::QuatTransform world_xf = getWorldTransform();
     glm::mat4 model = world_xf.toMatrix();
 
     const float render_mode = is_selected ? 2.0f : (is_hovered ? 1.0f : 0.0f);
@@ -197,14 +197,14 @@ void SpatialPillNode::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
         .index_count = idx_count
     });
 
-    SpatialNode::collectRender(mesh_buf, out_commands);
+    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
-const NovaSpatial::MeshData& SpatialPillNode::resolveMesh(const glm::vec4& color, float render_mode) {
+const Nova::MeshData& SpatialPillNode::resolveMesh(const glm::vec4& color, float render_mode) {
     // Regenerated only when a value that actually feeds createPill() moves.
     // Every field in the key is public, so keying on the values rather than a
     // dirty flag keeps the cache correct under direct mutation.
-    const NovaSpatial::MeshCache::Signature signature = {{
+    const Nova::MeshCache::Signature signature = {{
         pill_radius, pill_height,
         color.r, color.g, color.b, color.a,
         render_mode,
@@ -222,10 +222,10 @@ const NovaSpatial::MeshData& SpatialPillNode::resolveMesh(const glm::vec4& color
 // ---------------------------------------------------------------------------
 // SpatialFilesystem Implementation
 // ---------------------------------------------------------------------------
-SpatialFilesystem::SpatialFilesystem(std::shared_ptr<SpatialNode> root_scene_node,
-                                     std::shared_ptr<NovaSpatial::SpatialFont> font_ptr)
+SpatialFilesystem::SpatialFilesystem(std::shared_ptr<Splash::SpatialNode> root_scene_node,
+                                     std::shared_ptr<Nova::SpatialFont> font_ptr)
     : scene_root_(root_scene_node), font_(font_ptr) {
-    filesystem_3d_root_ = std::make_shared<SpatialNode>();
+    filesystem_3d_root_ = std::make_shared<Splash::SpatialNode>();
     filesystem_3d_root_->name = "SpatialFilesystem_Root";
     scene_root_->addChild(filesystem_3d_root_);
 }

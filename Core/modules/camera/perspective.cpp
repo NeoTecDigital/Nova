@@ -1,5 +1,5 @@
 #include "perspective.h"
-
+namespace Nova {
 Perspective::Perspective() 
     { perspective = CameraPerspective::FIRST_PERSON; }
 
@@ -31,3 +31,5 @@ glm::vec3 Perspective::getOffset(glm::mat4 rotation)
         
         return glm::vec3(glm::vec4(_perspective_offset, 1.0f) * rotation);
     }
+
+} // namespace Nova

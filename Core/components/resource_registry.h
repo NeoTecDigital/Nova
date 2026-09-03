@@ -5,7 +5,7 @@
 #include <vector>
 #include <string>
 
-namespace NovaRAII {
+namespace Nova::RAII {
 
 /**
  * Resource Registry for Dynamic Cleanup Injection
@@ -160,4 +160,4 @@ private:
     std::vector<Resource> resources;
 };
 
-} // namespace NovaRAII
+} // namespace Nova::RAII

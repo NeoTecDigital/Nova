@@ -12,7 +12,7 @@
  * Design Principle: "If you create it, register how to destroy it"
  */
 
-namespace NovaRAII {
+namespace Nova::RAII {
 
 // Generic RAII wrapper for Vulkan handles
 template<typename HandleType>
@@ -140,4 +140,4 @@ inline CommandPool createCommandPool(VkDevice device, uint32_t queueFamilyIndex,
     });
 }
 
-} // namespace NovaRAII
+} // namespace Nova::RAII

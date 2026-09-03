@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cstdlib>
 
-namespace Clouds {
+namespace Vazio {
 
 namespace {
 
@@ -36,10 +36,10 @@ int subsurfacePaintIndex(struct wlr_surface* parent, const struct wlr_subsurface
 
 } // namespace
 
-SpatialCompositor::SpatialCompositor(NovaCore* core,
-                                     NovaSpatial::TextureBridge* texture_bridge,
-                                     std::shared_ptr<SpatialScene> scene,
-                                     std::shared_ptr<SpatialNode> portal_root,
+SpatialCompositor::SpatialCompositor(Nova::Core* core,
+                                     Nova::TextureBridge* texture_bridge,
+                                     std::shared_ptr<Splash::SpatialScene> scene,
+                                     std::shared_ptr<Splash::SpatialNode> portal_root,
                                      SpatialCompositorConfig config)
     : core_(core), texture_bridge_(texture_bridge), scene_(scene),
       portal_root_(std::move(portal_root)), config_(config) {
@@ -51,10 +51,10 @@ SpatialCompositor::SpatialCompositor(NovaCore* core,
     pointer_y_ = output_box_.height * 0.5;
 }
 
-const std::shared_ptr<SpatialNode>& SpatialCompositor::portalRoot() const {
+const std::shared_ptr<Splash::SpatialNode>& SpatialCompositor::portalRoot() const {
     // A null portal root is the single-Desktop default, not an error: the scene
     // root is exactly the Portal a session with one Desktop would inject.
-    static const std::shared_ptr<SpatialNode> none;
+    static const std::shared_ptr<Splash::SpatialNode> none;
     if (portal_root_) return portal_root_;
     return scene_ ? scene_->root : none;
 }
@@ -247,7 +247,7 @@ void SpatialCompositor::focusSurface(struct wlr_surface* surface) {
     // A surface this session does not host has no node to focus; clearing the
     // scene's focus on its behalf would be inventing a decision nobody made.
     if (scene_) {
-        if (std::shared_ptr<SpatialSurfaceHost> host = hostNodeForSurface(surface)) {
+        if (std::shared_ptr<Splash::SpatialSurfaceHost> host = hostNodeForSurface(surface)) {
             scene_->setKeyboardFocus(std::move(host));
         }
     }
@@ -348,12 +348,12 @@ void SpatialCompositor::onNewSubsurface(struct wlr_surface* parent_surface, void
     hosted->surface = subsurface->surface;
     hosted->parent_surface = parent_surface;
 
-    std::shared_ptr<NovaSpatial::TextureHandle> fallback_texture;
+    std::shared_ptr<Nova::TextureHandle> fallback_texture;
     if (texture_bridge_) fallback_texture = texture_bridge_->getFallbackTexture();
 
     // Its own pixels and its own input, exactly like a popup: a subsurface is
     // a second buffer the client draws, not chrome this compositor owns.
-    hosted->surface_host = std::make_shared<SpatialSurfaceHost>(
+    hosted->surface_host = std::make_shared<Splash::SpatialSurfaceHost>(
         glm::vec2(kSubsurfaceFallbackExtent, kSubsurfaceFallbackExtent), fallback_texture);
     hosted->surface_host->name = "Subsurface";
     hosted->surface_host->claims_pointer_input = true;
@@ -385,7 +385,7 @@ void SpatialCompositor::onNewSubsurface(struct wlr_surface* parent_surface, void
 }
 
 void SpatialCompositor::placeSubsurfaceOnParent(SpatialSubsurface& sub) {
-    std::shared_ptr<SpatialSurfaceHost> anchor = hostNodeForSurface(sub.parent_surface);
+    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(sub.parent_surface);
     if (!anchor || !sub.surface_host || !sub.subsurface || !sub.surface || !sub.parent_surface) return;
 
     // Offset is parent-relative surface-local pixels, applied by the parent's
@@ -477,4 +477,4 @@ void SpatialCompositor::releaseBackendStack() {
     }
 }
 
-} // namespace Clouds
+} // namespace Vazio

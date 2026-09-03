@@ -2,18 +2,18 @@
 #include "Core/modules/atomic/atomic.h"
 
 #include <vector>
-
+namespace Nova {
 /*
-    The Pipeline class is a builder that allows for the creation of a graphics pipeline
+    The Builder class is a builder that allows for the creation of a graphics pipeline
     and is responsible for the creation of the pipeline layout, shaders, and other pipeline related
     configurations.
 */
 
 // TODO: Assert Singleton
-class Pipeline {
+class Builder {
     public:
-	    Pipeline();
-        ~Pipeline();
+	    Builder();
+        ~Builder();
 
         VkPipeline instance;
         VkPipelineLayout layout;
@@ -22,18 +22,18 @@ class Pipeline {
         VkImage texture_image;
         VkDeviceMemory texture_image_memory;
 
-        Pipeline& shaders(VkDevice*, const std::string& vert_path = "", const std::string& frag_path = "");
-        Pipeline& vertexInput();
-        Pipeline& inputAssembly();
-        Pipeline& viewportState();
-        Pipeline& rasterizer();
-        Pipeline& multisampling();
-        Pipeline& depthStencil();
-        Pipeline& colorBlending();
-        Pipeline& dynamicState();
-        Pipeline& createLayout(VkDevice*, VkDescriptorSetLayout*);
-        Pipeline& pipe(VkRenderPass*);
-        Pipeline& create(VkDevice*);
+        Builder& shaders(VkDevice*, const std::string& vert_path = "", const std::string& frag_path = "");
+        Builder& vertexInput();
+        Builder& inputAssembly();
+        Builder& viewportState();
+        Builder& rasterizer();
+        Builder& multisampling();
+        Builder& depthStencil();
+        Builder& colorBlending();
+        Builder& dynamicState();
+        Builder& createLayout(VkDevice*, VkDescriptorSetLayout*);
+        Builder& pipe(VkRenderPass*);
+        Builder& create(VkDevice*);
         void clear();
 
 
@@ -58,3 +58,5 @@ class Pipeline {
        
         void addShaderStage(VkShaderModule, VkShaderStageFlagBits);
 };
+
+} // namespace Nova

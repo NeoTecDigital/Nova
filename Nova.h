@@ -11,22 +11,22 @@
 
 #include <string>
 #include <future>
-
+namespace Nova {
 // The goal of this layer of abstraction is to create a friendly user implementation for creating a graphics engine, for future projects.
 
 // Forward declaration
 class SMFTEngine;
 
 // TODO: Cross Platform Support
-class Nova {
+class App {
     // Allow SMFTEngine to access private _architect for compute operations
     friend class SMFTEngine;
 
     public:
         bool initialized = false;
 
-        Nova(NovaConfig);
-        ~Nova();
+        App(Config);
+        ~App();
 
         // TODO: Determine Default Initializers
 
@@ -38,23 +38,23 @@ class Nova {
         Mode getMode() const { return _mode; }
 
         // Get appropriate interface
-        NovaCore* getCore();  // Base interface (compute or graphics)
-        NovaCompute* getCompute();  // Compute-only interface (nullptr if graphics mode)
-        NovaGraphics* getGraphics();  // Graphics interface (nullptr if compute mode)
+        Core* getCore();  // Base interface (compute or graphics)
+        Compute* getCompute();  // Compute-only interface (nullptr if graphics mode)
+        Graphics* getGraphics();  // Graphics interface (nullptr if compute mode)
         struct SDL_Window* getWindow() const { return _window; }
 
     private:
-        NovaConfig _config;
+        Config _config;
         bool _suspended = false;
         struct SDL_Window* _window = nullptr;
 
         // Mode-specific instances
         Mode _mode;
-        NovaCompute* _architect_compute = nullptr;
-        NovaGraphics* _architect_graphics = nullptr;
+        Compute* _architect_compute = nullptr;
+        Graphics* _architect_graphics = nullptr;
 
         // Legacy compatibility
-        NovaCore* _architect = nullptr;  // Points to either _architect_compute or _architect_graphics
+        Core* _architect = nullptr;  // Points to either _architect_compute or _architect_graphics
 
         VkDebugUtilsMessengerEXT _debug_messenger;
 
@@ -66,3 +66,5 @@ class Nova {
         void _resizeWindow();
         void _initGraphicsPipeline();
 };
+
+} // namespace Nova

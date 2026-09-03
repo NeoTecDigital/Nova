@@ -17,7 +17,7 @@
 
 #include <algorithm>
 
-namespace Clouds {
+namespace Vazio {
 
 namespace {
 
@@ -33,9 +33,9 @@ constexpr float kPopupDepthBias = 0.004f;
 constexpr float kPopupFallbackExtent = 0.3f;
 
 // Is `node` the subtree rooted at `root`, or anywhere inside it?
-bool nodeWithin(const std::shared_ptr<SpatialNode>& node, const std::shared_ptr<SpatialNode>& root) {
+bool nodeWithin(const std::shared_ptr<Splash::SpatialNode>& node, const std::shared_ptr<Splash::SpatialNode>& root) {
     if (!node || !root) return false;
-    for (std::shared_ptr<SpatialNode> walk = node; walk; walk = walk->parent.lock()) {
+    for (std::shared_ptr<Splash::SpatialNode> walk = node; walk; walk = walk->parent.lock()) {
         if (walk == root) return true;
     }
     return false;
@@ -215,14 +215,14 @@ void SpatialCompositor::onNewXdgPopup(void* data) {
     hosted->surface = surface;
     hosted->parent_surface = popup->parent;
 
-    std::shared_ptr<NovaSpatial::TextureHandle> fallback_texture;
+    std::shared_ptr<Nova::TextureHandle> fallback_texture;
     if (texture_bridge_) {
         fallback_texture = texture_bridge_->getFallbackTexture();
     }
 
     // A popup is its own pixels: no frame, no title, no chrome. Whatever a menu
     // wants around its edges, it draws.
-    hosted->surface_host = std::make_shared<SpatialSurfaceHost>(
+    hosted->surface_host = std::make_shared<Splash::SpatialSurfaceHost>(
         glm::vec2(kPopupFallbackExtent, kPopupFallbackExtent), fallback_texture);
     hosted->surface_host->name = "XdgPopup";
 
@@ -253,7 +253,7 @@ void SpatialCompositor::bindPopupListeners(SpatialXdgPopup& popup, struct wlr_su
                                        &surface->events.new_subsurface);
 }
 
-void SpatialCompositor::bindChildSurfaceInput(const std::shared_ptr<SpatialSurfaceHost>& host,
+void SpatialCompositor::bindChildSurfaceInput(const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
                                               struct wlr_surface* surface) {
     if (!host || !surface) return;
 
@@ -285,7 +285,7 @@ void SpatialCompositor::bindChildSurfaceInput(const std::shared_ptr<SpatialSurfa
     };
 }
 
-std::shared_ptr<SpatialSurfaceHost> SpatialCompositor::hostNodeForSurface(
+std::shared_ptr<Splash::SpatialSurfaceHost> SpatialCompositor::hostNodeForSurface(
         struct wlr_surface* surface) const {
     if (!surface) return nullptr;
 
@@ -304,7 +304,7 @@ std::shared_ptr<SpatialSurfaceHost> SpatialCompositor::hostNodeForSurface(
 }
 
 void SpatialCompositor::attachPopupToParent(SpatialXdgPopup& popup) {
-    std::shared_ptr<SpatialSurfaceHost> anchor = hostNodeForSurface(popup.parent_surface);
+    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(popup.parent_surface);
     if (!anchor || !popup.surface_host) {
         report(LOGGER::ERROR, "SpatialCompositor - Popup %u has no hosted parent node; not shown",
                popup.handle);
@@ -324,7 +324,7 @@ void SpatialCompositor::attachPopupToParent(SpatialXdgPopup& popup) {
 }
 
 void SpatialCompositor::detachPopupFromParent(SpatialXdgPopup& popup) {
-    std::shared_ptr<SpatialSurfaceHost> anchor = hostNodeForSurface(popup.parent_surface);
+    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(popup.parent_surface);
     if (!anchor || !popup.surface_host) return;
 
     anchor->removeChild(popup.surface_host);
@@ -340,7 +340,7 @@ void SpatialCompositor::detachPopupFromParent(SpatialXdgPopup& popup) {
 }
 
 void SpatialCompositor::attachSubsurfaceToParent(SpatialSubsurface& sub) {
-    std::shared_ptr<SpatialSurfaceHost> anchor = hostNodeForSurface(sub.parent_surface);
+    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(sub.parent_surface);
     if (!anchor || !sub.surface_host) {
         report(LOGGER::ERROR, "SpatialCompositor - Subsurface %u has no hosted parent; not shown", sub.handle);
         return;
@@ -352,15 +352,15 @@ void SpatialCompositor::attachSubsurfaceToParent(SpatialSubsurface& sub) {
 }
 
 void SpatialCompositor::detachSubsurfaceFromParent(SpatialSubsurface& sub) {
-    std::shared_ptr<SpatialSurfaceHost> anchor = hostNodeForSurface(sub.parent_surface);
+    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(sub.parent_surface);
     if (!anchor || !sub.surface_host) return;
 
     anchor->removeChild(sub.surface_host);
     report(LOGGER::INFO, "SpatialCompositor - Subsurface %u unmapped from its parent node", sub.handle);
 }
 
-void SpatialCompositor::placeChildOnParentQuad(SpatialSurfaceHost& child,
-                                               const SpatialSurfaceHost& anchor,
+void SpatialCompositor::placeChildOnParentQuad(Splash::SpatialSurfaceHost& child,
+                                               const Splash::SpatialSurfaceHost& anchor,
                                                const struct wlr_surface& parent_surface,
                                                const struct wlr_box& child_box,
                                                float depth_bias) {
@@ -385,7 +385,7 @@ void SpatialCompositor::placeChildOnParentQuad(SpatialSurfaceHost& child,
 }
 
 void SpatialCompositor::placePopupOnParent(SpatialXdgPopup& popup) {
-    std::shared_ptr<SpatialSurfaceHost> anchor = hostNodeForSurface(popup.parent_surface);
+    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(popup.parent_surface);
     if (!anchor || !popup.surface_host || !popup.popup || !popup.surface) return;
     if (!popup.parent_surface) return;
 
@@ -420,8 +420,8 @@ void SpatialCompositor::drainDestroyedSubsurfaces() { drainHostedChildren(pendin
 
 void SpatialCompositor::releaseSubsurfaces() { releaseHostedChildren(subsurfaces_, pending_destroy_subsurfaces_); }
 
-void SpatialCompositor::releaseChildHost(const std::shared_ptr<SpatialSurfaceHost>& host,
-                                        std::shared_ptr<NovaSpatial::TextureHandle>& texture) {
+void SpatialCompositor::releaseChildHost(const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
+                                        std::shared_ptr<Nova::TextureHandle>& texture) {
     if (host) {
         // The parent node may already be gone - a client that destroys its
         // toplevel takes its children with it - so detach from whatever parent
@@ -468,7 +468,7 @@ void SpatialCompositor::releaseHostedChildren(std::vector<std::shared_ptr<Child>
 
 void SpatialCompositor::dismissPopupsOutsidePointer() {
     if (popups_.empty() || !scene_) return;
-    const std::shared_ptr<SpatialNode> focus = scene_->getPointerFocus();
+    const std::shared_ptr<Splash::SpatialNode> focus = scene_->getPointerFocus();
 
     // Copied first: wlr_xdg_popup_destroy runs the popup's own destroy path,
     // which mutates popups_ underneath the iteration. Nested menus fall out of
@@ -494,4 +494,4 @@ void SpatialCompositor::drainDestroyedPopups() { drainHostedChildren(pending_des
 
 void SpatialCompositor::releasePopups() { releaseHostedChildren(popups_, pending_destroy_popups_); }
 
-} // namespace Clouds
+} // namespace Vazio

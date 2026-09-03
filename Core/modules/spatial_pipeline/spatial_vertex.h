@@ -5,14 +5,14 @@
 #include "Core/math/hyper_math.h"
 #include <array>
 
-namespace NovaSpatial {
+namespace Nova {
 
 /**
  * SpatialVertex - Aligned with dual [a,b,c,w] Hyper4 primordial structures
  */
 struct SpatialVertex {
-    NovaMath::Hyper4 state_primary{0.0f, 0.0f, 0.0f, 1.0f}; // [a, b, c, w]_0 : Spatial / (x, y, z, w) / (re0, im0)
-    NovaMath::Hyper4 state_dual{1.0f, 1.0f, 1.0f, 1.0f};    // [a, b, c, w]_1 : Chromatic / (r, g, b, a) / Phase Field
+    Nova::Math::Hyper4 state_primary{0.0f, 0.0f, 0.0f, 1.0f}; // [a, b, c, w]_0 : Spatial / (x, y, z, w) / (re0, im0)
+    Nova::Math::Hyper4 state_dual{1.0f, 1.0f, 1.0f, 1.0f};    // [a, b, c, w]_1 : Chromatic / (r, g, b, a) / Phase Field
     glm::vec3 normal{0.0f, 0.0f, 1.0f};
     glm::vec2 uv{0.0f};
     glm::vec4 params{0.0f}; // [border_thickness, corner_radius, render_mode, phase_factor]
@@ -69,4 +69,4 @@ struct SpatialPushConstants {
     glm::vec4 surface_dim; // [width, height, aspect, time]
 };
 
-} // namespace NovaSpatial
+} // namespace Nova

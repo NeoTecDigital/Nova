@@ -6,7 +6,7 @@ namespace Clouds::UI {
 
 UIWindow::UIWindow(const std::string& window_title,
                    const glm::vec2& content_size,
-                   std::shared_ptr<NovaSpatial::SpatialFont> font_ptr)
+                   std::shared_ptr<Nova::SpatialFont> font_ptr)
     : title(window_title), font_(font_ptr) {
     name = "UIWindow: " + title;
     window_size = glm::vec2(content_size.x, content_size.y + g_Theme.titlebar_height);
@@ -33,7 +33,7 @@ void UIWindow::setupChrome() {
 }
 
 void UIWindow::buildBody(float body_h, float tb_h) {
-    body_panel_ = std::make_shared<SpatialPanel>(
+    body_panel_ = std::make_shared<Splash::SpatialPanel>(
         glm::vec2(window_size.x, body_h),
         g_Theme.window_bg
     );
@@ -44,7 +44,7 @@ void UIWindow::buildBody(float body_h, float tb_h) {
     body_panel_->claims_pointer_input = false;
     addChild(body_panel_);
 
-    content_area = std::make_shared<SpatialNode>();
+    content_area = std::make_shared<Splash::SpatialNode>();
     content_area->name = "WindowContentArea";
     content_area->transform.position = glm::vec3(0.0f, 0.0f, 0.002f);
     // A container, not a surface: its default 1x1 extent describes nothing, so
@@ -54,7 +54,7 @@ void UIWindow::buildBody(float body_h, float tb_h) {
 }
 
 void UIWindow::buildTitlebar(float body_h, float tb_h) {
-    titlebar_panel_ = std::make_shared<SpatialPanel>(
+    titlebar_panel_ = std::make_shared<Splash::SpatialPanel>(
         glm::vec2(window_size.x, tb_h),
         g_Theme.window_titlebar_active
     );
@@ -129,22 +129,22 @@ void UIWindow::close() {
     }
 }
 
-void UIWindow::onRayMove(const NovaMath::RayHit& hit) {
+void UIWindow::onRayMove(const Nova::Math::RayHit& hit) {
     if (is_dragging_) {
         glm::vec3 delta = hit.world_point - drag_start_hit_;
         transform.position = drag_start_pos_ + delta;
     }
-    SpatialNode::onRayMove(hit);
+    Splash::SpatialNode::onRayMove(hit);
 }
 
-void UIWindow::onRayButton(const NovaMath::RayHit& hit, uint32_t button, bool pressed) {
+void UIWindow::onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) {
     if (button == 1) { // Left click
         pressed ? onLeftPress(hit) : (void)(is_dragging_ = false);
     }
-    SpatialNode::onRayButton(hit, button, pressed);
+    Splash::SpatialNode::onRayButton(hit, button, pressed);
 }
 
-void UIWindow::onLeftPress(const NovaMath::RayHit& hit) {
+void UIWindow::onLeftPress(const Nova::Math::RayHit& hit) {
     if (on_focus_gained) {
         on_focus_gained(this);
     }
@@ -161,10 +161,10 @@ void UIWindow::onLeftPress(const NovaMath::RayHit& hit) {
     drag_start_pos_ = transform.position;
 }
 
-void UIWindow::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
-                             std::vector<SpatialRenderCommand>& out_commands) {
+void UIWindow::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+                             std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible) return;
-    SpatialNode::collectRender(mesh_buf, out_commands);
+    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 } // namespace Clouds::UI

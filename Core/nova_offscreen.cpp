@@ -1,12 +1,12 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 //
-// Offscreen presentation mode (plan section D.2): NovaGraphics without SDL,
+// Offscreen presentation mode (plan section D.2): Graphics without SDL,
 // without a surface and without a swapchain. Kept out of nova_graphics.cpp so
 // neither file passes its size limit and so the SDL path stays readable as one
 // thing.
 
 #include "./nova_graphics.h"
-
+namespace Nova {
 // initialLayout is UNDEFINED because loadOp is CLEAR: nothing in the image
 // survives the frame, so neither the previous contents nor the previous layout
 // can matter, and an imported buffer needs no acquire barrier to be legal here.
@@ -71,9 +71,9 @@ static VkRenderPass buildOffscreenPass(VkDevice device, VkFormat format, VkImage
     return pass;
 }
 
-NovaRenderTarget NovaImportedImage::asRenderTarget(VkImageLayout target_layout) const
+RenderTarget ImportedImage::asRenderTarget(VkImageLayout target_layout) const
 {
-    NovaRenderTarget target = {};
+    RenderTarget target = {};
     target.image = image;
     target.view = view;
     target.extent = extent;
@@ -88,12 +88,12 @@ NovaRenderTarget NovaImportedImage::asRenderTarget(VkImageLayout target_layout) 
     // RENDER PASS / FB CACHING  //
     ///////////////////////////////
 
-NovaOffscreenTargets::~NovaOffscreenTargets()
+OffscreenTargets::~OffscreenTargets()
 {
     destroy();
 }
 
-VkRenderPass NovaOffscreenTargets::renderPass(VkFormat format, VkImageLayout final_layout)
+VkRenderPass OffscreenTargets::renderPass(VkFormat format, VkImageLayout final_layout)
 {
     const uint64_t key = (static_cast<uint64_t>(format) << 32) | static_cast<uint32_t>(final_layout);
 
@@ -116,7 +116,7 @@ VkRenderPass NovaOffscreenTargets::renderPass(VkFormat format, VkImageLayout fin
     return pass;
 }
 
-VkFramebuffer NovaOffscreenTargets::framebuffer(VkRenderPass pass, const NovaRenderTarget& target)
+VkFramebuffer OffscreenTargets::framebuffer(VkRenderPass pass, const RenderTarget& target)
 {
     auto found = framebuffers_.find(target.view);
     if (found != framebuffers_.end()) {
@@ -153,7 +153,7 @@ VkFramebuffer NovaOffscreenTargets::framebuffer(VkRenderPass pass, const NovaRen
     return framebuffer;
 }
 
-void NovaOffscreenTargets::invalidate(VkImageView view)
+void OffscreenTargets::invalidate(VkImageView view)
 {
     auto found = framebuffers_.find(view);
     if (found == framebuffers_.end()) {
@@ -164,7 +164,7 @@ void NovaOffscreenTargets::invalidate(VkImageView view)
     framebuffers_.erase(found);
 }
 
-void NovaOffscreenTargets::destroy()
+void OffscreenTargets::destroy()
 {
     for (auto& entry : framebuffers_) {
         vkDestroyFramebuffer(device_, entry.second.framebuffer, nullptr);
@@ -181,8 +181,8 @@ void NovaOffscreenTargets::destroy()
     // OFFSCREEN CONSTRUCTION    //
     ///////////////////////////////
 
-NovaGraphics::NovaGraphics(const NovaOffscreenConfig& config, const std::string& debug_level)
-    : NovaCore(debug_level), offscreen_mode(true)
+Graphics::Graphics(const OffscreenConfig& config, const std::string& debug_level)
+    : Core(debug_level), offscreen_mode(true)
 {
     report(LOGGER::INFO, "NovaGraphics - Initializing offscreen mode (no surface) ..");
 
@@ -191,7 +191,7 @@ NovaGraphics::NovaGraphics(const NovaOffscreenConfig& config, const std::string&
     // No SDL, so no VK_KHR_surface / VK_KHR_*_surface at instance level.
     createVulkanInstance({});
 
-    NovaDeviceRequest request = {};
+    DeviceRequest request = {};
     request.need_presentation = false;
     request.need_graphics = true;
     request.drm_fd = config.drm_fd;
@@ -202,7 +202,7 @@ NovaGraphics::NovaGraphics(const NovaOffscreenConfig& config, const std::string&
             VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
             VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
             // Not part of the import trio: needed to hand a rendered buffer
-            // back to a consumer outside this device (NovaRenderTarget::
+            // back to a consumer outside this device (RenderTarget::
             // external_consumer). Import works without it; hand-off may not.
             VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME
         };
@@ -217,7 +217,7 @@ NovaGraphics::NovaGraphics(const NovaOffscreenConfig& config, const std::string&
     // the one every offscreen submission uses.
     vkGetDeviceQueue(logical_device, queues.indices.graphics_family.value(), 0, &graphics_queue);
 
-    offscreen_targets = std::make_unique<NovaOffscreenTargets>(logical_device);
+    offscreen_targets = std::make_unique<OffscreenTargets>(logical_device);
     createOffscreenFrameSyncObjects();
     registerOffscreenCleanup();
 
@@ -225,7 +225,7 @@ NovaGraphics::NovaGraphics(const NovaOffscreenConfig& config, const std::string&
            supportsDmabufImport() ? "available" : "unavailable");
 }
 
-void NovaGraphics::createOffscreenFrameSyncObjects()
+void Graphics::createOffscreenFrameSyncObjects()
 {
     report(LOGGER::VLINE, "\t .. Creating Offscreen Frame Sync Objects ..");
 
@@ -266,20 +266,20 @@ void NovaGraphics::createOffscreenFrameSyncObjects()
 // A TRIPWIRE, not a cleanup - and the distinction is the whole fix.
 //
 // Everything the offscreen state consists of (offscreen_targets,
-// imported_images) is a NovaGraphics member, but resource_registry belongs to
-// NovaCore. The registry drains from ~NovaCore, which runs AFTER every
-// NovaGraphics member has been destroyed, so a cleanup function placed here
+// imported_images) is a Graphics member, but resource_registry belongs to
+// Core. The registry drains from ~Core, which runs AFTER every
+// Graphics member has been destroyed, so a cleanup function placed here
 // could only ever touch freed storage: survivable at -O0 by accident, a double
 // free at -O2.
 //
-// So ~NovaGraphics does the release itself, in its own destructor body, where
+// So ~Graphics does the release itself, in its own destructor body, where
 // nothing of this object has been destroyed yet, and then drops this entry
-// unrun. Reaching this lambda therefore means ~NovaGraphics did NOT run - the
+// unrun. Reaching this lambda therefore means ~Graphics did NOT run - the
 // only way being a constructor that threw after this registration - which is
 // exactly the state in which touching the members would be a use-after-free.
 // Reporting is the correct action there; the objects are released with the
 // device a few registry entries later.
-void NovaGraphics::registerOffscreenCleanup()
+void Graphics::registerOffscreenCleanup()
 {
     resource_registry.register_resource(kOffscreenCleanupKey, []() {
         report(LOGGER::ERROR,
@@ -288,7 +288,7 @@ void NovaGraphics::registerOffscreenCleanup()
     });
 }
 
-void NovaGraphics::destroyOffscreenState()
+void Graphics::destroyOffscreenState()
 {
     // One idle wait covers every outstanding import; releaseImportedImage()
     // would also mutate the vector being walked.
@@ -296,7 +296,7 @@ void NovaGraphics::destroyOffscreenState()
         vkDeviceWaitIdle(logical_device);
     }
 
-    for (NovaImportedImage& imported : imported_images) {
+    for (ImportedImage& imported : imported_images) {
         destroyImportedResources(imported);
     }
     imported_images.clear();
@@ -311,7 +311,7 @@ void NovaGraphics::destroyOffscreenState()
     // OFFSCREEN FRAME           //
     ///////////////////////////////
 
-VkRenderPass NovaGraphics::getOffscreenRenderPass(VkFormat format, VkImageLayout final_layout)
+VkRenderPass Graphics::getOffscreenRenderPass(VkFormat format, VkImageLayout final_layout)
 {
     if (!offscreen_targets) {
         report(LOGGER::ERROR, "getOffscreenRenderPass: offscreen targets unavailable on this instance");
@@ -321,7 +321,7 @@ VkRenderPass NovaGraphics::getOffscreenRenderPass(VkFormat format, VkImageLayout
     return offscreen_targets->renderPass(format, final_layout);
 }
 
-bool NovaGraphics::waitForRender(VkFence fence, uint64_t timeout_ns)
+bool Graphics::waitForRender(VkFence fence, uint64_t timeout_ns)
 {
     if (fence == VK_NULL_HANDLE) {
         return false;
@@ -335,7 +335,7 @@ bool NovaGraphics::waitForRender(VkFence fence, uint64_t timeout_ns)
 static void recordOffscreenPass(VkCommandBuffer cmd,
                                 VkRenderPass pass,
                                 VkFramebuffer framebuffer,
-                                const NovaRenderTarget& target,
+                                const RenderTarget& target,
                                 uint32_t slot,
                                 const std::function<void(VkCommandBuffer, uint32_t)>& render_callback)
 {
@@ -382,7 +382,7 @@ static void recordOffscreenPass(VkCommandBuffer cmd,
  * Measured: without this, a DCC-modifier dmabuf reads back wrong.
  */
 static void releaseToForeignConsumer(VkCommandBuffer cmd,
-                                     const NovaRenderTarget& target,
+                                     const RenderTarget& target,
                                      uint32_t graphics_family)
 {
     VkImageMemoryBarrier release = {
@@ -411,7 +411,7 @@ static void releaseToForeignConsumer(VkCommandBuffer cmd,
 
 // The pass and framebuffer this target needs, both from the cache. False when
 // the target is unusable or either object could not be produced.
-bool NovaGraphics::resolveOffscreenTarget(const NovaRenderTarget& target,
+bool Graphics::resolveOffscreenTarget(const RenderTarget& target,
                                           VkRenderPass& pass_out,
                                           VkFramebuffer& framebuffer_out)
 {
@@ -449,7 +449,7 @@ static VkCommandBuffer beginOffscreenRecording(FrameData& frame)
     return cmd;
 }
 
-VkFence NovaGraphics::renderToImage(const NovaRenderTarget& target,
+VkFence Graphics::renderToImage(const RenderTarget& target,
                                     std::function<void(VkCommandBuffer, uint32_t)>&& render_callback)
 {
     VkRenderPass pass = VK_NULL_HANDLE;
@@ -494,3 +494,5 @@ VkFence NovaGraphics::renderToImage(const NovaRenderTarget& target,
     frame_ct++;
     return frame.in_flight;
 }
+
+} // namespace Nova

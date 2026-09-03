@@ -8,7 +8,7 @@
 
 #include <unistd.h>
 #include <vector>
-
+namespace Nova {
 
 /**
  * The image itself.
@@ -25,15 +25,15 @@
  * UNDEFINED - the same idiom wlroots' Vulkan renderer uses for dmabuf textures.
  *
  * `disjoint` is about how many BUFFERS back the image, never how many planes
- * the modifier declares. See novaPlanesShareOneBuffer().
+ * the modifier declares. See planesShareOneBuffer().
  */
 static VkImage createImportImage(VkDevice device,
-                                 const NovaDmabufAttributes& attrs,
+                                 const DmabufAttributes& attrs,
                                  VkFormat format,
                                  bool disjoint)
 {
     std::vector<VkSubresourceLayout> layouts;
-    novaFillPlaneLayouts(attrs, layouts);
+    fillPlaneLayouts(attrs, layouts);
 
     VkImageDrmFormatModifierExplicitCreateInfoEXT modifier_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT,
@@ -75,11 +75,11 @@ static VkImage createImportImage(VkDevice device,
 }
 
 // Requirements for the whole image, or for one memory plane when disjoint.
-static VkMemoryRequirements novaPlaneRequirements(VkDevice device, VkImage image, int plane, bool disjoint)
+static VkMemoryRequirements planeRequirements(VkDevice device, VkImage image, int plane, bool disjoint)
 {
     VkImagePlaneMemoryRequirementsInfo plane_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO,
-        .planeAspect = novaMemoryPlaneAspect(plane)
+        .planeAspect = memoryPlaneAspect(plane)
     };
 
     VkImageMemoryRequirementsInfo2 info = {
@@ -97,9 +97,9 @@ static VkMemoryRequirements novaPlaneRequirements(VkDevice device, VkImage image
 // One VkDeviceMemory per fd. The fd is dup'ed because a successful
 // vkAllocateMemory takes ownership of the descriptor it was handed.
 // A memory type the image and the fd both accept, or UINT32_MAX.
-uint32_t NovaGraphics::importMemoryTypeFor(int fd, const VkMemoryRequirements& requirements)
+uint32_t Graphics::importMemoryTypeFor(int fd, const VkMemoryRequirements& requirements)
 {
-    PFN_vkGetMemoryFdPropertiesKHR get_fd_properties = novaLoadGetMemoryFdProperties(logical_device);
+    PFN_vkGetMemoryFdPropertiesKHR get_fd_properties = loadGetMemoryFdProperties(logical_device);
     if (get_fd_properties == nullptr) {
         report(LOGGER::ERROR, "dmabuf import: vkGetMemoryFdPropertiesKHR unavailable");
         return UINT32_MAX;
@@ -112,7 +112,7 @@ uint32_t NovaGraphics::importMemoryTypeFor(int fd, const VkMemoryRequirements& r
         return UINT32_MAX;
     }
 
-    const uint32_t type_index = novaFirstAllowedMemoryType(
+    const uint32_t type_index = firstAllowedMemoryType(
         physical_device, requirements.memoryTypeBits & fd_properties.memoryTypeBits);
     if (type_index == UINT32_MAX) {
         report(LOGGER::ERROR, "dmabuf import: no memory type satisfies both image and fd");
@@ -121,7 +121,7 @@ uint32_t NovaGraphics::importMemoryTypeFor(int fd, const VkMemoryRequirements& r
     return type_index;
 }
 
-VkDeviceMemory NovaGraphics::importPlaneMemory(VkImage image, int fd, const VkMemoryRequirements& requirements)
+VkDeviceMemory Graphics::importPlaneMemory(VkImage image, int fd, const VkMemoryRequirements& requirements)
 {
     const uint32_t type_index = importMemoryTypeFor(fd, requirements);
     if (type_index == UINT32_MAX) {
@@ -167,13 +167,13 @@ VkDeviceMemory NovaGraphics::importPlaneMemory(VkImage image, int fd, const VkMe
 
 // One plane's VkDeviceMemory, recorded on the image so teardown frees it even
 // if a later plane fails.
-VkDeviceMemory NovaGraphics::importOnePlane(NovaImportedImage& imported,
-                                            const NovaDmabufAttributes& attrs,
+VkDeviceMemory Graphics::importOnePlane(ImportedImage& imported,
+                                            const DmabufAttributes& attrs,
                                             int plane,
                                             bool disjoint)
 {
     const VkMemoryRequirements requirements =
-        novaPlaneRequirements(logical_device, imported.image, plane, disjoint);
+        planeRequirements(logical_device, imported.image, plane, disjoint);
 
     if (requirements.size == 0) {
         report(LOGGER::ERROR,
@@ -190,8 +190,8 @@ VkDeviceMemory NovaGraphics::importOnePlane(NovaImportedImage& imported,
     return memory;
 }
 
-bool NovaGraphics::bindImportedMemory(NovaImportedImage& imported,
-                                      const NovaDmabufAttributes& attrs,
+bool Graphics::bindImportedMemory(ImportedImage& imported,
+                                      const DmabufAttributes& attrs,
                                       bool disjoint)
 {
     std::vector<VkBindImageMemoryInfo> binds;
@@ -207,7 +207,7 @@ bool NovaGraphics::bindImportedMemory(NovaImportedImage& imported,
 
         plane_binds.push_back(VkBindImagePlaneMemoryInfo{
             .sType = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO,
-            .planeAspect = novaMemoryPlaneAspect(plane)
+            .planeAspect = memoryPlaneAspect(plane)
         });
 
         binds.push_back(VkBindImageMemoryInfo{
@@ -234,21 +234,21 @@ bool NovaGraphics::bindImportedMemory(NovaImportedImage& imported,
 }
 
 // Every gate an import must clear before an object is created.
-bool NovaGraphics::dmabufImportAccepted(const NovaDmabufAttributes& attrs, VkFormat& format_out)
+bool Graphics::dmabufImportAccepted(const DmabufAttributes& attrs, VkFormat& format_out)
 {
     if (!supportsDmabufImport()) {
         report(LOGGER::ERROR, "dmabuf import: external-memory extensions are not enabled on this device");
         return false;
     }
 
-    if (!novaValidateDmabufRequest(attrs, format_out)) {
+    if (!validateDmabufRequest(attrs, format_out)) {
         return false;
     }
 
     uint32_t modifier_planes = 0;
-    if (!novaModifierPlaneCount(physical_device, format_out, attrs.modifier, modifier_planes)) {
+    if (!modifierPlaneCount(physical_device, format_out, attrs.modifier, modifier_planes)) {
         report(LOGGER::ERROR, "dmabuf import: %s + modifier 0x%llx unsupported on this device",
-               novaDrmFormatName(attrs.drm_format),
+               drmFormatName(attrs.drm_format),
                static_cast<unsigned long long>(attrs.modifier));
         return false;
     }
@@ -259,23 +259,23 @@ bool NovaGraphics::dmabufImportAccepted(const NovaDmabufAttributes& attrs, VkFor
         return false;
     }
 
-    if (!novaImportableAsDmabuf(physical_device, format_out, attrs.modifier)) {
+    if (!importableAsDmabuf(physical_device, format_out, attrs.modifier)) {
         report(LOGGER::ERROR, "dmabuf import: %s is not importable as a colour attachment here",
-               novaDrmFormatName(attrs.drm_format));
+               drmFormatName(attrs.drm_format));
         return false;
     }
 
     return true;
 }
 
-bool NovaGraphics::importDmabufAsImage(const NovaDmabufAttributes& attrs, NovaImportedImage& out)
+bool Graphics::importDmabufAsImage(const DmabufAttributes& attrs, ImportedImage& out)
 {
     VkFormat format = VK_FORMAT_UNDEFINED;
     if (!dmabufImportAccepted(attrs, format)) {
         return false;
     }
 
-    NovaImportedImage imported = {};
+    ImportedImage imported = {};
     imported.format = format;
     imported.extent = { attrs.width, attrs.height };
     imported.modifier = attrs.modifier;
@@ -283,7 +283,7 @@ bool NovaGraphics::importDmabufAsImage(const NovaDmabufAttributes& attrs, NovaIm
 
     // DISJOINT is about how many BUFFERS back the image, not how many planes
     // the modifier has. Several planes inside one dmabuf are one allocation.
-    const bool disjoint = attrs.plane_count > 1 && !novaPlanesShareOneBuffer(attrs);
+    const bool disjoint = attrs.plane_count > 1 && !planesShareOneBuffer(attrs);
 
     imported.image = createImportImage(logical_device, attrs, format, disjoint);
     if (imported.image == VK_NULL_HANDLE) {
@@ -300,14 +300,14 @@ bool NovaGraphics::importDmabufAsImage(const NovaDmabufAttributes& attrs, NovaIm
     trackImportedImage(out);
 
     report(LOGGER::INFO, "dmabuf imported: %ux%u %s modifier 0x%llx, %d plane(s)%s",
-           attrs.width, attrs.height, novaDrmFormatName(attrs.drm_format),
+           attrs.width, attrs.height, drmFormatName(attrs.drm_format),
            static_cast<unsigned long long>(attrs.modifier), attrs.plane_count,
            disjoint ? ", disjoint" : "");
 
     return true;
 }
 
-bool NovaGraphics::createImportedView(NovaImportedImage& imported)
+bool Graphics::createImportedView(ImportedImage& imported)
 {
     VkImageViewCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -339,12 +339,12 @@ bool NovaGraphics::createImportedView(NovaImportedImage& imported)
     return true;
 }
 
-void NovaGraphics::trackImportedImage(const NovaImportedImage& imported)
+void Graphics::trackImportedImage(const ImportedImage& imported)
 {
     imported_images.push_back(imported);
 }
 
-void NovaGraphics::destroyImportedResources(NovaImportedImage& imported)
+void Graphics::destroyImportedResources(ImportedImage& imported)
 {
     if (imported.view != VK_NULL_HANDLE) {
         if (offscreen_targets) {
@@ -368,7 +368,7 @@ void NovaGraphics::destroyImportedResources(NovaImportedImage& imported)
     imported.memory_count = 0;
 }
 
-void NovaGraphics::releaseImportedImage(NovaImportedImage& imported)
+void Graphics::releaseImportedImage(ImportedImage& imported)
 {
     // Same rule as TextureBridge::releaseTexture: a destroy cannot be ordered
     // by a barrier, so everything referencing it must already have retired.
@@ -388,3 +388,5 @@ void NovaGraphics::releaseImportedImage(NovaImportedImage& imported)
         }
     }
 }
+
+} // namespace Nova

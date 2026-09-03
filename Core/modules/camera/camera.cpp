@@ -2,7 +2,7 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
 #include <glm/gtx/quaternion.hpp>
-
+namespace Nova {
 static const float ACCELERATOR = 0.0005f;
 const float TURN_MAX_VELOCITY = 0.5f;
 const float MAX_VELOCITY = 2.3f;
@@ -93,3 +93,5 @@ void Camera::processEvents(SDL_Event& e)
                 pitch += (float)e.motion.yrel / 200.f;
             }
     }
+
+} // namespace Nova

@@ -40,7 +40,7 @@ constexpr int kInactiveDispatchMs = 50;
  * 0.997 cores at timeout 0, 0.0001 cores at timeout 50, and a dispatch that
  * would have waited a second returns in 301ms when a client connects at 300ms.
  */
-bool dispatchDisplay(Clouds::SpatialCompositor& compositor) {
+bool dispatchDisplay(Vazio::SpatialCompositor& compositor) {
     const bool active = compositor.isSessionActive();
     compositor.iterateEventLoop(active ? 0 : kInactiveDispatchMs);
     return active;
@@ -102,8 +102,8 @@ CommandLine parseCommandLine(int argc, char** argv) {
  * Unmapped keys are dropped, not guessed: a wrong keycode types the wrong
  * character into a client, which is worse than typing nothing.
  */
-void forwardKeyToCompositor(Clouds::SpatialCompositor& compositor,
-                            Clouds::SpatialScene& scene,
+void forwardKeyToCompositor(Vazio::SpatialCompositor& compositor,
+                            Splash::SpatialScene& scene,
                             const SDL_KeyboardEvent& key,
                             bool pressed) {
     const uint32_t evdev = CloudsInterim::sdlScancodeToEvdev(key.keysym.scancode);
@@ -130,7 +130,7 @@ int main(int argc, char** argv) {
     report(LOGGER::INFO, "  Dear ImGui Engine Controller & 3D Pill Tree Explorer   ");
     report(LOGGER::INFO, "=========================================================");
 
-    NovaConfig config = {
+    Nova::Config config = {
         .name = "Clouds 3D Spatial Engine",
         .screen = { 1600, 1000 },
         .debug_level = "INFO",
@@ -140,13 +140,13 @@ int main(int argc, char** argv) {
     };
 
     // Initialize Nova Vulkan Graphics Engine
-    auto nova = std::make_unique<Nova>(config);
+    auto nova = std::make_unique<Nova::App>(config);
     if (!nova->initialized) {
         report(LOGGER::ERROR, "Failed to initialize Nova Vulkan Engine");
         return 1;
     }
 
-    NovaGraphics* graphics = nova->getGraphics();
+    Nova::Graphics* graphics = nova->getGraphics();
     if (!graphics) {
         report(LOGGER::ERROR, "Graphics context unavailable");
         return 1;
@@ -154,20 +154,20 @@ int main(int argc, char** argv) {
 
     SDL_Window* sdl_window = nova->getWindow();
 
-    // Initialize Nova Spatial Texture & Pipeline Bridge
-    auto texture_bridge = std::make_unique<NovaSpatial::TextureBridge>(graphics);
+    // Initialize Nova Spatial Texture & Builder Bridge
+    auto texture_bridge = std::make_unique<Nova::TextureBridge>(graphics);
     texture_bridge->initialize();
 
-    // Construct 3D Quaternionic Vulkan Graphics Pipeline
-    auto pipeline = std::make_unique<NovaSpatial::SpatialPipeline>(graphics, graphics->getRenderPass(), texture_bridge.get());
+    // Construct 3D Quaternionic Vulkan Graphics Builder
+    auto pipeline = std::make_unique<Nova::SpatialPipeline>(graphics, graphics->getRenderPass(), texture_bridge.get());
     pipeline->build("shaders/spatial/spatial_ui_vert.spv", "shaders/spatial/spatial_ui_frag.spv");
 
     // Initialize 3D Spatial Scene
-    auto scene = std::make_shared<Clouds::SpatialScene>(graphics, texture_bridge.get());
+    auto scene = std::make_shared<Splash::SpatialScene>(graphics, texture_bridge.get());
     scene->initialize();
 
     // Initialize Rust OATS-rs FFI Delta Bridge
-    auto oats_bridge = std::make_shared<Clouds::OatsBridge>();
+    auto oats_bridge = std::make_shared<Splash::OatsBridge>();
     if (!oats_bridge->initialize()) {
         report(LOGGER::ERROR, "Failed to initialize OATS-rs FFI bridge - runtime unavailable");
         return 1;
@@ -191,12 +191,12 @@ int main(int argc, char** argv) {
     // Initialize wlroots Wayland Display Server. The scene root doubles as the
     // portal root while this session hosts exactly one Desktop; a real Portal
     // node substitutes here without the compositor knowing the difference.
-    const Clouds::SpatialCompositorConfig compositor_config = {
+    const Vazio::SpatialCompositorConfig compositor_config = {
         .headless = cli.headless,
         .virtual_width = static_cast<uint32_t>(config.screen.width),
         .virtual_height = static_cast<uint32_t>(config.screen.height)
     };
-    auto compositor = std::make_unique<Clouds::SpatialCompositor>(
+    auto compositor = std::make_unique<Vazio::SpatialCompositor>(
         graphics, texture_bridge.get(), scene, scene->root, compositor_config);
     if (!compositor->startServer("wayland-clouds-0")) {
         report(LOGGER::ERROR, "Failed to start the Wayland display server - no socket to host clients on");

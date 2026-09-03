@@ -2,14 +2,14 @@
 //
 // Nova's DMA-BUF vocabulary. Deliberately free of wlroots and libdrm headers:
 // Core is the drawing layer and must not depend on the client transport, so the
-// Clouds layer translates wlr_dmabuf_attributes into NovaDmabufAttributes.
+// Vazio layer translates wlr_dmabuf_attributes into DmabufAttributes.
 // The fourcc codes below are ABI, not API - their values are fixed by the
 // Linux DRM format definitions and cannot drift.
 #pragma once
 
 #include <vulkan/vulkan.h>
 #include <cstdint>
-
+namespace Nova {
 // Little-endian packing of a DRM fourcc, identical to drm_fourcc.h's fourcc_code.
 #define NOVA_FOURCC(a, b, c, d)                                      \
     (static_cast<uint32_t>(a) | (static_cast<uint32_t>(b) << 8) |    \
@@ -22,7 +22,7 @@ static constexpr uint64_t NOVA_DRM_FORMAT_MOD_LINEAR = 0ULL;
 // A DRM format names channels in the order of a little-endian machine WORD; a
 // Vulkan non-packed format names them in increasing MEMORY address. That is why
 // XRGB8888 (word x,R,G,B) maps to B8G8R8A8 (bytes B,G,R,X) and not the reverse.
-enum NovaDrmFormat : uint32_t {
+enum DrmFormat : uint32_t {
     NOVA_DRM_FORMAT_XRGB8888     = NOVA_FOURCC('X', 'R', '2', '4'),
     NOVA_DRM_FORMAT_ARGB8888     = NOVA_FOURCC('A', 'R', '2', '4'),
     NOVA_DRM_FORMAT_XBGR8888     = NOVA_FOURCC('X', 'B', '2', '4'),
@@ -41,7 +41,7 @@ enum NovaDrmFormat : uint32_t {
 
 static constexpr int NOVA_DMABUF_MAX_PLANES = 4;
 
-struct NovaDmabufPlane {
+struct DmabufPlane {
     // Borrowed for the duration of the import call only: Nova dups every fd it
     // keeps, so the caller still owns and must close the fds it passed in.
     int fd = -1;
@@ -56,13 +56,13 @@ struct NovaDmabufPlane {
  * vendor-defined layout, LINEAR means linear, and any other value must be
  * honoured exactly.
  */
-struct NovaDmabufAttributes {
+struct DmabufAttributes {
     uint32_t width = 0;
     uint32_t height = 0;
     uint32_t drm_format = 0;
     uint64_t modifier = NOVA_DRM_FORMAT_MOD_INVALID;
     int plane_count = 0;
-    NovaDmabufPlane planes[NOVA_DMABUF_MAX_PLANES] = {};
+    DmabufPlane planes[NOVA_DMABUF_MAX_PLANES] = {};
 };
 
 /**
@@ -72,7 +72,7 @@ struct NovaDmabufAttributes {
  * ARGB8888 share VK_FORMAT_B8G8R8A8_UNORM, so the reverse lookup has to pick,
  * and it picks the alpha-bearing code.
  */
-struct NovaFormatMapping {
+struct FormatMapping {
     uint32_t drm_format;
     VkFormat vk_format;
     bool has_alpha;
@@ -80,18 +80,20 @@ struct NovaFormatMapping {
 };
 
 // The table itself, so callers can advertise exactly what Nova can import.
-const NovaFormatMapping* novaFormatTable(uint32_t& count_out);
+const FormatMapping* formatTable(uint32_t& count_out);
 
 // DRM fourcc -> VkFormat. VK_FORMAT_UNDEFINED when the code is not in the table.
-VkFormat novaVulkanFormatFromDrm(uint32_t drm_format);
+VkFormat vulkanFormatFromDrm(uint32_t drm_format);
 
 // VkFormat -> DRM fourcc, preferring the alpha-bearing code. 0 when unmapped.
-uint32_t novaDrmFormatFromVulkan(VkFormat format);
+uint32_t drmFormatFromVulkan(VkFormat format);
 
 // True when the fourcc carries a defined alpha channel (ARGB yes, XRGB no).
-bool novaDrmFormatHasAlpha(uint32_t drm_format);
+bool drmFormatHasAlpha(uint32_t drm_format);
 
 // "XR24"-style spelling of any fourcc, table member or not. Unknown codes are
 // rendered into a thread_local scratch buffer valid until this thread's next
 // call, so a log line must be formatted before the next lookup.
-const char* novaDrmFormatName(uint32_t drm_format);
+const char* drmFormatName(uint32_t drm_format);
+
+} // namespace Nova

@@ -11,20 +11,20 @@
 #include <functional>
 #include <string>
 
-namespace Clouds {
+namespace Splash {
 
 struct SpatialRenderCommand {
     glm::mat4 model;
     glm::vec4 surface_dim; // [width, height, aspect, time]
-    std::shared_ptr<NovaSpatial::TextureHandle> texture;
+    std::shared_ptr<Nova::TextureHandle> texture;
     uint32_t first_index;
     uint32_t index_count;
 };
 
 class SpatialNode : public std::enable_shared_from_this<SpatialNode> {
 public:
-    NovaMath::QuatTransform transform;
-    NovaMath::PhaseState8 phase_state; // Dual [a, b, c, w] primordial state: Spatial/Real + Chromatic/Phase
+    Nova::Math::QuatTransform transform;
+    Nova::Math::PhaseState8 phase_state; // Dual [a, b, c, w] primordial state: Spatial/Real + Chromatic/Phase
     glm::vec2 size{1.0f, 1.0f}; // Dimensions in 3D world units (meters)
     std::string name = "SpatialNode";
 
@@ -71,14 +71,14 @@ public:
     }
 
     // Compute cumulative world transform
-    NovaMath::QuatTransform getWorldTransform() const;
+    Nova::Math::QuatTransform getWorldTransform() const;
 
     // Interactive event hooks
     virtual void onUpdate(float dt);
-    virtual void onRayEnter(const NovaMath::RayHit& hit);
-    virtual void onRayMove(const NovaMath::RayHit& hit);
+    virtual void onRayEnter(const Nova::Math::RayHit& hit);
+    virtual void onRayMove(const Nova::Math::RayHit& hit);
     virtual void onRayLeave();
-    virtual void onRayButton(const NovaMath::RayHit& hit, uint32_t button, bool pressed);
+    virtual void onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed);
     virtual void onKey(uint32_t key, bool pressed);
 
     // Raycast hit test against this node and its children. Reports the NEAREST
@@ -86,10 +86,10 @@ public:
     // depth decides what the pointer is on. Ties go to the later sibling, which
     // is the one painted on top. Answers geometry only; which node the event is
     // routed to is SpatialScene's decision.
-    virtual bool hitTest(const NovaMath::Ray3D& world_ray, NovaMath::RayHit& out_hit, std::shared_ptr<SpatialNode>& out_node);
+    virtual bool hitTest(const Nova::Math::Ray3D& world_ray, Nova::Math::RayHit& out_hit, std::shared_ptr<SpatialNode>& out_node);
 
     // Batch render collector: appends geometry to mesh_buf and adds draw calls to out_commands
-    virtual void collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands);
+    virtual void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands);
 };
 
-} // namespace Clouds
+} // namespace Splash

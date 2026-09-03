@@ -3,16 +3,16 @@
 #include <set>
 #include <string>
 #include <stdexcept>
-
+namespace Nova {
 // Base class constructor
-NovaCore::NovaCore(const std::string& debug_level)
+Core::Core(const std::string& debug_level)
 {
     report(LOGGER::INFO, "NovaCore - Base initialization");
     _blankContext();
 }
 
 // Base class destructor
-NovaCore::~NovaCore()
+Core::~Core()
 {
     report(LOGGER::INFO, "NovaCore - Base cleanup");
 
@@ -23,7 +23,7 @@ NovaCore::~NovaCore()
     // Cleans up in reverse order (LIFO)
 }
 
-void NovaCore::_blankContext()
+void Core::_blankContext()
 {
     instance = VK_NULL_HANDLE;
     physical_device = VK_NULL_HANDLE;
@@ -43,7 +43,7 @@ void NovaCore::_blankContext()
     window_extent = {0, 0};
 }
 
-void NovaCore::setWindowExtent(VkExtent2D extent)
+void Core::setWindowExtent(VkExtent2D extent)
 {
     window_extent = extent;
 }
@@ -52,9 +52,9 @@ void NovaCore::setWindowExtent(VkExtent2D extent)
 //
 // Extensions arrive as data. This translation unit deliberately links no window
 // system: the SDL query that used to live here is now
-// NovaSDL::vulkanInstanceExtensions (Core/nova_sdl.cpp), so `vazio` and every
+// Nova::SDL::vulkanInstanceExtensions (Core/nova_sdl.cpp), so `vazio` and every
 // other windowless consumer of libNova.a stops carrying libSDL2.
-void NovaCore::createVulkanInstance(const std::vector<const char*>& instance_extensions)
+void Core::createVulkanInstance(const std::vector<const char*>& instance_extensions)
 {
     report(LOGGER::VLINE, "\t .. Instantiating Vulkan Instance ..");
 
@@ -103,7 +103,7 @@ void NovaCore::createVulkanInstance(const std::vector<const char*>& instance_ext
 }
 
 // Validation layer support check
-bool NovaCore::checkValidationLayerSupport()
+bool Core::checkValidationLayerSupport()
 {
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -159,7 +159,7 @@ static std::vector<VkDeviceQueueCreateInfo> buildQueueCreateInfos(const std::set
 }
 
 // Logical device creation
-void NovaCore::createLogicalDevice(bool need_swapchain_extension)
+void Core::createLogicalDevice(bool need_swapchain_extension)
 {
     report(LOGGER::VLINE, "\t .. Creating Logical Device ..");
 
@@ -192,7 +192,7 @@ void NovaCore::createLogicalDevice(bool need_swapchain_extension)
     report(LOGGER::INFO, "Logical device created");
 }
 
-void NovaCore::createDeviceHandle(const std::vector<VkDeviceQueueCreateInfo>& queue_infos,
+void Core::createDeviceHandle(const std::vector<VkDeviceQueueCreateInfo>& queue_infos,
                                   bool need_swapchain_extension)
 {
     VkPhysicalDeviceFeatures deviceFeatures{};
@@ -224,19 +224,19 @@ void NovaCore::createDeviceHandle(const std::vector<VkDeviceQueueCreateInfo>& qu
 
 // One queue per resolved family, index 0. collectQueueFamilies() already asked
 // createLogicalDevice for each of these, so a handle exists wherever an index does.
-void NovaCore::acquireQueueHandles()
+void Core::acquireQueueHandles()
 {
     vkGetDeviceQueue(logical_device, queues.indices.compute_family.value(), 0, &queues.compute);
     vkGetDeviceQueue(logical_device, queues.indices.transfer_family.value(), 0, &queues.transfer);
 
-    // Index 0 of the graphics family is the same handle NovaGraphics renders on,
+    // Index 0 of the graphics family is the same handle Graphics renders on,
     // which is what lets an immediate submission be ordered against the frames.
     if (queues.indices.graphics_family.has_value()) {
         vkGetDeviceQueue(logical_device, queues.indices.graphics_family.value(), 0, &queues.graphics);
     }
 }
 
-void NovaCore::createMemoryAllocator()
+void Core::createMemoryAllocator()
 {
     VmaAllocatorCreateInfo allocatorInfo = {
         .physicalDevice = physical_device,
@@ -255,7 +255,7 @@ void NovaCore::createMemoryAllocator()
 }
 
 // One immediate context: pool bound to `queue_family`, one primary buffer, one fence.
-void NovaCore::buildImmediateContext(ImmediateContext& context, uint32_t queue_family, VkQueue queue)
+void Core::buildImmediateContext(ImmediateContext& context, uint32_t queue_family, VkQueue queue)
 {
     VkCommandPoolCreateInfo pool_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -281,7 +281,7 @@ void NovaCore::buildImmediateContext(ImmediateContext& context, uint32_t queue_f
     context.queue = queue;
 }
 
-void NovaCore::destroyImmediateContext(ImmediateContext& context)
+void Core::destroyImmediateContext(ImmediateContext& context)
 {
     if (context.fence != VK_NULL_HANDLE) {
         vkDestroyFence(logical_device, context.fence, nullptr);
@@ -293,7 +293,7 @@ void NovaCore::destroyImmediateContext(ImmediateContext& context)
 }
 
 // Immediate context creation (Phase 1 fix)
-void NovaCore::createImmediateContext()
+void Core::createImmediateContext()
 {
     report(LOGGER::VLINE, "\t .. Creating Immediate Context ..");
 
@@ -319,7 +319,7 @@ void NovaCore::createImmediateContext()
 }
 
 // Shared command pools creation
-void NovaCore::createSharedCommandPools()
+void Core::createSharedCommandPools()
 {
     report(LOGGER::VLINE, "\t .. Creating Shared Command Pools ..");
 
@@ -355,7 +355,7 @@ void NovaCore::createSharedCommandPools()
 }
 
 // Immediate submit implementation
-void NovaCore::submitImmediate(ImmediateContext& context, const std::function<void(VkCommandBuffer)>& func)
+void Core::submitImmediate(ImmediateContext& context, const std::function<void(VkCommandBuffer)>& func)
 {
     VK_TRY(vkResetFences(logical_device, 1, &context.fence));
     VK_TRY(vkResetCommandBuffer(context.cmd, 0));
@@ -379,18 +379,18 @@ void NovaCore::submitImmediate(ImmediateContext& context, const std::function<vo
     VK_TRY(vkWaitForFences(logical_device, 1, &context.fence, VK_TRUE, UINT64_MAX));
 }
 
-void NovaCore::immediateSubmit(std::function<void(VkCommandBuffer)>&& func)
+void Core::immediateSubmit(std::function<void(VkCommandBuffer)>&& func)
 {
     submitImmediate(immediate, func);
 }
 
-void NovaCore::immediateSubmitGraphics(std::function<void(VkCommandBuffer)>&& func)
+void Core::immediateSubmitGraphics(std::function<void(VkCommandBuffer)>&& func)
 {
     submitImmediate(hasGraphicsImmediate() ? graphics_immediate : immediate, func);
 }
 
 // Buffer creation
-Buffer_T NovaCore::createEphemeralBuffer(size_t size, VkBufferUsageFlags flags, VmaMemoryUsage usage)
+Buffer_T Core::createEphemeralBuffer(size_t size, VkBufferUsageFlags flags, VmaMemoryUsage usage)
 {
     VkBufferCreateInfo buffer_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -417,3 +417,5 @@ Buffer_T NovaCore::createEphemeralBuffer(size_t size, VkBufferUsageFlags flags, 
 
     return buffer;
 }
+
+} // namespace Nova

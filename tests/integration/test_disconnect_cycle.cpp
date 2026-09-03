@@ -8,7 +8,7 @@
 // window entries never reaped, an event loop that survives one disconnect and
 // not two, and a teardown that is only safe the first time it runs.
 //
-// No Vulkan, no renderer of our own: headless wlroots and a null NovaCore.
+// No Vulkan, no renderer of our own: headless wlroots and a null Core.
 
 #include "harness_check.h"
 #include "wl_client_kit.h"
@@ -120,8 +120,8 @@ int runCycleClient(const char* socket_name) {
 }
 
 struct Server {
-    std::shared_ptr<Clouds::SpatialScene> scene;
-    std::unique_ptr<Clouds::SpatialCompositor> compositor;
+    std::shared_ptr<Splash::SpatialScene> scene;
+    std::unique_ptr<Vazio::SpatialCompositor> compositor;
     std::string socket_name;
 
     void pump() {
@@ -222,12 +222,12 @@ namespace {
 
 bool buildServer(Server& server, CheckLog& log) {
     server.socket_name = "wayland-vzl-" + std::to_string(getpid());
-    server.scene = std::make_shared<Clouds::SpatialScene>(nullptr, nullptr);
+    server.scene = std::make_shared<Splash::SpatialScene>(nullptr, nullptr);
 
-    const Clouds::SpatialCompositorConfig config = { .headless = true,
+    const Vazio::SpatialCompositorConfig config = { .headless = true,
                                                      .virtual_width = 800,
                                                      .virtual_height = 600 };
-    server.compositor = std::make_unique<Clouds::SpatialCompositor>(
+    server.compositor = std::make_unique<Vazio::SpatialCompositor>(
         nullptr, nullptr, server.scene, server.scene->root, config);
 
     return log.check(server.compositor->startServer(server.socket_name),
@@ -239,11 +239,11 @@ bool buildServer(Server& server, CheckLog& log) {
 // the whole reason the claim is worth a test.
 void gradeTeardown(Server& server, CheckLog& log) {
     server.compositor->stop();
-    log.check(server.compositor->stage() == Clouds::SessionStage::Down,
+    log.check(server.compositor->stage() == Vazio::SessionStage::Down,
               "teardown: stop() left the session Down");
     server.compositor->stop();
     server.compositor->stop();
-    log.check(server.compositor->stage() == Clouds::SessionStage::Down,
+    log.check(server.compositor->stage() == Vazio::SessionStage::Down,
               "teardown: two further stop() calls are no-ops");
     log.check(server.compositor->windowCount() == 0 && server.compositor->popupCount() == 0,
               "teardown: no windows or popups survive the stop");
@@ -263,7 +263,7 @@ int main() {
 
     Server server;
     if (!buildServer(server, log)) return log.report();
-    log.check(server.compositor->stage() == Clouds::SessionStage::Open,
+    log.check(server.compositor->stage() == Vazio::SessionStage::Open,
               "server: session is Open before the first cycle");
 
     for (int cycle = 1; cycle <= kCycles; ++cycle) {

@@ -2,15 +2,15 @@
 
 #include <SDL2/SDL_vulkan.h>
 #include <string>
-
+namespace Nova {
     // Get Current Frame
-FrameData& NovaCoreLegacy::current_frame() { { return frames[_frame_ct % MAX_FRAMES_IN_FLIGHT]; } }
+FrameData& CoreLegacy::current_frame() { { return frames[_frame_ct % MAX_FRAMES_IN_FLIGHT]; } }
 
     ////////////////////////
     //  INSTANCE CREATION //
     ////////////////////////
 
-NovaCoreLegacy::NovaCoreLegacy(VkExtent2D extent, std::string& level, bool compute_only_mode)
+CoreLegacy::CoreLegacy(VkExtent2D extent, std::string& level, bool compute_only_mode)
     {
         compute_only = compute_only_mode;
         _blankContext();
@@ -38,7 +38,7 @@ NovaCoreLegacy::NovaCoreLegacy(VkExtent2D extent, std::string& level, bool compu
         // setWindowExtent(extent);
     }
 
-NovaCoreLegacy::~NovaCoreLegacy()
+CoreLegacy::~CoreLegacy()
     {
         printf("[DEBUG NovaCoreLegacy destructor] Entry - using ResourceRegistry for cleanup\n");
         fflush(stdout);
@@ -56,7 +56,7 @@ NovaCoreLegacy::~NovaCoreLegacy()
 
         // Resource registry destructor will be called automatically here,
         // cleaning up all registered resources in reverse order (LIFO)
-        // This happens when the NovaCore object is destroyed
+        // This happens when the Core object is destroyed
 
         printf("[DEBUG NovaCoreLegacy destructor] Blanking context\n");
         fflush(stdout);
@@ -73,7 +73,7 @@ NovaCoreLegacy::~NovaCoreLegacy()
     // VULKAN INSTANCE //
     /////////////////////
 
-void NovaCoreLegacy::createVulkanInstance() 
+void CoreLegacy::createVulkanInstance() 
     {
         report(LOGGER::VLINE, "\t .. Instantiating Engine ..");
         VkApplicationInfo app_info = {
@@ -227,7 +227,7 @@ static SwapChainContext initSwapchain() {
 }
 
 
-void NovaCoreLegacy::_blankContext()
+void CoreLegacy::_blankContext()
     {
         report(LOGGER::INFO, "NovaCore - No Context ..");
 
@@ -249,7 +249,7 @@ void NovaCoreLegacy::_blankContext()
     }
 
 // This should not be done like this
-void NovaCoreLegacy::setWindowExtent(VkExtent2D extent) 
+void CoreLegacy::setWindowExtent(VkExtent2D extent) 
     {
         swapchain.extent = extent;
         //swapchain.details.extent = extent;
@@ -264,7 +264,7 @@ void NovaCoreLegacy::setWindowExtent(VkExtent2D extent)
 static std::string familyIndexStr(const std::optional<unsigned int>& family) 
     { return family.has_value() ? std::to_string(family.value()) : std::string("<unset>"); }
 
-void NovaCoreLegacy::logQueues() 
+void CoreLegacy::logQueues() 
     {
         report(LOGGER::DEBUG, "\t .. Logging Queues ..");
         report(LOGGER::DLINE, "\t\tFamilies: %d", queues.families.size());
@@ -288,7 +288,7 @@ void NovaCoreLegacy::logQueues()
         report(LOGGER::DLINE, "\t\tPriorities: %d", queues.priorities.size());
     }
 
-void NovaCoreLegacy::logFrameData()
+void CoreLegacy::logFrameData()
     {
         report(LOGGER::DEBUG, "\t .. Logging Frame Data ..");
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) 
@@ -303,7 +303,7 @@ void NovaCoreLegacy::logFrameData()
     
     }
 
-void NovaCoreLegacy::logSwapChain() 
+void CoreLegacy::logSwapChain() 
     {
         report(LOGGER::DEBUG, "\t .. Logging SwapChain ..");
         report(LOGGER::DLINE, "\t\tSwapchain: %p", swapchain.instance);
@@ -318,7 +318,7 @@ void NovaCoreLegacy::logSwapChain()
         report(LOGGER::DLINE, "\t\tExtent: %d x %d", swapchain.extent.width, swapchain.extent.height);
     }
 
-void NovaCoreLegacy::log() 
+void CoreLegacy::log() 
     {
         report(LOGGER::DEBUG, "\t .. Logging Context ..");
         report(LOGGER::DLINE, "\t\tInstance: %p", instance);
@@ -331,3 +331,5 @@ void NovaCoreLegacy::log()
         report(LOGGER::DLINE, "\t\tPresent Info: %p", &present);
         logFrameData();
     }
+
+} // namespace Nova

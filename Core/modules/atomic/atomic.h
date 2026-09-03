@@ -8,7 +8,7 @@
 #include <deque>
 #include <functional>
 #include <glm/glm.hpp>
-
+namespace Nova {
 
     //////////////////
     // Object Types //
@@ -205,3 +205,5 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
                                                     VkDebugUtilsMessageTypeFlagsEXT, 
                                                     const VkDebugUtilsMessengerCallbackDataEXT*, 
                                                     void*);
+
+} // namespace Nova

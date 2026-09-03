@@ -17,7 +17,7 @@ namespace Clouds {
  */
 class PillMeshGenerator {
 public:
-    static NovaSpatial::MeshData createPill(
+    static Nova::MeshData createPill(
         float radius = 0.08f,
         float cylinder_height = 0.25f,
         uint32_t radial_segments = 24,
@@ -30,7 +30,7 @@ public:
 /**
  * SpatialPillNode - Interactive 3D Pill representing an entity in the 3D Filesystem
  */
-class SpatialPillNode : public SpatialNode {
+class SpatialPillNode : public Splash::SpatialNode {
 public:
     std::string item_name;
     std::string full_path;
@@ -60,29 +60,29 @@ public:
                     const std::string& path,
                     bool is_dir,
                     uintmax_t size_bytes,
-                    std::shared_ptr<NovaSpatial::SpatialFont> font_ptr);
+                    std::shared_ptr<Nova::SpatialFont> font_ptr);
 
     void setSelected(bool sel);
     void setHovered(bool hov);
 
-    void onRayEnter(const NovaMath::RayHit& hit) override;
+    void onRayEnter(const Nova::Math::RayHit& hit) override;
     void onRayLeave() override;
-    void onRayButton(const NovaMath::RayHit& hit, uint32_t button, bool pressed) override;
+    void onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) override;
 
     void update(float dt);
-    void collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) override;
+    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
-    std::shared_ptr<NovaSpatial::SpatialFont> font_;
+    std::shared_ptr<Nova::SpatialFont> font_;
     float phase_angle_ = 0.0f;
     float pulse_anim_ = 0.0f;
 
     // Pill geometry is static per (radius, height, colour, render mode). The
     // per-frame idle rotation and pulse ride on the model matrix and push
     // constants respectively, so neither touches vertex data.
-    NovaSpatial::MeshCache mesh_cache_;
+    Nova::MeshCache mesh_cache_;
 
-    const NovaSpatial::MeshData& resolveMesh(const glm::vec4& color, float render_mode);
+    const Nova::MeshData& resolveMesh(const glm::vec4& color, float render_mode);
 };
 
 /**
@@ -90,8 +90,8 @@ private:
  */
 class SpatialFilesystem {
 public:
-    SpatialFilesystem(std::shared_ptr<SpatialNode> root_scene_node,
-                      std::shared_ptr<NovaSpatial::SpatialFont> font_ptr);
+    SpatialFilesystem(std::shared_ptr<Splash::SpatialNode> root_scene_node,
+                      std::shared_ptr<Nova::SpatialFont> font_ptr);
     ~SpatialFilesystem() = default;
 
     void scanAndBuild3DTree(const std::string& root_path, int max_depth = 2);
@@ -110,9 +110,9 @@ public:
     std::function<void(SpatialPillNode*)> on_node_selected;
 
 private:
-    std::shared_ptr<SpatialNode> scene_root_;
-    std::shared_ptr<NovaSpatial::SpatialFont> font_;
-    std::shared_ptr<SpatialNode> filesystem_3d_root_;
+    std::shared_ptr<Splash::SpatialNode> scene_root_;
+    std::shared_ptr<Nova::SpatialFont> font_;
+    std::shared_ptr<Splash::SpatialNode> filesystem_3d_root_;
 
     std::shared_ptr<SpatialPillNode> root_pill_;
     std::vector<std::shared_ptr<SpatialPillNode>> all_nodes_;

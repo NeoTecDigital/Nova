@@ -3,7 +3,7 @@
 #include "./quaternion_transform.h"
 #include <limits>
 
-namespace NovaMath {
+namespace Nova::Math {
 
 struct Ray3D {
     glm::vec3 origin{0.0f};
@@ -97,4 +97,4 @@ inline bool intersectOrientedQuad(const Ray3D& ray, const QuatTransform& transfo
     return true;
 }
 
-} // namespace NovaMath
+} // namespace Nova::Math

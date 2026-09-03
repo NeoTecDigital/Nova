@@ -16,7 +16,7 @@
 
 #include <cstring>
 
-namespace Clouds {
+namespace Vazio {
 
 
 bool SpatialPresentLoop::ensureSidecar(Output& bound, struct wlr_output* output) {
@@ -176,7 +176,7 @@ void SpatialPresentLoop::destroySidecarTarget() {
 }
 
 bool SpatialPresentLoop::renderIntoSidecarTarget() {
-    NovaRenderTarget target = {};
+    Nova::RenderTarget target = {};
     target.image = sidecar_target_.image;
     target.view = sidecar_target_.view;
     target.extent = sidecar_target_.extent;
@@ -253,4 +253,4 @@ bool SpatialPresentLoop::presentSidecar(Output&, struct wlr_buffer* buffer) {
     return true;
 }
 
-} // namespace Clouds
+} // namespace Vazio

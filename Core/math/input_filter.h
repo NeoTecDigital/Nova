@@ -6,10 +6,10 @@
 #include <array>
 #include <cmath>
 
-namespace NovaMath {
+namespace Nova::Math {
 
 /**
- * InputRayFilter - Precision Filter & Acceleration Pipeline for 3D Input
+ * InputRayFilter - Precision Filter & Acceleration Builder for 3D Input
  * 
  * Provides:
  * - Sub-pixel temporal/spatial dithering (for micro-accurate ray hits on thin or distant rotated geometry)
@@ -52,4 +52,4 @@ public:
     }
 };
 
-} // namespace NovaMath
+} // namespace Nova::Math

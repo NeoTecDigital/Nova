@@ -7,7 +7,7 @@ namespace Clouds::UI {
 // UILabel Implementation
 // ---------------------------------------------------------------------------
 UILabel::UILabel(const std::string& label_text,
-                 std::shared_ptr<NovaSpatial::SpatialFont> font_ptr,
+                 std::shared_ptr<Nova::SpatialFont> font_ptr,
                  float scale,
                  const glm::vec4& text_color,
                  TextAlignment align)
@@ -31,11 +31,11 @@ glm::vec2 UILabel::getDimensions() const {
     return font->measureText(text, font_scale);
 }
 
-void UILabel::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
-                            std::vector<SpatialRenderCommand>& out_commands) {
+void UILabel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+                            std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible || text.empty() || !font) return;
 
-    NovaMath::QuatTransform world_xf = getWorldTransform();
+    Nova::Math::QuatTransform world_xf = getWorldTransform();
     
     // Offset world position based on alignment
     if (alignment == TextAlignment::LEFT) {
@@ -60,7 +60,7 @@ void UILabel::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
         .index_count = idx_count
     });
 
-    SpatialNode::collectRender(mesh_buf, out_commands);
+    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ void UILabel::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
 // ---------------------------------------------------------------------------
 UIButton::UIButton(const std::string& btn_label,
                    const glm::vec2& btn_size,
-                   std::shared_ptr<NovaSpatial::SpatialFont> font_ptr,
+                   std::shared_ptr<Nova::SpatialFont> font_ptr,
                    std::function<void()> click_handler,
                    ButtonVariant btn_variant)
     : label(btn_label), variant(btn_variant), on_click(click_handler), font_(font_ptr) {
@@ -132,7 +132,7 @@ glm::vec4 UIButton::getActiveColor() const {
     return g_Theme.primary_active;
 }
 
-void UIButton::onRayEnter(const NovaMath::RayHit&) {
+void UIButton::onRayEnter(const Nova::Math::RayHit&) {
     hover_factor_ = 1.0f;
 }
 
@@ -141,7 +141,7 @@ void UIButton::onRayLeave() {
     is_pressed_ = false;
 }
 
-void UIButton::onRayButton(const NovaMath::RayHit&, uint32_t button, bool pressed) {
+void UIButton::onRayButton(const Nova::Math::RayHit&, uint32_t button, bool pressed) {
     if (!enabled) return;
 
     if (button == 1) { // Left click
@@ -156,8 +156,8 @@ void UIButton::onRayButton(const NovaMath::RayHit&, uint32_t button, bool presse
     }
 }
 
-void UIButton::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
-                             std::vector<SpatialRenderCommand>& out_commands) {
+void UIButton::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+                             std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible) return;
 
     glm::vec4 current_color = is_pressed_ ? getActiveColor() :
@@ -167,10 +167,10 @@ void UIButton::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
         current_color = glm::vec4(0.15f, 0.18f, 0.24f, 0.50f);
     }
 
-    NovaMath::QuatTransform world_xf = getWorldTransform();
+    Nova::Math::QuatTransform world_xf = getWorldTransform();
     glm::mat4 model = world_xf.toMatrix();
 
-    auto quad_mesh = NovaSpatial::SpatialMeshGenerator::createPlanarQuad(
+    auto quad_mesh = Nova::SpatialMeshGenerator::createPlanarQuad(
         size,
         current_color,
         border_thickness,
@@ -189,7 +189,7 @@ void UIButton::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
         .index_count = idx_count
     });
 
-    SpatialNode::collectRender(mesh_buf, out_commands);
+    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ void UIButton::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
 // ---------------------------------------------------------------------------
 UIBadge::UIBadge(const std::string& badge_text,
                  const glm::vec4& color,
-                 std::shared_ptr<NovaSpatial::SpatialFont> font_ptr)
+                 std::shared_ptr<Nova::SpatialFont> font_ptr)
     : text(badge_text), bg_color(color), font_(font_ptr) {
     name = "UIBadge: " + text;
     
@@ -230,14 +230,14 @@ void UIBadge::setText(const std::string& new_text, const glm::vec4& color) {
     }
 }
 
-void UIBadge::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
-                            std::vector<SpatialRenderCommand>& out_commands) {
+void UIBadge::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+                            std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible) return;
 
-    NovaMath::QuatTransform world_xf = getWorldTransform();
+    Nova::Math::QuatTransform world_xf = getWorldTransform();
     glm::mat4 model = world_xf.toMatrix();
 
-    auto quad_mesh = NovaSpatial::SpatialMeshGenerator::createPlanarQuad(
+    auto quad_mesh = Nova::SpatialMeshGenerator::createPlanarQuad(
         size,
         bg_color,
         g_Theme.border_button,
@@ -256,7 +256,7 @@ void UIBadge::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
         .index_count = idx_count
     });
 
-    SpatialNode::collectRender(mesh_buf, out_commands);
+    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 // ---------------------------------------------------------------------------
@@ -274,14 +274,14 @@ void UIProgressBar::setProgress(float val) {
     progress = std::clamp(val, 0.0f, 1.0f);
 }
 
-void UIProgressBar::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
-                                  std::vector<SpatialRenderCommand>& out_commands) {
+void UIProgressBar::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+                                  std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible) return;
 
-    NovaMath::QuatTransform world_xf = getWorldTransform();
+    Nova::Math::QuatTransform world_xf = getWorldTransform();
     
     // 1. Background trough
-    auto bg_mesh = NovaSpatial::SpatialMeshGenerator::createPlanarQuad(
+    auto bg_mesh = Nova::SpatialMeshGenerator::createPlanarQuad(
         size,
         bg_color,
         0.001f,
@@ -304,11 +304,11 @@ void UIProgressBar::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
         float fill_w = size.x * progress;
         glm::vec2 fill_size(fill_w, size.y - 0.004f);
         
-        NovaMath::QuatTransform fill_xf = world_xf;
+        Nova::Math::QuatTransform fill_xf = world_xf;
         float offset_x = (fill_w - size.x) * 0.5f;
         fill_xf.position += fill_xf.orientation * glm::vec3(offset_x, 0.0f, 0.001f);
 
-        auto fill_mesh = NovaSpatial::SpatialMeshGenerator::createPlanarQuad(
+        auto fill_mesh = Nova::SpatialMeshGenerator::createPlanarQuad(
             fill_size,
             fill_color,
             0.0f,
@@ -327,7 +327,7 @@ void UIProgressBar::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
         });
     }
 
-    SpatialNode::collectRender(mesh_buf, out_commands);
+    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 // ---------------------------------------------------------------------------
@@ -335,7 +335,7 @@ void UIProgressBar::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
 // ---------------------------------------------------------------------------
 UITabControl::UITabControl(const std::vector<std::string>& tab_names,
                            float width,
-                           std::shared_ptr<NovaSpatial::SpatialFont> font_ptr,
+                           std::shared_ptr<Nova::SpatialFont> font_ptr,
                            std::function<void(int)> tab_callback)
     : on_tab_changed(tab_callback), total_width_(width) {
     name = "UITabControl";
@@ -377,10 +377,10 @@ void UITabControl::setActiveTab(int index) {
     }
 }
 
-void UITabControl::collectRender(NovaSpatial::SpatialMeshBuffer* mesh_buf,
-                                 std::vector<SpatialRenderCommand>& out_commands) {
+void UITabControl::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+                                 std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible) return;
-    SpatialNode::collectRender(mesh_buf, out_commands);
+    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 } // namespace Clouds::UI

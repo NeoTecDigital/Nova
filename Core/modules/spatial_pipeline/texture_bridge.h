@@ -7,7 +7,7 @@
 #include <memory>
 #include <unordered_map>
 
-namespace NovaSpatial {
+namespace Nova {
 
 /**
  * Byte order of a source pixel row, named in MEMORY order (byte 0 first).
@@ -50,7 +50,7 @@ struct TextureHandle {
 
 class TextureBridge {
 public:
-    TextureBridge(NovaCore* core);
+    TextureBridge(Core* core);
     ~TextureBridge();
 
     TextureBridge(const TextureBridge&) = delete;
@@ -104,7 +104,7 @@ public:
     static VkComponentMapping componentMapping(PixelLayout layout);
 
 private:
-    NovaCore* core_ = nullptr;
+    Core* core_ = nullptr;
     VkDevice device_ = VK_NULL_HANDLE;
     VmaAllocator allocator_ = VK_NULL_HANDLE;
 
@@ -153,4 +153,4 @@ private:
     void uploadStagingToImage(TextureHandle& handle);
 };
 
-} // namespace NovaSpatial
+} // namespace Nova

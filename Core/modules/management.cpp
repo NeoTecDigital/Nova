@@ -1,12 +1,12 @@
 #include "Core/core.h"
 #define VMA_IMPLEMENTATION
 #include "Core/components/vk_memory.h"
-
+namespace Nova {
     ///////////////////////////
     // PIPELINE CONSTRUCTION //
     ///////////////////////////
 
-void NovaCoreLegacy::destroyPipeline(Pipeline* pipeline)
+void CoreLegacy::destroyPipeline(Builder* pipeline)
     {
         report(LOGGER::DEBUG, "Management - Destroying Pipeline ..");
         if (pipeline) {
@@ -21,11 +21,11 @@ void NovaCoreLegacy::destroyPipeline(Pipeline* pipeline)
         return;
     }
 
-void NovaCoreLegacy::constructGraphicsPipeline(const std::string& vert_shader, const std::string& frag_shader)
+void CoreLegacy::constructGraphicsPipeline(const std::string& vert_shader, const std::string& frag_shader)
     {
         report(LOGGER::DEBUG, "Management - Constructing Graphics Pipeline ..");
 
-        graphics_pipeline = new Pipeline();
+        graphics_pipeline = new Builder();
 
         graphics_pipeline->shaders(&logical_device, vert_shader, frag_shader)
                 .vertexInput()
@@ -42,14 +42,14 @@ void NovaCoreLegacy::constructGraphicsPipeline(const std::string& vert_shader, c
         return;
     }
     
-void NovaCoreLegacy::constructComputePipeline()
+void CoreLegacy::constructComputePipeline()
     {
         report(LOGGER::DEBUG, "Management - Constructing Compute Pipeline ..");
 
-        compute_pipeline = new Pipeline();
+        compute_pipeline = new Builder();
 
         // Compute pipelines don't use graphics pipeline stages
-        // Just allocate the Pipeline object for now
+        // Just allocate the Builder object for now
         // Actual shader loading and pipeline creation will be done per-shader
 
         return;
@@ -59,7 +59,7 @@ void NovaCoreLegacy::constructComputePipeline()
     // RENDER PASS CREATION //
     //////////////////////////
 
-VkAttachmentDescription NovaCoreLegacy::colorAttachment()
+VkAttachmentDescription CoreLegacy::colorAttachment()
     {
         report(LOGGER::VLINE, "\t\t .. Creating Color Attachment ..");
 
@@ -112,7 +112,7 @@ static VkRenderPassCreateInfo renderPassInfo(VkAttachmentDescription* color_atta
         };
     }
 
-void NovaCoreLegacy::createRenderPass()
+void CoreLegacy::createRenderPass()
     {
         report(LOGGER::VLINE, "\t .. Creating Render Pass ..");
 
@@ -128,7 +128,7 @@ void NovaCoreLegacy::createRenderPass()
     }
 
 
-VkRenderPassBeginInfo NovaCoreLegacy::getRenderPassInfo(size_t i)
+VkRenderPassBeginInfo CoreLegacy::getRenderPassInfo(size_t i)
     {
         return {
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -168,7 +168,7 @@ static inline VkDescriptorSetLayoutCreateInfo _getLayoutInfo(VkDescriptorSetLayo
             };
     }
 
-void NovaCoreLegacy::createDescriptorSetLayout() 
+void CoreLegacy::createDescriptorSetLayout() 
     {
         report(LOGGER::VLINE, "\t .. Creating Descriptor Set Layout ..");
 
@@ -204,7 +204,7 @@ static inline VkDescriptorPoolCreateInfo getPoolInfo(uint32_t ct, VkDescriptorPo
         };
     }
 
-void NovaCoreLegacy::constructDescriptorPool() 
+void CoreLegacy::constructDescriptorPool() 
     {
         report(LOGGER::VLINE, "\t .. Constructing Descriptor Pool ..");
 
@@ -258,7 +258,7 @@ static inline VkWriteDescriptorSet getDescriptorWrite(VkDescriptorSet* set, VkDe
         };
     }
 
-void NovaCoreLegacy::createDescriptorSets() 
+void CoreLegacy::createDescriptorSets() 
     {
         report(LOGGER::VLINE, "\t .. Creating Descriptor Sets ..");
 
@@ -293,7 +293,7 @@ static inline VkCommandPoolCreateInfo createCommandPoolInfo(unsigned int queue_f
             };
     }
     
-void NovaCoreLegacy::createCommandPool()
+void CoreLegacy::createCommandPool()
     {
         report(LOGGER::VLINE, "\t .. Creating Command Pool ..");
 
@@ -346,7 +346,7 @@ void NovaCoreLegacy::createCommandPool()
         return;
     }
 
-inline VkCommandBufferAllocateInfo NovaCoreLegacy::createCommandBuffersInfo(VkCommandPool& cmd_pool, char* name)
+inline VkCommandBufferAllocateInfo CoreLegacy::createCommandBuffersInfo(VkCommandPool& cmd_pool, char* name)
     {
         report(LOGGER::VLINE, "\t\t .. Creating %s Command Buffer Info  ..", name);
 
@@ -359,7 +359,7 @@ inline VkCommandBufferAllocateInfo NovaCoreLegacy::createCommandBuffersInfo(VkCo
             };
     }
 
-void NovaCoreLegacy::createCommandBuffers()
+void CoreLegacy::createCommandBuffers()
     {
         report(LOGGER::VLINE, "\t .. Creating Command Buffers ..");
 
@@ -389,7 +389,7 @@ void NovaCoreLegacy::createCommandBuffers()
     }
 
 
-VkCommandBuffer NovaCoreLegacy::createEphemeralCommand(VkCommandPool& pool) 
+VkCommandBuffer CoreLegacy::createEphemeralCommand(VkCommandPool& pool) 
     {
         report(LOGGER::VLINE, "\t .. Creating Ephemeral Command Buffer ..");
 
@@ -423,7 +423,7 @@ static inline VkSubmitInfo createSubmitInfo(VkCommandBuffer* cmd)
         };
     }
 
-void NovaCoreLegacy::flushCommandBuffer(VkCommandBuffer& buf, char* name) 
+void CoreLegacy::flushCommandBuffer(VkCommandBuffer& buf, char* name) 
     {
         report(LOGGER::VLINE, "\t .. Ending %s Command Buffer ..", name);
 
@@ -440,7 +440,7 @@ void NovaCoreLegacy::flushCommandBuffer(VkCommandBuffer& buf, char* name)
         return;
     }
 
-void NovaCoreLegacy::destroyCommandContext()
+void CoreLegacy::destroyCommandContext()
     {
         report(LOGGER::VERBOSE, "Management - Destroying Semaphores, Fences and Command Pools ..");
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -498,7 +498,7 @@ static VkFenceCreateInfo createFenceInfo()
         };
     }
 
-void NovaCoreLegacy::createImmediateContext()
+void CoreLegacy::createImmediateContext()
 {
     report(LOGGER::VLINE, "\t .. Creating Immediate Context ..");
 
@@ -542,7 +542,7 @@ void NovaCoreLegacy::createImmediateContext()
     });
 }
 
-void NovaCoreLegacy::createSyncObjects()
+void CoreLegacy::createSyncObjects()
     {
         report(LOGGER::VLINE, "\t .. Creating Sync Objects ..");
 
@@ -607,7 +607,7 @@ static inline VmaAllocationCreateInfo getVMAAllocationInfo(VmaMemoryUsage mem_us
         };
     }
 
-Buffer_T NovaCoreLegacy::createEphemeralBuffer(size_t size, VkBufferUsageFlags flags, VmaMemoryUsage mem_usage)
+Buffer_T CoreLegacy::createEphemeralBuffer(size_t size, VkBufferUsageFlags flags, VmaMemoryUsage mem_usage)
     {
         report(LOGGER::VLINE, "\t .. Creating Ephemeral Buffer ..");
 
@@ -651,7 +651,7 @@ static inline VkSubmitInfo2 getSubmitInfo2(VkCommandBufferSubmitInfo* cmd)
         };
     }
 
-void NovaCoreLegacy::immediateSubmit(std::function<void(VkCommandBuffer)>&& func)
+void CoreLegacy::immediateSubmit(std::function<void(VkCommandBuffer)>&& func)
     {
         VK_TRY(vkResetFences(logical_device, 1, &queues.immediate.fence));
         VK_TRY(vkResetCommandBuffer(queues.immediate.cmd, 0));
@@ -674,7 +674,7 @@ void NovaCoreLegacy::immediateSubmit(std::function<void(VkCommandBuffer)>&& func
         VK_TRY(vkWaitForFences(logical_device, 1, &queues.immediate.fence, VK_TRUE, UINT64_MAX));
     }
 
-MeshBuffer NovaCoreLegacy::createMeshBuffer(std::span<uint32_t> idx, std::span<Vertex_T> vtx)
+MeshBuffer CoreLegacy::createMeshBuffer(std::span<uint32_t> idx, std::span<Vertex_T> vtx)
     {
         const size_t VERTEX_BUFFER_SIZE = vtx.size() * sizeof(Vertex_T);
         const size_t INDEX_BUFFER_SIZE = idx.size() * sizeof(uint32_t);
@@ -717,3 +717,5 @@ MeshBuffer NovaCoreLegacy::createMeshBuffer(std::span<uint32_t> idx, std::span<V
         vmaDestroyBuffer(allocator, staging_buffer.buffer, staging_buffer.allocation);
         return buffer;
     }
+
+} // namespace Nova

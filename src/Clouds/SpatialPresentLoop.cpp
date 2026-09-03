@@ -20,19 +20,19 @@
 #include <cstring>
 #include <ctime>
 
-namespace Clouds {
+namespace Vazio {
 
 namespace {
 
 // Translate wlroots' DMA-BUF description into Nova's. The fds stay borrowed:
 // Nova dups what it keeps, and these belong to the wlr_buffer.
-NovaDmabufAttributes toNovaAttributes(const struct wlr_dmabuf_attributes& src) {
-    NovaDmabufAttributes out = {};
+Nova::DmabufAttributes toNovaAttributes(const struct wlr_dmabuf_attributes& src) {
+    Nova::DmabufAttributes out = {};
     out.width = static_cast<uint32_t>(src.width);
     out.height = static_cast<uint32_t>(src.height);
     out.drm_format = src.format;
     out.modifier = src.modifier;
-    out.plane_count = std::min(src.n_planes, NOVA_DMABUF_MAX_PLANES);
+    out.plane_count = std::min(src.n_planes, Nova::NOVA_DMABUF_MAX_PLANES);
     for (int plane = 0; plane < out.plane_count; ++plane) {
         out.planes[plane].fd = src.fd[plane];
         out.planes[plane].offset = src.offset[plane];
@@ -111,7 +111,7 @@ void SpatialPresentLoop::Output::onDestroy(void*) {
 
 // --- Construction / teardown -------------------------------------------------
 
-SpatialPresentLoop::SpatialPresentLoop(NovaGraphics* graphics, SpatialCompositor* compositor)
+SpatialPresentLoop::SpatialPresentLoop(Nova::Graphics* graphics, SpatialCompositor* compositor)
     : graphics_(graphics), compositor_(compositor) {}
 
 SpatialPresentLoop::~SpatialPresentLoop() {
@@ -256,11 +256,11 @@ bool SpatialPresentLoop::selectPath(struct wlr_output* output) {
                             (output->renderer->render_buffer_caps & WLR_BUFFER_CAP_DMABUF) != 0;
 
     PresentPath chosen = PresentPath::PixmanSidecar;
-    VkFormat format = novaVulkanFormatFromDrm(kPresentFallbackDrmFormat);
+    VkFormat format = Nova::vulkanFormatFromDrm(kPresentFallbackDrmFormat);
     VkImageLayout layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     if (graphics_ && graphics_->supportsDmabufImport() && caps_allow && probeDmabufImport(output)) {
         chosen = PresentPath::DmabufImport;
-        format = novaVulkanFormatFromDrm(drm_format);
+        format = Nova::vulkanFormatFromDrm(drm_format);
         layout = VK_IMAGE_LAYOUT_GENERAL;
     }
 
@@ -269,7 +269,7 @@ bool SpatialPresentLoop::selectPath(struct wlr_output* output) {
         report(LOGGER::ERROR,
                "SpatialPresentLoop - No render pass for %s over %s; leaving the path undecided so a "
                "later attach re-probes",
-               presentPathName(chosen), novaDrmFormatName(drm_format));
+               presentPathName(chosen), Nova::drmFormatName(drm_format));
         return false;
     }
 
@@ -280,7 +280,7 @@ bool SpatialPresentLoop::selectPath(struct wlr_output* output) {
     report(LOGGER::INFO,
            "SpatialPresentLoop - Presentation path: %s (output format %s, dmabuf import %s, "
            "renderer dmabuf caps %s)",
-           presentPathName(path_), novaDrmFormatName(drm_format),
+           presentPathName(path_), Nova::drmFormatName(drm_format),
            (graphics_ && graphics_->supportsDmabufImport()) ? "available" : "unavailable",
            caps_allow ? "yes" : "no");
     return true;
@@ -411,7 +411,7 @@ void SpatialPresentLoop::presentFrame(Output& bound) {
 
 // --- DMA-BUF import path -----------------------------------------------------
 
-const NovaImportedImage* SpatialPresentLoop::importedImageFor(struct wlr_buffer* buffer) {
+const Nova::ImportedImage* SpatialPresentLoop::importedImageFor(struct wlr_buffer* buffer) {
     // Reap the entries whose buffers were destroyed since the last lookup.
     imports_.erase(std::remove_if(imports_.begin(), imports_.end(),
                                   [](const std::unique_ptr<ImportedBuffer>& held) {
@@ -429,31 +429,31 @@ const NovaImportedImage* SpatialPresentLoop::importedImageFor(struct wlr_buffer*
     auto entry = std::make_unique<ImportedBuffer>();
     entry->loop = this;
     entry->buffer = buffer;
-    const NovaDmabufAttributes nova_attrs = toNovaAttributes(attrs);
+    const Nova::DmabufAttributes nova_attrs = toNovaAttributes(attrs);
     if (!graphics_->importDmabufAsImage(nova_attrs, entry->image)) {
         report(LOGGER::ERROR, "SpatialPresentLoop - Cannot import output buffer (%s, modifier 0x%llx)",
-               novaDrmFormatName(attrs.format), static_cast<unsigned long long>(attrs.modifier));
+               Nova::drmFormatName(attrs.format), static_cast<unsigned long long>(attrs.modifier));
         return nullptr;
     }
 
     entry->destroy_listener.bind(entry.get(), &ImportedBuffer::onDestroy, &buffer->events.destroy);
-    const NovaImportedImage* image = &entry->image;
+    const Nova::ImportedImage* image = &entry->image;
     imports_.push_back(std::move(entry));
     report(LOGGER::INFO, "SpatialPresentLoop - Imported output buffer %p (%ux%u %s), %zu cached",
            static_cast<const void*>(buffer), image->extent.width, image->extent.height,
-           novaDrmFormatName(image->drm_format), imports_.size());
+           Nova::drmFormatName(image->drm_format), imports_.size());
     return image;
 }
 
 bool SpatialPresentLoop::presentImported(Output&, struct wlr_buffer* buffer) {
-    const NovaImportedImage* image = importedImageFor(buffer);
+    const Nova::ImportedImage* image = importedImageFor(buffer);
     if (!image) return false;
 
     // asRenderTarget sets external_consumer, which is what releases the image
     // to VK_QUEUE_FAMILY_FOREIGN_EXT after the pass. Required, not defensive:
     // KMS reading a DCC-compressed radv image without it gets the compressed
     // representation, measured.
-    const NovaRenderTarget target = image->asRenderTarget(target_layout_);
+    const Nova::RenderTarget target = image->asRenderTarget(target_layout_);
     const VkExtent2D extent = target.extent;
     VkFence fence = graphics_->renderToImage(target, [this, extent](VkCommandBuffer cmd, uint32_t) {
         scene_renderer_(cmd, extent);
@@ -465,4 +465,4 @@ bool SpatialPresentLoop::presentImported(Output&, struct wlr_buffer* buffer) {
     return graphics_->waitForRender(fence);
 }
 
-} // namespace Clouds
+} // namespace Vazio

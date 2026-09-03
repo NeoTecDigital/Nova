@@ -14,8 +14,8 @@
 #include <stdexcept>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
-
-void NovaCore::setQueueFamilyProperties(uint32_t index)
+namespace Nova {
+void Core::setQueueFamilyProperties(uint32_t index)
 {
     const VkQueueFamilyProperties* queue_family = &queues.families[index];
     std::string queue_name = "";
@@ -80,7 +80,7 @@ static void backfillQueueFamilies(QueueFamilyIndices& indices)
 }
 
 // Get queue families
-void NovaCore::getQueueFamilies(VkPhysicalDevice scanned_device, VkSurfaceKHR surface, bool need_presentation)
+void Core::getQueueFamilies(VkPhysicalDevice scanned_device, VkSurfaceKHR surface, bool need_presentation)
 {
     report(LOGGER::VLINE, "\t .. Acquiring Queue Families ..");
 
@@ -115,7 +115,7 @@ void NovaCore::getQueueFamilies(VkPhysicalDevice scanned_device, VkSurfaceKHR su
     backfillQueueFamilies(queues.indices);
 }
 
-const char* novaDeviceTypeName(VkPhysicalDeviceType type)
+const char* deviceTypeName(VkPhysicalDeviceType type)
 {
     switch (type) {
         case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return "Integrated GPU";
@@ -126,7 +126,7 @@ const char* novaDeviceTypeName(VkPhysicalDeviceType type)
     }
 }
 
-uint32_t novaDeviceTypeScore(VkPhysicalDeviceType type)
+uint32_t deviceTypeScore(VkPhysicalDeviceType type)
 {
     switch (type) {
         case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:   return 400;
@@ -157,7 +157,7 @@ static bool deviceHasExtension(VkPhysicalDevice device, const char* name)
     return false;
 }
 
-bool novaDrmNodeOf(int drm_fd, int64_t& major_out, int64_t& minor_out)
+bool drmNodeOf(int drm_fd, int64_t& major_out, int64_t& minor_out)
 {
     if (drm_fd < 0) {
         return false;
@@ -173,7 +173,7 @@ bool novaDrmNodeOf(int drm_fd, int64_t& major_out, int64_t& minor_out)
     return true;
 }
 
-bool novaDeviceOwnsDrmNode(VkPhysicalDevice device, int64_t node_major, int64_t node_minor)
+bool deviceOwnsDrmNode(VkPhysicalDevice device, int64_t node_major, int64_t node_minor)
 {
     if (!deviceHasExtension(device, VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME)) {
         return false;
@@ -217,11 +217,11 @@ static void reportCandidate(VkPhysicalDevice device, uint32_t score, bool drm_ma
     }
 
     report(LOGGER::INFO, "GPU candidate: %s | %s | driver %s | score %u%s",
-           base.deviceName, novaDeviceTypeName(base.deviceType), driver, score,
+           base.deviceName, deviceTypeName(base.deviceType), driver, score,
            drm_match ? " | DRM node match" : "");
 }
 
-std::vector<std::string> NovaCore::resolveOptionalExtensions(VkPhysicalDevice device,
+std::vector<std::string> Core::resolveOptionalExtensions(VkPhysicalDevice device,
                                                              const std::vector<const char*>& wanted)
 {
     std::vector<std::string> resolved;
@@ -237,7 +237,7 @@ std::vector<std::string> NovaCore::resolveOptionalExtensions(VkPhysicalDevice de
     return resolved;
 }
 
-bool NovaCore::hasDeviceExtension(const char* name) const
+bool Core::hasDeviceExtension(const char* name) const
 {
     for (const auto& enabled : enabled_device_extensions) {
         if (enabled == name) {
@@ -248,7 +248,7 @@ bool NovaCore::hasDeviceExtension(const char* name) const
     return false;
 }
 
-bool NovaCore::deviceProvisioned(VkPhysicalDevice scanned_device, const NovaDeviceRequest& request)
+bool Core::deviceProvisioned(VkPhysicalDevice scanned_device, const DeviceRequest& request)
 {
     const bool wants_present = request.need_presentation && request.surface != VK_NULL_HANDLE;
     getQueueFamilies(scanned_device, request.surface, wants_present);
@@ -264,9 +264,9 @@ bool NovaCore::deviceProvisioned(VkPhysicalDevice scanned_device, const NovaDevi
            (!request.need_graphics || queues.indices.graphics_family.has_value());
 }
 
-bool NovaCore::deviceProvisioned(VkPhysicalDevice scanned_device, VkSurfaceKHR surface, bool need_swapchain)
+bool Core::deviceProvisioned(VkPhysicalDevice scanned_device, VkSurfaceKHR surface, bool need_swapchain)
 {
-    return deviceProvisioned(scanned_device, NovaDeviceRequest{
+    return deviceProvisioned(scanned_device, DeviceRequest{
         .need_presentation = need_swapchain,
         .need_graphics = need_swapchain,
         .surface = surface
@@ -290,7 +290,7 @@ static VkPhysicalDevice highestScoring(const std::vector<VkPhysicalDevice>& cand
     return winner;
 }
 
-void NovaCore::createPhysicalDevice(const NovaDeviceRequest& request)
+void Core::createPhysicalDevice(const DeviceRequest& request)
 {
     report(LOGGER::VLINE, "\t .. Selecting Physical Device ..");
 
@@ -307,7 +307,7 @@ void NovaCore::createPhysicalDevice(const NovaDeviceRequest& request)
 
     int64_t node_major = 0;
     int64_t node_minor = 0;
-    const bool has_node_hint = novaDrmNodeOf(request.drm_fd, node_major, node_minor);
+    const bool has_node_hint = drmNodeOf(request.drm_fd, node_major, node_minor);
 
     std::vector<VkPhysicalDevice> passed;
     std::vector<uint32_t> scores;
@@ -320,8 +320,8 @@ void NovaCore::createPhysicalDevice(const NovaDeviceRequest& request)
         VkPhysicalDeviceProperties props = {};
         vkGetPhysicalDeviceProperties(device, &props);
 
-        const bool drm_match = has_node_hint && novaDeviceOwnsDrmNode(device, node_major, node_minor);
-        const uint32_t score = novaDeviceTypeScore(props.deviceType) + (drm_match ? DRM_MATCH_BONUS : 0);
+        const bool drm_match = has_node_hint && deviceOwnsDrmNode(device, node_major, node_minor);
+        const uint32_t score = deviceTypeScore(props.deviceType) + (drm_match ? DRM_MATCH_BONUS : 0);
 
         reportCandidate(device, score, drm_match);
         passed.push_back(device);
@@ -334,7 +334,7 @@ void NovaCore::createPhysicalDevice(const NovaDeviceRequest& request)
 
 // The scoring loop left queues.indices describing whichever candidate it scanned
 // last, so the winner is re-scanned before anything reads them.
-void NovaCore::finalizeDeviceSelection(const NovaDeviceRequest& request)
+void Core::finalizeDeviceSelection(const DeviceRequest& request)
 {
     if (physical_device == VK_NULL_HANDLE) {
         report(LOGGER::ERROR, "Failed to find a suitable GPU!");
@@ -351,18 +351,20 @@ void NovaCore::finalizeDeviceSelection(const NovaDeviceRequest& request)
     VkPhysicalDeviceProperties props = {};
     vkGetPhysicalDeviceProperties(physical_device, &props);
     report(LOGGER::INFO, "Selected GPU: %s", props.deviceName);
-    report(LOGGER::INFO, "Selected GPU Type: %s", novaDeviceTypeName(props.deviceType));
+    report(LOGGER::INFO, "Selected GPU Type: %s", deviceTypeName(props.deviceType));
 
     if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
         report(LOGGER::WARN, "Selected GPU is a CPU software rasterizer - expect severely degraded throughput");
     }
 }
 
-void NovaCore::createPhysicalDevice(bool need_presentation, VkSurfaceKHR surface)
+void Core::createPhysicalDevice(bool need_presentation, VkSurfaceKHR surface)
 {
-    createPhysicalDevice(NovaDeviceRequest{
+    createPhysicalDevice(DeviceRequest{
         .need_presentation = need_presentation,
         .need_graphics = need_presentation,
         .surface = surface
     });
 }
+
+} // namespace Nova

@@ -8,11 +8,11 @@
 #include <vector>
 #include <memory>
 
-namespace NovaSpatial {
+namespace Nova {
 
 class SpatialPipeline {
 public:
-    SpatialPipeline(NovaCore* core, VkRenderPass render_pass, TextureBridge* texture_bridge);
+    SpatialPipeline(Core* core, VkRenderPass render_pass, TextureBridge* texture_bridge);
     ~SpatialPipeline();
 
     // Construct the Vulkan graphics pipeline
@@ -28,7 +28,7 @@ public:
     VkPipelineLayout getLayout() const { return pipeline_layout_; }
 
 private:
-    NovaCore* core_ = nullptr;
+    Core* core_ = nullptr;
     VkDevice device_ = VK_NULL_HANDLE;
     VkRenderPass render_pass_ = VK_NULL_HANDLE;
     TextureBridge* texture_bridge_ = nullptr;
@@ -40,4 +40,4 @@ private:
     std::vector<char> readFile(const std::string& filename);
 };
 
-} // namespace NovaSpatial
+} // namespace Nova

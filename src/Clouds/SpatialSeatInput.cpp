@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <ctime>
 
-namespace Clouds {
+namespace Vazio {
 
 namespace {
 
@@ -495,4 +495,4 @@ void SpatialCompositor::processPointerButton(uint32_t evdev_button, bool pressed
     scene_->processPointerButton(evdevToSceneButton(evdev_button), pressed);
 }
 
-} // namespace Clouds
+} // namespace Vazio

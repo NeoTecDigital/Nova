@@ -78,7 +78,7 @@ struct Harness {
     struct wlr_backend* backend = nullptr;
     struct wlr_renderer* renderer = nullptr;
     struct wlr_allocator* allocator = nullptr;
-    std::unique_ptr<NovaGraphics> nova;
+    std::unique_ptr<Nova::Graphics> nova;
 
     bool up() const {
         return display && backend && renderer && allocator && nova;
@@ -107,11 +107,11 @@ bool bringUp(Harness& h) {
 
     if (!wlr_backend_start(h.backend)) return false;
 
-    NovaOffscreenConfig config = {};
+    Nova::OffscreenConfig config = {};
     config.extent = { 640, 400 };
     config.drm_fd = wlr_backend_get_drm_fd(h.backend);
     config.request_dmabuf_import = true;
-    h.nova = std::make_unique<NovaGraphics>(config, std::string("ERROR"));
+    h.nova = std::make_unique<Nova::Graphics>(config, std::string("ERROR"));
     return true;
 }
 
@@ -151,18 +151,18 @@ int runSidecarCase() {
     initOutputRender(h, first);
     initOutputRender(h, second);
 
-    Clouds::SpatialPresentLoop loop(h.nova.get(), nullptr);
+    Vazio::SpatialPresentLoop loop(h.nova.get(), nullptr);
     loop.setSceneRenderer([](VkCommandBuffer, const VkExtent2D&) {});
 
     check(loop.attach(first), "sidecar: the first output was adopted");
-    check(loop.path() == Clouds::PresentPath::PixmanSidecar,
+    check(loop.path() == Vazio::PresentPath::PixmanSidecar,
           "sidecar: the CPU path was selected");
     check(loop.renderPass() != VK_NULL_HANDLE, "sidecar: a render pass exists after attach");
 
     // D1: the shared readback target is sized for `first`. A second output of a
     // different size must be refused, not silently resize it.
     check(!loop.attach(second), "D1: a second sidecar output is refused");
-    check(loop.path() == Clouds::PresentPath::PixmanSidecar,
+    check(loop.path() == Vazio::PresentPath::PixmanSidecar,
           "D1: the refusal did not disturb the selected path");
 
     pump(h, 30);
@@ -180,7 +180,7 @@ int runSidecarCase() {
           "D4: the mode change cost no failed frames");
 
     loop.stop();
-    check(loop.path() == Clouds::PresentPath::Undecided, "sidecar: stop() reset the path");
+    check(loop.path() == Vazio::PresentPath::Undecided, "sidecar: stop() reset the path");
     return 0;
 }
 
@@ -200,14 +200,14 @@ int runElectionCase() {
     initOutputRender(h, first);
     initOutputRender(h, second);
 
-    Clouds::SpatialPresentLoop loop(h.nova.get(), nullptr);
+    Vazio::SpatialPresentLoop loop(h.nova.get(), nullptr);
     loop.setSceneRenderer([](VkCommandBuffer, const VkExtent2D&) {});
 
     check(loop.attach(first), "election: the first output was adopted");
-    if (loop.path() != Clouds::PresentPath::DmabufImport) {
+    if (loop.path() != Vazio::PresentPath::DmabufImport) {
         std::printf("[skip] election: this device selected %s, not dmabuf-import; "
                     "the multi-output case needs the zero-copy path\n",
-                    Clouds::presentPathName(loop.path()));
+                    Vazio::presentPathName(loop.path()));
         return 0;
     }
     check(loop.attach(second), "election: a second output is accepted on the import path");

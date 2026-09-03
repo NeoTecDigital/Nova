@@ -5,7 +5,7 @@
 // (format advertisement) and unit-tested without a GPU.
 
 #include "./nova_dmabuf.h"
-
+namespace Nova {
 namespace {
 
 /**
@@ -27,7 +27,7 @@ namespace {
  * codes (multi-plane FORMATS, distinct from the multi-plane MODIFIERS handled
  * in nova_dmabuf_import.cpp). Adding a row is the whole cost of extending this.
  */
-constexpr NovaFormatMapping FORMAT_TABLE[] = {
+constexpr FormatMapping FORMAT_TABLE[] = {
     { NOVA_DRM_FORMAT_ARGB8888,      VK_FORMAT_B8G8R8A8_UNORM,             true,  "AR24" },
     { NOVA_DRM_FORMAT_XRGB8888,      VK_FORMAT_B8G8R8A8_UNORM,             false, "XR24" },
     { NOVA_DRM_FORMAT_ABGR8888,      VK_FORMAT_R8G8B8A8_UNORM,             true,  "AB24" },
@@ -46,7 +46,7 @@ constexpr NovaFormatMapping FORMAT_TABLE[] = {
 
 constexpr uint32_t FORMAT_TABLE_SIZE = sizeof(FORMAT_TABLE) / sizeof(FORMAT_TABLE[0]);
 
-const NovaFormatMapping* findByDrm(uint32_t drm_format)
+const FormatMapping* findByDrm(uint32_t drm_format)
 {
     for (uint32_t i = 0; i < FORMAT_TABLE_SIZE; i++) {
         if (FORMAT_TABLE[i].drm_format == drm_format) {
@@ -59,19 +59,19 @@ const NovaFormatMapping* findByDrm(uint32_t drm_format)
 
 } // namespace
 
-const NovaFormatMapping* novaFormatTable(uint32_t& count_out)
+const FormatMapping* formatTable(uint32_t& count_out)
 {
     count_out = FORMAT_TABLE_SIZE;
     return FORMAT_TABLE;
 }
 
-VkFormat novaVulkanFormatFromDrm(uint32_t drm_format)
+VkFormat vulkanFormatFromDrm(uint32_t drm_format)
 {
-    const NovaFormatMapping* mapping = findByDrm(drm_format);
+    const FormatMapping* mapping = findByDrm(drm_format);
     return mapping != nullptr ? mapping->vk_format : VK_FORMAT_UNDEFINED;
 }
 
-uint32_t novaDrmFormatFromVulkan(VkFormat format)
+uint32_t drmFormatFromVulkan(VkFormat format)
 {
     // The table is ordered alpha-variant-first per Vulkan format, so the first
     // hit is already the preferred answer.
@@ -84,15 +84,15 @@ uint32_t novaDrmFormatFromVulkan(VkFormat format)
     return 0;
 }
 
-bool novaDrmFormatHasAlpha(uint32_t drm_format)
+bool drmFormatHasAlpha(uint32_t drm_format)
 {
-    const NovaFormatMapping* mapping = findByDrm(drm_format);
+    const FormatMapping* mapping = findByDrm(drm_format);
     return mapping != nullptr && mapping->has_alpha;
 }
 
-const char* novaDrmFormatName(uint32_t drm_format)
+const char* drmFormatName(uint32_t drm_format)
 {
-    const NovaFormatMapping* mapping = findByDrm(drm_format);
+    const FormatMapping* mapping = findByDrm(drm_format);
     if (mapping != nullptr) {
         return mapping->name;
     }
@@ -109,3 +109,5 @@ const char* novaDrmFormatName(uint32_t drm_format)
 
     return scratch;
 }
+
+} // namespace Nova

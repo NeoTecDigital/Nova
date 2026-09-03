@@ -4,13 +4,13 @@
 #include <set>
 #include <stdexcept>
 #include <string>
-
+namespace Nova {
 
     //////////////////////
     // VALIDATION LAYER //
     //////////////////////
 
-bool NovaCoreLegacy::checkValidationLayerSupport() 
+bool CoreLegacy::checkValidationLayerSupport() 
     {
         uint32_t layerCount;
         vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -30,7 +30,7 @@ bool NovaCoreLegacy::checkValidationLayerSupport()
     //  Device Queues //
     ////////////////////
 
-void NovaCoreLegacy::setQueueFamilyProperties(unsigned int i) {
+void CoreLegacy::setQueueFamilyProperties(unsigned int i) {
     VkQueueFamilyProperties* queue_family = &queues.families[i];
     std::string queue_name = "";
 
@@ -118,7 +118,7 @@ static std::set<uint32_t> collectQueueFamilies(const QueueFamilyIndices& indices
         return families;
     }
 
-void NovaCoreLegacy::getQueueFamilies(VkPhysicalDevice scanned_device) 
+void CoreLegacy::getQueueFamilies(VkPhysicalDevice scanned_device) 
     {
         report(LOGGER::VLINE, "\t .. Acquiring Queue Families ..");
 
@@ -176,7 +176,7 @@ static bool checkDeviceExtensionSupport(VkPhysicalDevice device)
     //  DEVICE PROVISION  //
     ////////////////////////
 
-bool NovaCoreLegacy::deviceProvisioned(VkPhysicalDevice scanned_device)
+bool CoreLegacy::deviceProvisioned(VkPhysicalDevice scanned_device)
     {
         getQueueFamilies(scanned_device);
 
@@ -203,7 +203,7 @@ bool NovaCoreLegacy::deviceProvisioned(VkPhysicalDevice scanned_device)
     // PHYSICAL DEVICE INFO //
     //////////////////////////
 
-void NovaCoreLegacy::createPhysicalDevice() 
+void CoreLegacy::createPhysicalDevice() 
     {
         report(LOGGER::VLINE, "\t .. Scanning for Physical Devices ..");
 
@@ -249,7 +249,7 @@ void NovaCoreLegacy::createPhysicalDevice()
     // LOGICAL DEVICE INFO //
     /////////////////////////
 
-VkDeviceQueueCreateInfo NovaCoreLegacy::getQueueCreateInfo(uint32_t queue_family)
+VkDeviceQueueCreateInfo CoreLegacy::getQueueCreateInfo(uint32_t queue_family)
     {
         return {
                 sType: VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -259,7 +259,7 @@ VkDeviceQueueCreateInfo NovaCoreLegacy::getQueueCreateInfo(uint32_t queue_family
             };
     }
 
-void NovaCoreLegacy::createLogicalDevice()
+void CoreLegacy::createLogicalDevice()
     {
         report(LOGGER::VLINE, "\t .. Creating Logical Device ..");
         VkPhysicalDeviceFeatures _device_features = {};
@@ -348,3 +348,5 @@ void NovaCoreLegacy::createLogicalDevice()
 
         //log();
     }
+
+} // namespace Nova

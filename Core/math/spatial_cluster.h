@@ -7,7 +7,7 @@
 #include <memory>
 #include <algorithm>
 
-namespace NovaMath {
+namespace Nova::Math {
 
 struct ClusterAABB {
     glm::vec3 min_pt{-1.0f};
@@ -123,4 +123,4 @@ private:
     std::unordered_map<uint64_t, ClusterNode> clusters_;
 };
 
-} // namespace NovaMath
+} // namespace Nova::Math

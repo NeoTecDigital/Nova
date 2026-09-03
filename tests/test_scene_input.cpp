@@ -48,8 +48,8 @@ static int g_failures = 0;
 
 namespace {
 
-using Clouds::SpatialNode;
-using Clouds::SpatialScene;
+using Splash::SpatialNode;
+using Splash::SpatialScene;
 using Clouds::UI::UIButton;
 using Clouds::UI::UILabel;
 using Clouds::UI::UIWindow;
@@ -69,7 +69,7 @@ public:
     int releases = 0;
     int keys = 0;
 
-    void onRayEnter(const NovaMath::RayHit& hit) override {
+    void onRayEnter(const Nova::Math::RayHit& hit) override {
         ++enters;
         SpatialNode::onRayEnter(hit);
     }
@@ -77,11 +77,11 @@ public:
         ++leaves;
         SpatialNode::onRayLeave();
     }
-    void onRayMove(const NovaMath::RayHit& hit) override {
+    void onRayMove(const Nova::Math::RayHit& hit) override {
         ++moves;
         SpatialNode::onRayMove(hit);
     }
-    void onRayButton(const NovaMath::RayHit& hit, uint32_t button, bool pressed) override {
+    void onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) override {
         pressed ? ++presses : ++releases;
         SpatialNode::onRayButton(hit, button, pressed);
     }
@@ -138,8 +138,8 @@ void testNearestBeatsListOrder() {
     root->addChild(near_quad);
     root->addChild(far_quad);
 
-    const NovaMath::Ray3D ray(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f));
-    NovaMath::RayHit hit;
+    const Nova::Math::Ray3D ray(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::RayHit hit;
     std::shared_ptr<SpatialNode> node;
 
     CHECK(root->hitTest(ray, hit, node), "two overlapping quads must produce a hit");
@@ -153,8 +153,8 @@ void testParentIsNotShadowedByItsChild() {
     auto child = makeQuad("Child", glm::vec3(0.0f, 0.0f, -0.4f), glm::vec2(1.0f)); // world z = 0.2
     parent->addChild(child);
 
-    const NovaMath::Ray3D ray(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f));
-    NovaMath::RayHit hit;
+    const Nova::Math::Ray3D ray(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::RayHit hit;
     std::shared_ptr<SpatialNode> node;
 
     CHECK(parent->hitTest(ray, hit, node), "parent subtree must produce a hit");
@@ -162,7 +162,7 @@ void testParentIsNotShadowedByItsChild() {
 
     // ...and the child still wins when it is genuinely in front.
     child->transform.position.z = 0.4f; // world z = 1.0
-    NovaMath::RayHit front_hit;
+    Nova::Math::RayHit front_hit;
     std::shared_ptr<SpatialNode> front_node;
     CHECK(parent->hitTest(ray, front_hit, front_node), "parent subtree must still hit");
     CHECK(front_node == child, "a child in front of its parent wins on distance");
@@ -292,9 +292,9 @@ void testGrabHoldsADragThatLeavesTheNode() {
     // Well clear of a 0.6 x 0.465 window: the ray now hits nothing at all.
     const glm::vec3 off_node(1.4f, tb_centre_y + 0.9f, 0.0f);
     {
-        NovaMath::RayHit probe;
+        Nova::Math::RayHit probe;
         std::shared_ptr<SpatialNode> probe_node;
-        const NovaMath::Ray3D ray = NovaMath::unprojectScreenRay(
+        const Nova::Math::Ray3D ray = Nova::Math::unprojectScreenRay(
             screenPixelFor(*scene, off_node), kScreen,
             glm::inverse(scene->getProjectionMatrix(kScreenW / kScreenH) * scene->getViewMatrix()));
         CHECK(!scene->root->hitTest(ray, probe, probe_node), "the off-node aim point must miss the scene");

@@ -7,9 +7,9 @@
 
 #include "./nova_graphics.h"
 #include <set>
-
+namespace Nova {
 // Swapchain creation (placeholder - will migrate from existing code)
-void NovaGraphics::createSwapchain()
+void Graphics::createSwapchain()
 {
     report(LOGGER::VLINE, "\t .. Creating Swapchain ..");
 
@@ -37,7 +37,7 @@ void NovaGraphics::createSwapchain()
     report(LOGGER::INFO, "Swapchain created with %d images", image_count);
 }
 
-SwapChainSupportDetails NovaGraphics::querySwapChainSupport(VkPhysicalDevice device)
+SwapChainSupportDetails Graphics::querySwapChainSupport(VkPhysicalDevice device)
 {
     SwapChainSupportDetails details = {};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
@@ -59,7 +59,7 @@ SwapChainSupportDetails NovaGraphics::querySwapChainSupport(VkPhysicalDevice dev
     return details;
 }
 
-void NovaGraphics::querySwapChainDetails()
+void Graphics::querySwapChainDetails()
 {
     report(LOGGER::VLINE, "\t .. Querying SwapChain Details ..");
 
@@ -103,7 +103,7 @@ void NovaGraphics::querySwapChainDetails()
     }
 }
 
-void NovaGraphics::createSwapchainInfoKHR(VkSwapchainCreateInfoKHR* create_info, uint32_t image_count)
+void Graphics::createSwapchainInfoKHR(VkSwapchainCreateInfoKHR* create_info, uint32_t image_count)
 {
     std::set<uint32_t> unique_queue_families = {
         queues.indices.graphics_family.value(),
@@ -138,7 +138,7 @@ void NovaGraphics::createSwapchainInfoKHR(VkSwapchainCreateInfoKHR* create_info,
     }
 }
 
-void NovaGraphics::createImageViews()
+void Graphics::createImageViews()
 {
     report(LOGGER::VLINE, "\t .. Creating Image Views ..");
 
@@ -171,7 +171,7 @@ void NovaGraphics::createImageViews()
     report(LOGGER::INFO, "Created %zu image views", swapchain.image_views.size());
 }
 
-void NovaGraphics::createFramebuffers()
+void Graphics::createFramebuffers()
 {
     report(LOGGER::VLINE, "\t .. Creating Framebuffers ..");
 
@@ -196,8 +196,10 @@ void NovaGraphics::createFramebuffers()
     report(LOGGER::INFO, "Created %zu framebuffers", swapchain.framebuffers.size());
 }
 
-void NovaGraphics::recreateSwapchain()
+void Graphics::recreateSwapchain()
 {
     report(LOGGER::DEBUG, "NovaGraphics::recreateSwapchain() - not yet implemented");
     // Placeholder - will migrate from existing code
 }
+
+} // namespace Nova

@@ -39,24 +39,24 @@ namespace {
 
 constexpr float kUnitBoxHalfExtent = 1.0f;
 
-NovaMath::ClusterAABB makeUnitBox() {
-    return NovaMath::ClusterAABB{glm::vec3(-kUnitBoxHalfExtent), glm::vec3(kUnitBoxHalfExtent)};
+Nova::Math::ClusterAABB makeUnitBox() {
+    return Nova::Math::ClusterAABB{glm::vec3(-kUnitBoxHalfExtent), glm::vec3(kUnitBoxHalfExtent)};
 }
 
-NovaMath::ClusterAABB makeBox(const glm::vec3& center, float half) {
-    return NovaMath::ClusterAABB{center - glm::vec3(half), center + glm::vec3(half)};
+Nova::Math::ClusterAABB makeBox(const glm::vec3& center, float half) {
+    return Nova::Math::ClusterAABB{center - glm::vec3(half), center + glm::vec3(half)};
 }
 
 // ---------------------------------------------------------------------------
 // Narrowphase ray/AABB correctness.
 // ---------------------------------------------------------------------------
 void testRayAabbHitMiss() {
-    const NovaMath::ClusterAABB box = makeUnitBox();
+    const Nova::Math::ClusterAABB box = makeUnitBox();
     float t_min = 0.0f;
     float t_max = 0.0f;
 
     // Head-on hit: origin 10 units out on +Z, box front face at z = +1 => t = 9.
-    NovaMath::Ray3D head_on(glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::Ray3D head_on(glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
     CHECK(box.intersectRay(head_on, t_min, t_max), "head-on ray must hit the unit box");
     CHECK_NEAR(t_min, 9.0, 1e-4, "entry distance for head-on ray");
     CHECK_NEAR(t_max, 11.0, 1e-4, "exit distance for head-on ray");
@@ -64,15 +64,15 @@ void testRayAabbHitMiss() {
     CHECK_NEAR(entry.z, kUnitBoxHalfExtent, 1e-4, "entry point lies on the +Z face");
 
     // Same ray reversed: the box is entirely behind the origin => miss.
-    NovaMath::Ray3D pointing_away(glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    Nova::Math::Ray3D pointing_away(glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     CHECK(!box.intersectRay(pointing_away, t_min, t_max), "ray pointing away must miss");
 
     // Laterally displaced ray: parallel to the box but outside every slab.
-    NovaMath::Ray3D offset(glm::vec3(5.0f, 5.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::Ray3D offset(glm::vec3(5.0f, 5.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
     CHECK(!box.intersectRay(offset, t_min, t_max), "laterally offset ray must miss");
 
     // Ray originating inside the box: entry parameter is negative, still a hit.
-    NovaMath::Ray3D inside(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::Ray3D inside(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
     CHECK(box.intersectRay(inside, t_min, t_max), "ray starting inside the box must hit");
     CHECK_NEAR(t_min, -1.0, 1e-4, "interior ray entry parameter is behind the origin");
     CHECK_NEAR(t_max, 1.0, 1e-4, "interior ray exit parameter");
@@ -86,22 +86,22 @@ void testRayAabbHitMiss() {
 // This is asserted so the convention cannot silently flip.
 // ---------------------------------------------------------------------------
 void testRayAabbGraze() {
-    const NovaMath::ClusterAABB box = makeUnitBox();
+    const Nova::Math::ClusterAABB box = makeUnitBox();
     float t_min = 0.0f;
     float t_max = 0.0f;
 
-    NovaMath::Ray3D on_face(glm::vec3(kUnitBoxHalfExtent, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::Ray3D on_face(glm::vec3(kUnitBoxHalfExtent, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
     CHECK(!box.intersectRay(on_face, t_min, t_max),
           "ray grazing exactly along the +X face plane resolves as a miss");
 
-    NovaMath::Ray3D just_inside(glm::vec3(kUnitBoxHalfExtent - 1e-3f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::Ray3D just_inside(glm::vec3(kUnitBoxHalfExtent - 1e-3f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
     CHECK(box.intersectRay(just_inside, t_min, t_max), "ray just inside the +X face must hit");
     CHECK_NEAR(t_min, 9.0, 1e-4, "grazing-inside entry distance matches the head-on case");
 
-    NovaMath::Ray3D just_outside(glm::vec3(kUnitBoxHalfExtent + 1e-3f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::Ray3D just_outside(glm::vec3(kUnitBoxHalfExtent + 1e-3f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
     CHECK(!box.intersectRay(just_outside, t_min, t_max), "ray just outside the +X face must miss");
 
-    NovaMath::Ray3D corner(glm::vec3(kUnitBoxHalfExtent, kUnitBoxHalfExtent, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::Ray3D corner(glm::vec3(kUnitBoxHalfExtent, kUnitBoxHalfExtent, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
     CHECK(!box.intersectRay(corner, t_min, t_max),
           "ray grazing exactly along a corner edge resolves as a miss, consistent with the face case");
 }
@@ -110,9 +110,9 @@ void testRayAabbGraze() {
 // Broadphase must never drop a true positive: every AABB the narrowphase
 // confirms has to be present in the candidate set returned by queryRay.
 // ---------------------------------------------------------------------------
-void testBroadphaseContainsNarrowphaseHits(const std::vector<NovaMath::ClusterAABB>& boxes,
-                                           const NovaMath::SpatialClusterIndex& index,
-                                           const NovaMath::Ray3D& ray,
+void testBroadphaseContainsNarrowphaseHits(const std::vector<Nova::Math::ClusterAABB>& boxes,
+                                           const Nova::Math::SpatialClusterIndex& index,
+                                           const Nova::Math::Ray3D& ray,
                                            const char* label) {
     uint32_t tests_performed = 0;
     std::vector<uint32_t> candidates = index.queryRay(ray, tests_performed);
@@ -137,8 +137,8 @@ void testBroadphaseContainsNarrowphaseHits(const std::vector<NovaMath::ClusterAA
 }
 
 void testBroadphaseKnownQuery() {
-    NovaMath::SpatialClusterIndex index(1.0f, 4);
-    std::vector<NovaMath::ClusterAABB> boxes;
+    Nova::Math::SpatialClusterIndex index(1.0f, 4);
+    std::vector<Nova::Math::ClusterAABB> boxes;
 
     // id 0 is the intended target; ids 1..3 are decoys in distant cells.
     boxes.push_back(makeBox(glm::vec3(0.5f, 0.5f, 0.5f), 0.25f));
@@ -151,7 +151,7 @@ void testBroadphaseKnownQuery() {
     CHECK(index.getItemCount() == boxes.size(), "index item count must match insert count");
     CHECK(index.getClusterCount() > 0, "index must allocate at least one cluster");
 
-    NovaMath::Ray3D ray(glm::vec3(0.5f, 0.5f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::Ray3D ray(glm::vec3(0.5f, 0.5f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 
     // Analytic narrowphase truth: front face of the target sits at z = 0.75.
     float t_min = 0.0f;
@@ -162,7 +162,7 @@ void testBroadphaseKnownQuery() {
     testBroadphaseContainsNarrowphaseHits(boxes, index, ray, "known query must produce a narrowphase hit");
 
     uint32_t tests_performed = 0;
-    NovaMath::Ray3D far_ray(glm::vec3(500.0f, 500.0f, 500.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::Ray3D far_ray(glm::vec3(500.0f, 500.0f, 500.0f), glm::vec3(0.0f, 0.0f, -1.0f));
     std::vector<uint32_t> far_candidates = index.queryRay(far_ray, tests_performed);
     CHECK(!std::binary_search(far_candidates.begin(), far_candidates.end(), 0u),
           "grossly separated ray must not return the target AABB as a candidate");
@@ -178,16 +178,16 @@ void testHaltonSequence() {
     const double expect_base3[6] = {1.0 / 3, 2.0 / 3, 1.0 / 9, 4.0 / 9, 7.0 / 9, 2.0 / 9};
 
     for (uint32_t i = 0; i < 6; ++i) {
-        CHECK_NEAR(NovaMath::InputRayFilter::halton(i, 2), expect_base2[i], 1e-6,
+        CHECK_NEAR(Nova::Math::InputRayFilter::halton(i, 2), expect_base2[i], 1e-6,
                    "Halton base-2 value mismatch");
-        CHECK_NEAR(NovaMath::InputRayFilter::halton(i, 3), expect_base3[i], 1e-6,
+        CHECK_NEAR(Nova::Math::InputRayFilter::halton(i, 3), expect_base3[i], 1e-6,
                    "Halton base-3 value mismatch");
     }
 
     bool in_range = true;
     for (uint32_t i = 0; i < 100000; ++i) {
-        const float h2 = NovaMath::InputRayFilter::halton(i, 2);
-        const float h3 = NovaMath::InputRayFilter::halton(i, 3);
+        const float h2 = Nova::Math::InputRayFilter::halton(i, 2);
+        const float h3 = Nova::Math::InputRayFilter::halton(i, 3);
         if (!(h2 >= 0.0f && h2 < 1.0f) || !(h3 >= 0.0f && h3 < 1.0f)) {
             in_range = false;
             break;
@@ -205,8 +205,8 @@ constexpr float kDitherNdcBoundX = 0.25f / 800.0f;
 constexpr float kDitherNdcBoundY = 0.25f / 500.0f;
 
 void testRayFilterDither() {
-    NovaMath::InputRayFilter filter;
-    NovaMath::EnginePhysicsConfig config;
+    Nova::Math::InputRayFilter filter;
+    Nova::Math::EnginePhysicsConfig config;
     config.dither_enabled = false;
     config.dither_amplitude = 0.5f;
 
@@ -214,7 +214,7 @@ void testRayFilterDither() {
     const glm::vec2 screen_size(1600.0f, 1000.0f);
     const glm::mat4 inv_vp(1.0f);
 
-    const NovaMath::Ray3D undithered = filter.filterScreenRay(base_pos, screen_size, inv_vp, config, 0);
+    const Nova::Math::Ray3D undithered = filter.filterScreenRay(base_pos, screen_size, inv_vp, config, 0);
     CHECK_NEAR(undithered.origin.x, 0.0, 1e-6, "screen centre unprojects to NDC x = 0");
     CHECK_NEAR(undithered.origin.y, 0.0, 1e-6, "screen centre unprojects to NDC y = 0");
     CHECK_NEAR(undithered.direction.z, 1.0, 1e-6, "identity inv-VP yields a +Z view direction");
@@ -224,7 +224,7 @@ void testRayFilterDither() {
     size_t distinct = 0;
     float previous = undithered.origin.x;
     for (uint32_t frame = 0; frame < 16; ++frame) {
-        const NovaMath::Ray3D r = filter.filterScreenRay(base_pos, screen_size, inv_vp, config, frame);
+        const Nova::Math::Ray3D r = filter.filterScreenRay(base_pos, screen_size, inv_vp, config, frame);
         CHECK(std::fabs(r.origin.x) <= kDitherNdcBoundX, "dither X offset must stay within the sub-pixel bound");
         CHECK(std::fabs(r.origin.y) <= kDitherNdcBoundY, "dither Y offset must stay within the sub-pixel bound");
         CHECK_NEAR(r.direction.z, 1.0, 1e-6, "dither must not perturb the ray direction");
@@ -240,19 +240,19 @@ void testRayFilterDither() {
 // Benchmarks (unchanged output, now with correctness assertions layered on).
 // ---------------------------------------------------------------------------
 void benchmarkSpatialIndex() {
-    NovaMath::SpatialClusterIndex cluster_index(1.0f, 4);
+    Nova::Math::SpatialClusterIndex cluster_index(1.0f, 4);
     const int num_aabbs = 100000;
 
     std::mt19937 rng(42);
     std::uniform_real_distribution<float> dist_pos(-50.0f, 50.0f);
     std::uniform_real_distribution<float> dist_size(0.2f, 2.0f);
 
-    std::vector<NovaMath::ClusterAABB> boxes;
+    std::vector<Nova::Math::ClusterAABB> boxes;
     boxes.reserve(num_aabbs);
     for (int i = 0; i < num_aabbs; ++i) {
         const glm::vec3 center(dist_pos(rng), dist_pos(rng), dist_pos(rng));
         const glm::vec3 half(dist_size(rng) * 0.5f);
-        boxes.push_back(NovaMath::ClusterAABB{center - half, center + half});
+        boxes.push_back(Nova::Math::ClusterAABB{center - half, center + half});
     }
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -268,7 +268,7 @@ void benchmarkSpatialIndex() {
           "every inserted AABB must be accounted for");
 
     // Exhaustive no-false-negative sweep against the full 100k population.
-    NovaMath::Ray3D probe(glm::vec3(0.0f, 0.0f, 100.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    Nova::Math::Ray3D probe(glm::vec3(0.0f, 0.0f, 100.0f), glm::vec3(0.0f, 0.0f, -1.0f));
     testBroadphaseContainsNarrowphaseHits(boxes, cluster_index, probe,
                                           "dense population must yield at least one narrowphase hit");
 
@@ -281,7 +281,7 @@ void benchmarkSpatialIndex() {
     uint32_t tests_performed = 0;
     for (int i = 0; i < num_rays; ++i) {
         const glm::vec3 jittered_dir = glm::normalize(ray_dir + glm::vec3(dist_size(rng) * 0.01f, dist_size(rng) * 0.01f, 0.0f));
-        NovaMath::Ray3D ray{ray_orig, jittered_dir};
+        Nova::Math::Ray3D ray{ray_orig, jittered_dir};
         total_candidates += cluster_index.queryRay(ray, tests_performed).size();
     }
     end = std::chrono::high_resolution_clock::now();
@@ -296,8 +296,8 @@ void benchmarkSpatialIndex() {
 }
 
 void benchmarkRayFilter() {
-    NovaMath::InputRayFilter ray_filter;
-    NovaMath::EnginePhysicsConfig config;
+    Nova::Math::InputRayFilter ray_filter;
+    Nova::Math::EnginePhysicsConfig config;
     config.dither_enabled = true;
     config.dither_amplitude = 0.5f;
 
@@ -310,7 +310,7 @@ void benchmarkRayFilter() {
     double ray_accum = 0.0;
     float max_abs_origin_x = 0.0f;
     for (uint32_t i = 0; i < static_cast<uint32_t>(num_samples); ++i) {
-        const NovaMath::Ray3D r = ray_filter.filterScreenRay(base_pos, screen_size, inv_vp, config, i);
+        const Nova::Math::Ray3D r = ray_filter.filterScreenRay(base_pos, screen_size, inv_vp, config, i);
         ray_accum += static_cast<double>(r.origin.x) + static_cast<double>(r.direction.z);
         max_abs_origin_x = std::max(max_abs_origin_x, std::fabs(r.origin.x));
     }

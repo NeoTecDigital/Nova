@@ -3,7 +3,7 @@
 // The staged boot entry (plan section B): one process, one DRM master
 // acquisition, splash morphing into session in-engine.
 //
-//   Splash  - offscreen NovaGraphics (no SDL anywhere in this binary), texture
+//   Splash  - offscreen Graphics (no SDL anywhere in this binary), texture
 //             bridge, scene, and a compositor substrate held LATENT: outputs
 //             live and committing frames, zero sockets, zero protocol globals.
 //   Session - a readiness token arrives on the channel Core provided, the SAME
@@ -159,37 +159,37 @@ private:
  * fact this process actually knows.
  */
 struct BootDesktop {
-    std::shared_ptr<Clouds::SpatialNode> root;
-    std::shared_ptr<Clouds::SpatialLabel> status;
-    std::vector<std::shared_ptr<Clouds::SpatialPanel>> orbiters;
+    std::shared_ptr<Splash::SpatialNode> root;
+    std::shared_ptr<Splash::SpatialLabel> status;
+    std::vector<std::shared_ptr<Splash::SpatialPanel>> orbiters;
     float elapsed = 0.0f;
 
-    void build(const std::shared_ptr<NovaSpatial::SpatialFont>& font, const char* channel) {
-        root = std::make_shared<Clouds::SpatialNode>();
+    void build(const std::shared_ptr<Nova::SpatialFont>& font, const char* channel) {
+        root = std::make_shared<Splash::SpatialNode>();
         root->name = "BootDesktop";
 
-        auto title = std::make_shared<Clouds::SpatialLabel>("VAZIO", font, 0.006f);
+        auto title = std::make_shared<Splash::SpatialLabel>("VAZIO", font, 0.006f);
         title->transform.position = glm::vec3(0.0f, 0.55f, 0.0f);
         root->addChild(title);
 
-        status = std::make_shared<Clouds::SpatialLabel>("", font, 0.0022f);
+        status = std::make_shared<Splash::SpatialLabel>("", font, 0.0022f);
         status->transform.position = glm::vec3(0.0f, -0.55f, 0.0f);
         root->addChild(status);
 
-        auto channel_line = std::make_shared<Clouds::SpatialLabel>(
+        auto channel_line = std::make_shared<Splash::SpatialLabel>(
             std::string("readiness channel: ") + channel, font, 0.0016f,
             glm::vec4(0.55f, 0.62f, 0.78f, 1.0f));
         channel_line->transform.position = glm::vec3(0.0f, -0.68f, 0.0f);
         root->addChild(channel_line);
 
         for (int i = 0; i < 5; ++i) {
-            auto orbiter = std::make_shared<Clouds::SpatialPanel>(
+            auto orbiter = std::make_shared<Splash::SpatialPanel>(
                 glm::vec2(0.14f, 0.14f), glm::vec4(0.16f, 0.34f, 0.62f, 0.9f));
             orbiter->name = "BootOrbiter";
             orbiter->interactable = false;
             // Each orbiter starts at a different point on the phase circle, so
             // evolvePhase moves them independently rather than in lockstep.
-            orbiter->phase_state = NovaMath::PhaseState8::fromComplexPhase(
+            orbiter->phase_state = Nova::Math::PhaseState8::fromComplexPhase(
                 std::cos(static_cast<float>(i) * 1.2566371f),
                 std::sin(static_cast<float>(i) * 1.2566371f),
                 static_cast<float>(i) * 0.7f);
@@ -255,34 +255,34 @@ int openDrmHint(const std::string& node) {
 namespace {
 
 struct Runtime {
-    std::unique_ptr<NovaGraphics> graphics;
-    std::unique_ptr<NovaSpatial::TextureBridge> bridge;
-    std::unique_ptr<NovaSpatial::SpatialPipeline> pipeline;
-    std::shared_ptr<Clouds::SpatialScene> scene;
-    std::unique_ptr<Clouds::SpatialCompositor> compositor;
-    std::unique_ptr<Clouds::SpatialPresentLoop> present;
+    std::unique_ptr<Nova::Graphics> graphics;
+    std::unique_ptr<Nova::TextureBridge> bridge;
+    std::unique_ptr<Nova::SpatialPipeline> pipeline;
+    std::shared_ptr<Splash::SpatialScene> scene;
+    std::unique_ptr<Vazio::SpatialCompositor> compositor;
+    std::unique_ptr<Vazio::SpatialPresentLoop> present;
 
     // Session stage only; absent for the whole of the splash.
-    std::shared_ptr<Clouds::OatsBridge> oats;
+    std::shared_ptr<Splash::OatsBridge> oats;
     std::shared_ptr<Clouds::SpatialFilesystem> filesystem;
-    std::shared_ptr<Clouds::SpatialNode> session_root;
+    std::shared_ptr<Splash::SpatialNode> session_root;
 
     BootDesktop boot;
 };
 
 bool buildGraphics(Runtime& rt, const CommandLine& cli, int drm_fd) {
-    NovaOffscreenConfig config;
+    Nova::OffscreenConfig config;
     config.extent = { cli.headless ? 1600u : 1920u, cli.headless ? 1000u : 1080u };
     config.drm_fd = drm_fd;
     config.request_dmabuf_import = true;
 
-    rt.graphics = std::make_unique<NovaGraphics>(config, "INFO");
-    rt.bridge = std::make_unique<NovaSpatial::TextureBridge>(rt.graphics.get());
+    rt.graphics = std::make_unique<Nova::Graphics>(config, "INFO");
+    rt.bridge = std::make_unique<Nova::TextureBridge>(rt.graphics.get());
     rt.bridge->initialize();
 
     // No font file: SpatialFont falls back to its built-in atlas, which is what
     // makes the splash independent of anything on disk (plan B.3.7).
-    rt.scene = std::make_shared<Clouds::SpatialScene>(rt.graphics.get(), rt.bridge.get());
+    rt.scene = std::make_shared<Splash::SpatialScene>(rt.graphics.get(), rt.bridge.get());
     rt.scene->initialize("");
     rt.scene->show_lookat_reticle = false;
     rt.scene->show_cursor_reticle = false;
@@ -292,7 +292,7 @@ bool buildGraphics(Runtime& rt, const CommandLine& cli, int drm_fd) {
 // Bind the presentation loop to the outputs the substrate brought up, and build
 // the scene pipeline against the render pass the chosen path settled on.
 bool bindPresentation(Runtime& rt) {
-    rt.present = std::make_unique<Clouds::SpatialPresentLoop>(rt.graphics.get(), rt.compositor.get());
+    rt.present = std::make_unique<Vazio::SpatialPresentLoop>(rt.graphics.get(), rt.compositor.get());
     rt.present->setSceneRenderer([&rt](VkCommandBuffer cmd, const VkExtent2D& extent) {
         if (!rt.pipeline) return;
         rt.scene->render(rt.pipeline.get(), cmd,
@@ -303,7 +303,7 @@ bool bindPresentation(Runtime& rt) {
     // handler. A hotplugged output lands here too, and finds the pipeline built.
     rt.compositor->setOutputReadyHandler([&rt](struct wlr_output* output) {
         if (!rt.present->attach(output) || rt.pipeline) return;
-        rt.pipeline = std::make_unique<NovaSpatial::SpatialPipeline>(
+        rt.pipeline = std::make_unique<Nova::SpatialPipeline>(
             rt.graphics.get(), rt.present->renderPass(), rt.bridge.get());
         rt.pipeline->build(resolveAssetPath("shaders/spatial/spatial_ui_vert.spv"),
                            resolveAssetPath("shaders/spatial/spatial_ui_frag.spv"));
@@ -330,13 +330,13 @@ void enterSessionStage(Runtime& rt, const CommandLine& cli) {
     rt.boot.status.reset();
     rt.boot.orbiters.clear();
 
-    rt.session_root = std::make_shared<Clouds::SpatialNode>();
+    rt.session_root = std::make_shared<Splash::SpatialNode>();
     rt.session_root->name = "SessionDesktop";
     rt.scene->root->addChild(rt.session_root);
 
     // OATS degrades, never aborts (plan B.3.2): a runtime that will not start
     // costs this session its presenters, not its display.
-    rt.oats = std::make_shared<Clouds::OatsBridge>();
+    rt.oats = std::make_shared<Splash::OatsBridge>();
     if (!rt.oats->initialize()) {
         report(LOGGER::ERROR, "vazio - OATS runtime unavailable; continuing without its presenters");
         rt.oats.reset();
@@ -359,12 +359,12 @@ bool enterSplashStage(Runtime& rt, const CommandLine& cli, const ReadinessChanne
                       int drm_fd) {
     if (!buildGraphics(rt, cli, drm_fd)) return false;
 
-    const Clouds::SpatialCompositorConfig compositor_config = {
+    const Vazio::SpatialCompositorConfig compositor_config = {
         .headless = cli.headless,
         .virtual_width = rt.graphics->getWindowExtent().width,
         .virtual_height = rt.graphics->getWindowExtent().height
     };
-    rt.compositor = std::make_unique<Clouds::SpatialCompositor>(
+    rt.compositor = std::make_unique<Vazio::SpatialCompositor>(
         rt.graphics.get(), rt.bridge.get(), rt.scene, rt.scene->root, compositor_config);
 
     if (!rt.compositor->startSubstrate()) {
@@ -376,7 +376,7 @@ bool enterSplashStage(Runtime& rt, const CommandLine& cli, const ReadinessChanne
     rt.boot.build(rt.scene->font, readiness.describe());
     rt.scene->root->addChild(rt.boot.root);
     report(LOGGER::INFO, "vazio - Splash stage on %zu output(s) over %s; readiness channel: %s",
-           rt.compositor->outputCount(), Clouds::presentPathName(rt.present->path()),
+           rt.compositor->outputCount(), Vazio::presentPathName(rt.present->path()),
            readiness.describe());
 
     // No readiness source is plan B.2 option (i) by default: stay on the splash
@@ -393,7 +393,7 @@ bool enterSplashStage(Runtime& rt, const CommandLine& cli, const ReadinessChanne
 // false means the flip was attempted on a live substrate and refused, which is
 // fatal - there is no second substrate to fall back to.
 bool openSessionIfReady(Runtime& rt, const CommandLine& cli, ReadinessChannel& readiness) {
-    if (rt.compositor->stage() != Clouds::SessionStage::Latent) return true;
+    if (rt.compositor->stage() != Vazio::SessionStage::Latent) return true;
     if (!readiness.signalled()) return true;
 
     report(LOGGER::INFO, "vazio - Readiness token received after %.2fs; opening the session",
@@ -458,7 +458,7 @@ int main(int argc, char** argv) {
     report(LOGGER::INFO, "vazio - Shutting down: %llu frames committed, %llu failed, stage %s",
            static_cast<unsigned long long>(rt.present->commits()),
            static_cast<unsigned long long>(rt.present->failures()),
-           rt.compositor->stage() == Clouds::SessionStage::Open ? "open" : "latent");
+           rt.compositor->stage() == Vazio::SessionStage::Open ? "open" : "latent");
 
     // Order is load bearing: the loop's listeners live on wlr_output signals,
     // so they come off before the compositor destroys the display that owns

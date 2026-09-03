@@ -3,7 +3,7 @@
 #include <string>
 #include <unordered_set>
 #include <algorithm>
-
+namespace Nova {
     //////////////////
     //  Debug Utils //
     //////////////////
@@ -69,3 +69,5 @@ void createDebugMessenger(VkInstance *instance, VkDebugUtilsMessengerEXT *_debug
             { report(LOGGER::ERROR, "Vulkan: vkCreateDebugUtilsMessengerEXT not available\n"); }
     }
 
+
+} // namespace Nova

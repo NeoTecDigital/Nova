@@ -1,9 +1,9 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 //
-// Offscreen NovaGraphics acceptance probe, and the direct reproducer for the
+// Offscreen Graphics acceptance probe, and the direct reproducer for the
 // teardown use-after-free QA5 found: an optimized build used to render 18/18
-// checks correctly and then die inside ~NovaCore, because the cleanup lambda
-// NovaGraphics registered in the BASE registry touched DERIVED members that had
+// checks correctly and then die inside ~Core, because the cleanup lambda
+// Graphics registered in the BASE registry touched DERIVED members that had
 // already been destroyed.
 //
 // The teardown is therefore the last and most important assertion in the file.
@@ -37,7 +37,7 @@ struct OwnedImage {
     VkImageView view = VK_NULL_HANDLE;
 };
 
-bool createOwnedImage(NovaGraphics& nova, VkExtent2D extent, VkFormat format, OwnedImage& out) {
+bool createOwnedImage(Nova::Graphics& nova, VkExtent2D extent, VkFormat format, OwnedImage& out) {
     VkImageCreateInfo image_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
@@ -68,7 +68,7 @@ bool createOwnedImage(NovaGraphics& nova, VkExtent2D extent, VkFormat format, Ow
     return vkCreateImageView(nova.getDevice(), &view_info, nullptr, &out.view) == VK_SUCCESS;
 }
 
-void destroyOwnedImage(NovaGraphics& nova, OwnedImage& owned) {
+void destroyOwnedImage(Nova::Graphics& nova, OwnedImage& owned) {
     if (owned.view != VK_NULL_HANDLE) {
         vkDestroyImageView(nova.getDevice(), owned.view, nullptr);
         owned.view = VK_NULL_HANDLE;
@@ -82,12 +82,12 @@ void destroyOwnedImage(NovaGraphics& nova, OwnedImage& owned) {
 
 // One render + readback, so the checks cover a real submission rather than only
 // object construction. Returns the clear colour the GPU actually wrote.
-bool renderAndReadBack(NovaGraphics& nova, const NovaRenderTarget& target, uint32_t& pixel_out) {
+bool renderAndReadBack(Nova::Graphics& nova, const Nova::RenderTarget& target, uint32_t& pixel_out) {
     VkFence fence = nova.renderToImage(target, [](VkCommandBuffer, uint32_t) {});
     if (fence == VK_NULL_HANDLE || !nova.waitForRender(fence)) return false;
 
     const size_t bytes = static_cast<size_t>(target.extent.width) * target.extent.height * 4;
-    Buffer_T readback = nova.createEphemeralBuffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+    Nova::Buffer_T readback = nova.createEphemeralBuffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                                    VMA_MEMORY_USAGE_CPU_ONLY);
     if (readback.allocation == VK_NULL_HANDLE) return false;
 
@@ -120,14 +120,14 @@ bool renderAndReadBack(NovaGraphics& nova, const NovaRenderTarget& target, uint3
 int main() {
     const std::string debug_level = "ERROR";
 
-    NovaOffscreenConfig config = {};
+    Nova::OffscreenConfig config = {};
     config.extent = { 640, 360 };
     config.request_dmabuf_import = true;
 
     // Scoped so the destructor runs BEFORE the summary is printed: a teardown
     // that aborts must not be able to print a passing summary first.
     {
-        auto nova = std::make_unique<NovaGraphics>(config, debug_level);
+        auto nova = std::make_unique<Nova::Graphics>(config, debug_level);
 
         check(nova->getDevice() != VK_NULL_HANDLE, "offscreen instance has a logical device");
         check(nova->getAllocator() != VK_NULL_HANDLE, "offscreen instance has a VMA allocator");
@@ -148,7 +148,7 @@ int main() {
         check(createOwnedImage(*nova, config.extent, format, owned), "owned colour target allocated");
         check(owned.view != VK_NULL_HANDLE, "owned colour target has an image view");
 
-        NovaRenderTarget target = {};
+        Nova::RenderTarget target = {};
         target.image = owned.image;
         target.view = owned.view;
         target.extent = config.extent;
@@ -170,7 +170,7 @@ int main() {
         check(renderAndReadBack(*nova, target, pixel_again), "second frame through the same view");
         check(pixel_again == pixel, "second frame produced identical pixels");
 
-        NovaRenderTarget invalid = {};
+        Nova::RenderTarget invalid = {};
         check(nova->renderToImage(invalid, [](VkCommandBuffer, uint32_t) {}) == VK_NULL_HANDLE,
               "renderToImage rejects an invalid target");
 

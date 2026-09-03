@@ -46,7 +46,7 @@ static const glm::vec3 p8 = glm::vec3(-0.5f, -0.5f, -0.5f); // bottom left back
 
 static int subdivisions = 2;
 
-static void subdivide(glm::vec3 a, glm::vec3 b, glm::vec3 c, glm::vec3 d, std::vector<Vertex>* vertices, std::vector<uint32_t>* indices) 
+static void subdivide(glm::vec3 a, glm::vec3 b, glm::vec3 c, glm::vec3 d, std::vector<Nova::Vertex>* vertices, std::vector<uint32_t>* indices) 
     {
         for (int i = 0; i < subdivisions; i++) 
             {
@@ -79,7 +79,7 @@ static void subdivide(glm::vec3 a, glm::vec3 b, glm::vec3 c, glm::vec3 d, std::v
             }
     }
 
-void genesis::createObjects(std::vector<Vertex>* vertices, std::vector<uint32_t>* indices) 
+void genesis::createObjects(std::vector<Nova::Vertex>* vertices, std::vector<uint32_t>* indices) 
     {
         std::vector<glm::vec3> positions = {};
         std::vector<glm::vec3> colors = {};

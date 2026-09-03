@@ -6,9 +6,9 @@
 
 #include <memory>
 #include <vector>
-
+namespace Nova {
 /**
- * NovaGraphics - Graphics rendering mode
+ * Graphics - Graphics rendering mode
  *
  * Traditional Vulkan rendering pipeline:
  * - Surface and swapchain
@@ -22,7 +22,7 @@
  * - Window-based applications
  * - Game engines
  */
-class NovaGraphics : public NovaCore {
+class Graphics : public Core {
 private:
     // Graphics-specific resources
     VkQueue graphics_queue = VK_NULL_HANDLE;
@@ -37,19 +37,19 @@ private:
     FrameData frames[MAX_FRAMES_IN_FLIGHT] = {};
     VkRenderPass render_pass = VK_NULL_HANDLE;
 
-    Pipeline* graphics_pipeline = nullptr;
+    Builder* graphics_pipeline = nullptr;
     DescriptorContext descriptor;
 
     // Offscreen mode (plan section D.2): no surface, no swapchain, no present.
     // renderFrame() is unusable in this mode and says so; renderToImage() is
     // the whole presentation path.
     bool offscreen_mode = false;
-    std::unique_ptr<NovaOffscreenTargets> offscreen_targets;
+    std::unique_ptr<OffscreenTargets> offscreen_targets;
 
     // Imported dmabufs, tracked BY VALUE and matched on VkImage. Tracking the
     // caller's object by address would leave a dangling entry the moment a
-    // caller let its NovaImportedImage go out of scope unreleased.
-    std::vector<NovaImportedImage> imported_images;
+    // caller let its ImportedImage go out of scope unreleased.
+    std::vector<ImportedImage> imported_images;
 
     const VkClearValue CLEAR_COLOR = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
     unsigned int frame_ct = 0;
@@ -75,7 +75,7 @@ private:
     void createFrameSyncObjects();
     void recreateSwapchain();
 
-    // Teardown halves of the surface-backed path, split out of ~NovaGraphics so
+    // Teardown halves of the surface-backed path, split out of ~Graphics so
     // the destructor stays readable. Both are safe in offscreen mode, where the
     // collections they walk are empty.
     void destroySwapchainResources();
@@ -90,9 +90,9 @@ private:
     /**
      * The registry key the offscreen cleanup entry is filed under.
      *
-     * NovaCore::resource_registry belongs to the BASE, so it runs its entries
-     * from ~NovaCore - after offscreen_targets and imported_images below have
-     * already been destroyed. ~NovaGraphics therefore runs and unregisters this
+     * Core::resource_registry belongs to the BASE, so it runs its entries
+     * from ~Core - after offscreen_targets and imported_images below have
+     * already been destroyed. ~Graphics therefore runs and unregisters this
      * entry itself, by this key, while those members are still alive. The key
      * is named here because two translation units address it: nova_offscreen.cpp
      * registers, nova_graphics.cpp releases.
@@ -103,22 +103,22 @@ private:
     // image, then the render passes and framebuffers. Idempotent.
     void destroyOffscreenState();
 
-    bool resolveOffscreenTarget(const NovaRenderTarget& target,
+    bool resolveOffscreenTarget(const RenderTarget& target,
                                 VkRenderPass& pass_out,
                                 VkFramebuffer& framebuffer_out);
 
     // DMA-BUF import internals.
-    bool dmabufImportAccepted(const NovaDmabufAttributes& attrs, VkFormat& format_out);
+    bool dmabufImportAccepted(const DmabufAttributes& attrs, VkFormat& format_out);
     uint32_t importMemoryTypeFor(int fd, const VkMemoryRequirements& requirements);
     VkDeviceMemory importPlaneMemory(VkImage image, int fd, const VkMemoryRequirements& requirements);
-    VkDeviceMemory importOnePlane(NovaImportedImage& imported, const NovaDmabufAttributes& attrs,
+    VkDeviceMemory importOnePlane(ImportedImage& imported, const DmabufAttributes& attrs,
                                   int plane, bool disjoint);
-    bool bindImportedMemory(NovaImportedImage& imported, const NovaDmabufAttributes& attrs, bool disjoint);
-    bool createImportedView(NovaImportedImage& imported);
-    void trackImportedImage(const NovaImportedImage& imported);
+    bool bindImportedMemory(ImportedImage& imported, const DmabufAttributes& attrs, bool disjoint);
+    bool createImportedView(ImportedImage& imported);
+    void trackImportedImage(const ImportedImage& imported);
 
     // Destroy the handles an import created. Assumes the device is already idle.
-    void destroyImportedResources(NovaImportedImage& imported);
+    void destroyImportedResources(ImportedImage& imported);
 
     void querySwapChainDetails();
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
@@ -133,7 +133,7 @@ public:
      *
      * DEFINED IN Core/nova_sdl.cpp, not in nova_graphics.cpp. That translation
      * unit is the only one in Nova that calls libSDL2, and it is compiled into
-     * the separate NovaSDL archive so that windowless targets never resolve
+     * the separate Nova::SDL archive so that windowless targets never resolve
      * against SDL at all. Declaring it here costs nothing: `struct SDL_Window`
      * is an incomplete type and needs no SDL header.
      *
@@ -141,7 +141,7 @@ public:
      * @param debug_level Logging level
      * @param window SDL window handle
      */
-    NovaGraphics(VkExtent2D extent, const std::string& debug_level, struct SDL_Window* window);
+    Graphics(VkExtent2D extent, const std::string& debug_level, struct SDL_Window* window);
 
     /**
      * Constructor - Initialize graphics mode against a surface Nova did not make.
@@ -151,7 +151,7 @@ public:
      *        this translation unit has no window system to ask - the caller who
      *        owns the surface is the one that knows.
      */
-    NovaGraphics(VkExtent2D extent, const std::string& debug_level, VkSurfaceKHR surface,
+    Graphics(VkExtent2D extent, const std::string& debug_level, VkSurfaceKHR surface,
                  const std::vector<const char*>& instance_extensions);
 
     /**
@@ -161,12 +161,12 @@ public:
      * for a graphics family without a present family, so this constructor is
      * usable on a bare TTY where no display server exists.
      */
-    NovaGraphics(const NovaOffscreenConfig& config, const std::string& debug_level);
+    Graphics(const OffscreenConfig& config, const std::string& debug_level);
 
     /**
      * Destructor - Cleanup graphics resources
      */
-    ~NovaGraphics() override;
+    ~Graphics() override;
 
     /**
      * Render a frame with custom rendering callback
@@ -192,7 +192,7 @@ public:
      * before handing the image to a consumer: bring-up sync is fence-and-wait,
      * per plan D.2; timeline semaphores come later.
      */
-    VkFence renderToImage(const NovaRenderTarget& target,
+    VkFence renderToImage(const RenderTarget& target,
                           std::function<void(VkCommandBuffer, uint32_t)>&& render_callback);
 
     // Block until a fence from renderToImage signals. False on timeout/error.
@@ -206,7 +206,7 @@ public:
      * format, the modifier or the plane count is not importable on this device,
      * or when the external-memory extensions are absent.
      */
-    bool importDmabufAsImage(const NovaDmabufAttributes& attrs, NovaImportedImage& out);
+    bool importDmabufAsImage(const DmabufAttributes& attrs, ImportedImage& out);
 
     /**
      * Destroy an imported image and every object Nova created for it.
@@ -215,13 +215,13 @@ public:
      * and for the same reason: a destroy cannot be ordered by a barrier, and a
      * command buffer still in flight would be left referencing nothing.
      */
-    void releaseImportedImage(NovaImportedImage& image);
+    void releaseImportedImage(ImportedImage& image);
 
     /**
      * The render pass renderToImage() will use for this (format, layout) pair.
      *
      * Callers build their graphics pipelines against it. It is created on first
-     * ask and cached, so the handle is stable for the life of this NovaGraphics
+     * ask and cached, so the handle is stable for the life of this Graphics
      * and a pipeline built against it stays compatible.
      *
      * VK_NULL_HANDLE if creation fails. getRenderPass() is the swapchain
@@ -301,3 +301,5 @@ public:
      */
     VkSurfaceKHR getSurface() const { return surface; }
 };
+
+} // namespace Nova

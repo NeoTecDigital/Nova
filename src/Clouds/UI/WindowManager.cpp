@@ -8,17 +8,17 @@
 
 namespace Clouds::UI {
 
-WindowManager::WindowManager(std::shared_ptr<SpatialNode> scene_root,
-                             std::shared_ptr<NovaSpatial::SpatialFont> font_ptr,
-                             std::shared_ptr<OatsBridge> oats_bridge,
-                             NovaMath::EnginePhysicsConfig* physics_config)
+WindowManager::WindowManager(std::shared_ptr<Splash::SpatialNode> scene_root,
+                             std::shared_ptr<Nova::SpatialFont> font_ptr,
+                             std::shared_ptr<Splash::OatsBridge> oats_bridge,
+                             Nova::Math::EnginePhysicsConfig* physics_config)
     : root_(scene_root), font_(font_ptr), oats_bridge_(oats_bridge), physics_config_(physics_config) {
 }
 
 void WindowManager::initialize() {
     if (!root_ || !font_) return;
 
-    window_root_ = std::make_shared<SpatialNode>();
+    window_root_ = std::make_shared<Splash::SpatialNode>();
     window_root_->name = "WindowManager_Root";
     root_->addChild(window_root_);
 
@@ -47,8 +47,8 @@ void WindowManager::createMenuBar() {
     menubar_->addMenu("Physics", {
         { "Toggle LaserFocus", "", [this]() {
             if (physics_config_) {
-                physics_config_->accel_mode = (physics_config_->accel_mode == NovaMath::AccelerationMode::LaserFocus) ?
-                    NovaMath::AccelerationMode::ClusteredDither : NovaMath::AccelerationMode::LaserFocus;
+                physics_config_->accel_mode = (physics_config_->accel_mode == Nova::Math::AccelerationMode::LaserFocus) ?
+                    Nova::Math::AccelerationMode::ClusteredDither : Nova::Math::AccelerationMode::LaserFocus;
             }
         }},
         { "Toggle Dithering", "", [this]() {
@@ -83,7 +83,7 @@ void WindowManager::createPhysicsWindow() {
     physics_stats_label_->transform.position = glm::vec3(-0.38f, 0.14f, 0.003f);
     physics_window_->content_area->addChild(physics_stats_label_);
 
-    bool is_laser = physics_config_ && (physics_config_->accel_mode == NovaMath::AccelerationMode::LaserFocus);
+    bool is_laser = physics_config_ && (physics_config_->accel_mode == Nova::Math::AccelerationMode::LaserFocus);
 
     laser_focus_btn_ = std::make_shared<UIButton>(
         is_laser ? "LaserFocus: ENABLED" : "LaserFocus: DISABLED",
@@ -91,9 +91,9 @@ void WindowManager::createPhysicsWindow() {
         font_,
         [this]() {
             if (physics_config_) {
-                physics_config_->accel_mode = (physics_config_->accel_mode == NovaMath::AccelerationMode::LaserFocus) ?
-                    NovaMath::AccelerationMode::ClusteredDither : NovaMath::AccelerationMode::LaserFocus;
-                bool now_laser = (physics_config_->accel_mode == NovaMath::AccelerationMode::LaserFocus);
+                physics_config_->accel_mode = (physics_config_->accel_mode == Nova::Math::AccelerationMode::LaserFocus) ?
+                    Nova::Math::AccelerationMode::ClusteredDither : Nova::Math::AccelerationMode::LaserFocus;
+                bool now_laser = (physics_config_->accel_mode == Nova::Math::AccelerationMode::LaserFocus);
                 laser_focus_btn_->setLabel(now_laser ? "LaserFocus: ENABLED" : "LaserFocus: DISABLED");
                 laser_focus_btn_->setVariant(now_laser ? ButtonVariant::SUCCESS : ButtonVariant::SECONDARY);
             }
@@ -129,7 +129,7 @@ void WindowManager::createPhysicsWindow() {
             if (physics_config_) {
                 physics_config_->phase_coupling_strength = 1.0f;
                 physics_config_->phase_velocity = 2.0f;
-                physics_config_->accel_mode = NovaMath::AccelerationMode::LaserFocus;
+                physics_config_->accel_mode = Nova::Math::AccelerationMode::LaserFocus;
                 physics_config_->dither_enabled = true;
             }
         },
@@ -236,7 +236,7 @@ void WindowManager::refreshWindowContents() {
 
     if (menubar_) {
         const bool is_laser = physics_config_ &&
-            (physics_config_->accel_mode == NovaMath::AccelerationMode::LaserFocus);
+            (physics_config_->accel_mode == Nova::Math::AccelerationMode::LaserFocus);
         std::ostringstream ss;
         if (oats_bridge_) {
             ss << "Tick: " << oats_bridge_->getTick() << " | ";

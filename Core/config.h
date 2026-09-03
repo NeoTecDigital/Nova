@@ -1,7 +1,7 @@
 #include "core.h"
 #include <string>
-
-struct NovaConfig {
+namespace Nova {
+struct Config {
     std::string name;
     VkExtent2D screen;
     std::string debug_level;     // none, release, staging, development, debug
@@ -13,3 +13,5 @@ struct NovaConfig {
     std::string vert_shader_path = "";
     std::string frag_shader_path = "";
 };
+
+} // namespace Nova

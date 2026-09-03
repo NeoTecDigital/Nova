@@ -5,9 +5,9 @@
 #include <cstring>
 #include <algorithm>
 
-namespace NovaSpatial {
+namespace Nova {
 
-SpatialFont::SpatialFont(NovaCore* core, TextureBridge* texture_bridge)
+SpatialFont::SpatialFont(Core* core, TextureBridge* texture_bridge)
     : core_(core), texture_bridge_(texture_bridge) {
     if (FT_Init_FreeType(&ft_library_) != 0) {
         report(LOGGER::ERROR, "SpatialFont - Failed to initialize FreeType library");
@@ -193,10 +193,10 @@ MeshData SpatialFont::createTextMesh(const std::string& text,
         uint32_t base_v = static_cast<uint32_t>(mesh.vertices.size());
 
         // Top-left, Top-right, Bottom-right, Bottom-left (inverting Y for correct glyph orientation)
-        mesh.vertices.push_back({ NovaMath::Hyper4(x0, y1, 0.001f, 1.0f), NovaMath::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(g.uv_min.x, g.uv_min.y), params });
-        mesh.vertices.push_back({ NovaMath::Hyper4(x1, y1, 0.001f, 1.0f), NovaMath::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(g.uv_max.x, g.uv_min.y), params });
-        mesh.vertices.push_back({ NovaMath::Hyper4(x1, y0, 0.001f, 1.0f), NovaMath::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(g.uv_max.x, g.uv_max.y), params });
-        mesh.vertices.push_back({ NovaMath::Hyper4(x0, y0, 0.001f, 1.0f), NovaMath::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(g.uv_min.x, g.uv_max.y), params });
+        mesh.vertices.push_back({ Nova::Math::Hyper4(x0, y1, 0.001f, 1.0f), Nova::Math::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(g.uv_min.x, g.uv_min.y), params });
+        mesh.vertices.push_back({ Nova::Math::Hyper4(x1, y1, 0.001f, 1.0f), Nova::Math::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(g.uv_max.x, g.uv_min.y), params });
+        mesh.vertices.push_back({ Nova::Math::Hyper4(x1, y0, 0.001f, 1.0f), Nova::Math::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(g.uv_max.x, g.uv_max.y), params });
+        mesh.vertices.push_back({ Nova::Math::Hyper4(x0, y0, 0.001f, 1.0f), Nova::Math::Hyper4(color.r, color.g, color.b, color.a), normal, glm::vec2(g.uv_min.x, g.uv_max.y), params });
 
         mesh.indices.push_back(base_v + 0);
         mesh.indices.push_back(base_v + 1);
@@ -211,4 +211,4 @@ MeshData SpatialFont::createTextMesh(const std::string& text,
     return mesh;
 }
 
-} // namespace NovaSpatial
+} // namespace Nova

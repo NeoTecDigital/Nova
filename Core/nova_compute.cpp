@@ -1,7 +1,7 @@
 #include "./nova_compute.h"
-
-NovaCompute::NovaCompute(const std::string& debug_level)
-    : NovaCore(debug_level)
+namespace Nova {
+Compute::Compute(const std::string& debug_level)
+    : Core(debug_level)
 {
     report(LOGGER::INFO, "NovaCompute - Initializing compute-only mode ..");
 
@@ -39,21 +39,21 @@ NovaCompute::NovaCompute(const std::string& debug_level)
     report(LOGGER::INFO, "NovaCompute - Initialized successfully");
 }
 
-NovaCompute::~NovaCompute()
+Compute::~Compute()
 {
     report(LOGGER::INFO, "NovaCompute - Destroying");
     vkDeviceWaitIdle(logical_device);
 
-    // compute_fence is a NovaCompute member; resource_registry belongs to the
-    // base. Draining the entry from ~NovaCore would run it after this object's
+    // compute_fence is a Compute member; resource_registry belongs to the
+    // base. Draining the entry from ~Core would run it after this object's
     // members are gone. VkFence is a trivially destructible handle so the bytes
-    // happened to survive, but the pattern is the teardown UAF that ~NovaGraphics
+    // happened to survive, but the pattern is the teardown UAF that ~Graphics
     // already had to fix - so run and unregister it HERE, while the member is
     // still alive. Idempotent: run_and_release is a no-op if the key is absent.
     resource_registry.run_and_release("compute_resources");
 }
 
-void NovaCompute::submitCompute(std::function<void(VkCommandBuffer)>&& func)
+void Compute::submitCompute(std::function<void(VkCommandBuffer)>&& func)
 {
     // Acquire mutex and HOLD it until waitCompute() releases.
     // This prevents another thread from resetting the command buffer
@@ -88,14 +88,14 @@ void NovaCompute::submitCompute(std::function<void(VkCommandBuffer)>&& func)
     // Lock remains held — released by waitCompute()
 }
 
-bool NovaCompute::isComputeComplete() const
+bool Compute::isComputeComplete() const
 {
     // Fence query is atomic in Vulkan — safe without mutex.
     // The caller must already own the submit_lock_ (they called submitCompute).
     return vkGetFenceStatus(logical_device, compute_fence) == VK_SUCCESS;
 }
 
-void NovaCompute::waitCompute()
+void Compute::waitCompute()
 {
     // Wait for GPU work to finish, then release the lock so other
     // threads can submit.
@@ -105,7 +105,7 @@ void NovaCompute::waitCompute()
     }
 }
 
-void NovaCompute::executeCompute(std::function<void(VkCommandBuffer)>&& func)
+void Compute::executeCompute(std::function<void(VkCommandBuffer)>&& func)
 {
     // Synchronous: acquire lock, record+submit, wait, release lock.
     // Uses a local lock — does NOT go through submitCompute/waitCompute
@@ -134,8 +134,10 @@ void NovaCompute::executeCompute(std::function<void(VkCommandBuffer)>&& func)
     VK_TRY(vkWaitForFences(logical_device, 1, &compute_fence, VK_TRUE, UINT64_MAX));
 }
 
-void NovaCompute::waitIdle()
+void Compute::waitIdle()
 {
     std::lock_guard<std::mutex> lock(compute_mutex_);
     vkDeviceWaitIdle(logical_device);
 }
+
+} // namespace Nova

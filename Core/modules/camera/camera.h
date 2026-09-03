@@ -2,7 +2,7 @@
 #include <glm/glm.hpp>
 #include <SDL2/SDL_events.h>
 #include "./perspective.h"
-
+namespace Nova {
 class Camera 
     {
         public:
@@ -28,3 +28,5 @@ class Camera
             float yaw{0.0f};
             float roll{0.0f};
     };
+
+} // namespace Nova

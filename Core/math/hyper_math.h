@@ -13,7 +13,7 @@
 #include <array>
 #include <string>
 
-namespace NovaMath {
+namespace Nova::Math {
 
 /**
  * Hyper4 - Unified 4D Primordial [a, b, c, w] Structure
@@ -252,4 +252,4 @@ struct PhaseState8 {
     }
 };
 
-} // namespace NovaMath
+} // namespace Nova::Math

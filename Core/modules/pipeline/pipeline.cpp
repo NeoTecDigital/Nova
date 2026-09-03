@@ -1,12 +1,12 @@
 #include "./pipeline.h"
 #include "Core/components/genesis.h"
-
+namespace Nova {
 
     ////////////////////////
     // GATEWAY DEFINITION //
     ////////////////////////
 
-Pipeline::Pipeline()
+Builder::Builder()
     { 
         report(LOGGER::VLINE, "\t .. Initializing Pipeline ..");
         clear(); 
@@ -15,13 +15,13 @@ Pipeline::Pipeline()
         genesis::createObjects(&vertices, &indices); // TODO: these need to exist on a higher level, but where?
     }
 
-Pipeline::~Pipeline()
+Builder::~Builder()
     { 
         report(LOGGER::INFO, "Pipeline - Deconstructing Pipeline ..");
         clear();
     }
 
-void Pipeline::clear()
+void Builder::clear()
     {
         report(LOGGER::VLINE, "\t .. Clearing Pipeline ..");
         instance = VK_NULL_HANDLE;
@@ -66,7 +66,7 @@ static inline void createShaderModule(VkDevice* logical_device, std::vector<char
         return;
     }
 
-void Pipeline::addShaderStage(VkShaderModule shader_module, VkShaderStageFlagBits stage)
+void Builder::addShaderStage(VkShaderModule shader_module, VkShaderStageFlagBits stage)
     {
         std::string stage_name = stage == VK_SHADER_STAGE_VERTEX_BIT ? "Vertex" : "Fragment";
         report(LOGGER::VLINE, "\t\t .. Adding %s Shader Stage ..", stage_name.c_str());
@@ -84,7 +84,7 @@ void Pipeline::addShaderStage(VkShaderModule shader_module, VkShaderStageFlagBit
         return;
     }
 
-Pipeline& Pipeline::shaders(VkDevice* logical_device, const std::string& vert_path, const std::string& frag_path)
+Builder& Builder::shaders(VkDevice* logical_device, const std::string& vert_path, const std::string& frag_path)
     {
         report(LOGGER::VLINE, "\t .. Creating Shaders ..");
 
@@ -112,7 +112,7 @@ Pipeline& Pipeline::shaders(VkDevice* logical_device, const std::string& vert_pa
     // VERTEX INPUT //
     //////////////////
 
-Pipeline& Pipeline::vertexInput()
+Builder& Builder::vertexInput()
     {
         report(LOGGER::VLINE, "\t .. Creating Vertex Input State ..");
 
@@ -144,7 +144,7 @@ Pipeline& Pipeline::vertexInput()
     // INPUT ASSEMBLY //
     ////////////////////
 
-Pipeline& Pipeline::inputAssembly()
+Builder& Builder::inputAssembly()
     {
         report(LOGGER::VLINE, "\t .. Creating Input Assembly ..");
 
@@ -162,7 +162,7 @@ Pipeline& Pipeline::inputAssembly()
     // VIEWPORT STATE //
     ////////////////////
 
-Pipeline& Pipeline::viewportState()
+Builder& Builder::viewportState()
     {
         report(LOGGER::VLINE, "\t .. Creating Viewport State ..");
 
@@ -180,7 +180,7 @@ Pipeline& Pipeline::viewportState()
     // RASTERIZER //
     ////////////////
 
-Pipeline& Pipeline::rasterizer()
+Builder& Builder::rasterizer()
     {
         report(LOGGER::VLINE, "\t .. Creating Rasterizer ..");
 
@@ -208,7 +208,7 @@ Pipeline& Pipeline::rasterizer()
     // MULTISAMPLING //
     ///////////////////
 
-Pipeline& Pipeline::multisampling()
+Builder& Builder::multisampling()
     {
         report(LOGGER::VLINE, "\t .. Creating Multisampling ..");
 
@@ -232,7 +232,7 @@ Pipeline& Pipeline::multisampling()
     // DEPTH STENCIL //
     ///////////////////
 
-Pipeline& Pipeline::depthStencil()
+Builder& Builder::depthStencil()
     {
         report(LOGGER::VLINE, "\t .. Creating Depth Stencil ..");
 
@@ -271,7 +271,7 @@ static VkPipelineColorBlendAttachmentState colorBlendAttachment()
             };
     }
 
-Pipeline& Pipeline::colorBlending()
+Builder& Builder::colorBlending()
     {
         report(LOGGER::VLINE, "\t .. Creating Color Blend State ..");
 
@@ -306,7 +306,7 @@ Pipeline& Pipeline::colorBlending()
     // DYNAMIC STATE //
     ///////////////////
 
-Pipeline& Pipeline::dynamicState()
+Builder& Builder::dynamicState()
     {
         report(LOGGER::VLINE, "\t .. Creating Dynamic State ..");
 
@@ -324,7 +324,7 @@ Pipeline& Pipeline::dynamicState()
     // LAYOUT //
     ////////////
 
-Pipeline& Pipeline::createLayout(VkDevice* logical_device, VkDescriptorSetLayout* descriptor_set_layout)
+Builder& Builder::createLayout(VkDevice* logical_device, VkDescriptorSetLayout* descriptor_set_layout)
     {
         report(LOGGER::VLINE, "\t .. Creating Pipeline Layout ..");
 
@@ -341,7 +341,7 @@ Pipeline& Pipeline::createLayout(VkDevice* logical_device, VkDescriptorSetLayout
         return *this;
     }
 
-Pipeline& Pipeline::pipe(VkRenderPass* render_pass)
+Builder& Builder::pipe(VkRenderPass* render_pass)
     {
         report(LOGGER::VLINE, "\t .. Creating Pipeline Create Info ..");
 
@@ -365,7 +365,7 @@ Pipeline& Pipeline::pipe(VkRenderPass* render_pass)
         return *this;
     }
 
-Pipeline& Pipeline::create(VkDevice* logical_device)
+Builder& Builder::create(VkDevice* logical_device)
     {
         report(LOGGER::VLINE, "\t .. Constructing Pipeline ..");
         VK_TRY(vkCreateGraphicsPipelines(*logical_device, VK_NULL_HANDLE, 1, &_pipeline_info, nullptr, &instance));
@@ -377,3 +377,5 @@ Pipeline& Pipeline::create(VkDevice* logical_device)
         return *this;
     }
 
+
+} // namespace Nova

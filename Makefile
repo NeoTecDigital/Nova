@@ -12,7 +12,7 @@ BUILD_DIR ?= build
 CMAKE     ?= cmake
 JOBS      ?= $(shell nproc 2>/dev/null || echo 4)
 
-.PHONY: all configure wavecube_compute Clouds test clean distclean
+.PHONY: all configure wavecube_compute vazio vazio-dev test clean distclean
 
 all: configure
 	$(CMAKE) --build $(BUILD_DIR) -j$(JOBS)
@@ -25,8 +25,11 @@ $(BUILD_DIR)/CMakeCache.txt:
 wavecube_compute: configure
 	$(CMAKE) --build $(BUILD_DIR) -j$(JOBS) --target wavecube_compute
 
-Clouds: configure
-	$(CMAKE) --build $(BUILD_DIR) -j$(JOBS) --target Clouds
+vazio: configure
+	$(CMAKE) --build $(BUILD_DIR) -j$(JOBS) --target vazio
+
+vazio-dev: configure
+	$(CMAKE) --build $(BUILD_DIR) -j$(JOBS) --target vazio-dev
 
 test: all
 	cd $(BUILD_DIR) && ctest --output-on-failure

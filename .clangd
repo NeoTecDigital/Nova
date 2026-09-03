@@ -40,14 +40,15 @@ CompileFlags:
     # Set on the Nova target for the whole tree; Nova/nova_compute.h keys on it.
     - -DNOVA_COMPUTE_ENABLED
 
-    # First-party roots, mirroring target_include_directories for Clouds.
-    # The repository root is the only one the four layer trees need: every
-    # first-party quoted include is either root-relative (Nova/..., Splash/...,
-    # Vazio/..., Clouds/...) or a same-directory sibling. /Nova mirrors the
-    # legacy -I<root>/Core search root that CMake still carries; /include is
-    # gone because the include/ tree is gone.
+    # The single first-party root, mirroring target_include_directories(Nova).
+    # It is the only one the four layer trees need: every first-party quoted
+    # include is either root-relative (Nova/..., Splash/..., Vazio/...,
+    # Clouds/...) or a same-directory sibling, and a sibling resolves against
+    # the including file rather than against a -I. The legacy -I<root>/Core
+    # search root - carried as /Nova after the layer move - is gone from CMake
+    # too: a second way to spell the same header is a second way to cross a
+    # layer boundary without naming it.
     - -I/home/persist/neotec/vazio
-    - -I/home/persist/neotec/vazio/Nova
 
     # The integration harnesses under tests/integration/ include their own
     # headers unqualified (wl_client_kit.h, harness_check.h, phase_channel.h),

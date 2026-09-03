@@ -365,9 +365,16 @@ set_source_files_properties(
     PROPERTIES COMPILE_OPTIONS "${NOVA_FASTGLTF_CARRIER_SUPPRESSIONS}"
 )
 
+# The repository root is the ONLY first-party search root. Every quoted include
+# in the tree is either root-relative ("Nova/...", "Splash/...", "Vazio/...",
+# "Clouds/...") or a same-directory sibling ("./core_base.h"), and a
+# same-directory sibling resolves against the including file, not against a -I.
+# The old -I<root>/Nova - the faithful rename of -I<root>/Core - had no dependent
+# include left once A3 made the last one explicit, so it is gone: a second search
+# root is a second way to spell the same header, and that is how a layer boundary
+# gets crossed without anyone naming it.
 target_include_directories(Nova PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
     ${Vulkan_INCLUDE_DIRS}
     ${FREETYPE_INCLUDE_DIRS}
 )
@@ -433,15 +440,63 @@ target_link_libraries(NovaSDL PUBLIC Nova ${SDL2_LIBRARIES})
 target_include_directories(NovaSDL PUBLIC ${SDL2_INCLUDE_DIRS})
 
 # ==========================================
-# Clouds display server & spatial UI
+# THE LAYER CHAIN: Nova <- Splash <- {Vazio, Clouds}
+#
+# Every layer is its OWN static archive and every archive names the layer
+# directly beneath it with `target_link_libraries(<lib> PUBLIC <lower>)`. The
+# point is not tidiness: PUBLIC is what makes the direction load-bearing. A TU
+# in Splash that reaches up into Clouds now has no archive to resolve against
+# and the build stops with an undefined reference, so a layering violation is a
+# link error rather than something a reviewer has to notice.
+#
+# The chain is a DAG, not a stack. Vazio and Clouds are SIBLINGS - both build on
+# Splash, neither knows the other exists - which is exactly the claim the plan
+# makes about the runtime environment versus the things running in it.
+#
+# The two main() files are the ONLY code in the tree that spans that fork:
+# Vazio/vazio_main.cpp and Vazio/vazio_dev_main.cpp each include
+# Clouds/apps/*.h. They are composition roots and they sit ABOVE both siblings
+# in the link order even though they live in Vazio/. They are therefore compiled
+# into their executables and are deliberately NOT members of libVazio.a -
+# globbing them into the library would invert the chain and hand Vazio a
+# dependency on Clouds that nothing else in the layer has.
 # ==========================================
-# The session layer both entry points are built from: scene, compositor,
-# presentation and the spatial UI. Nothing here touches SDL or ImGui, which is
-# what lets the staged boot binary exist at all (plan B.3).
-set(CLOUDS_SESSION_SOURCES
+
+# --- Splash: the SDK. Primitives over Nova + OATS + wlroots' listener idiom. ---
+# Depends on: Nova. Knows nothing of the compositor (Vazio) or its tenants
+# (Clouds); those are its consumers, and PUBLIC Nova is the only edge it has.
+add_library(Splash STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/Splash/SpatialNode.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/Primitives.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Splash/SpatialScene.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/Primitives.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/DynamicSceneManager.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/oats/OatsBridge.cpp"
+)
+target_compile_options(Splash PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+
+# Splash/WaylandListener.h includes <wayland-server-core.h> and is a public
+# header of this layer, so wayland-server is a compile requirement of every
+# consumer - stated here rather than re-stated on each of them. OATS is a Splash
+# link edge because Splash/oats/OatsBridge.cpp is the one TU that calls the C ABI.
+target_include_directories(Splash PUBLIC ${WAYLAND_SERVER_INCLUDE_DIRS})
+target_link_libraries(Splash PUBLIC
+    Nova
+    oats_ffi
+    nlohmann_json::nlohmann_json
+    ${WAYLAND_SERVER_LIBRARIES}
+)
+
+# --- Vazio: the display server / graphical runtime environment. ---------------
+# Depends on: Splash (and Nova through it). Does NOT depend on Clouds - see the
+# main() note above; the two entry points are the only upward edges and they are
+# not members of this archive.
+#
+# It owns the generated xdg-shell SERVER header. One owner on purpose: listing a
+# custom-command OUTPUT as a source of several targets makes the Makefile
+# generator emit the rule once per target, and a parallel build then races two
+# wayland-scanner invocations writing the same file. Every consumer picks the
+# ordering up through its link edge. Same reasoning as nova_client_protocols.
+add_library(Vazio STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialCompositor.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialBackendStack.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialPresentLoop.cpp"
@@ -449,22 +504,68 @@ set(CLOUDS_SESSION_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialWindowHost.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialPopupHost.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/SpatialSeatInput.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/oats/OatsBridge.cpp"
+    "${PROTOCOL_GEN_DIR}/xdg-shell-protocol.h"
+)
+target_compile_options(Vazio PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+
+# PUBLIC, not PRIVATE: wlroots' headers are #error guards until WLR_USE_UNSTABLE
+# is defined, and Vazio/SpatialCompositor.h and Vazio/SpatialPresentLoop.h are
+# both consumed outside this archive (both main()s, three integration harnesses).
+target_compile_definitions(Vazio PUBLIC WLR_USE_UNSTABLE)
+target_include_directories(Vazio PUBLIC
+    ${PROTOCOL_GEN_DIR}
+    ${WLROOTS_INCLUDE_DIRS}
+    ${WAYLAND_SERVER_INCLUDE_DIRS}
+    ${LIBDRM_INCLUDE_DIRS}
+    ${XKBCOMMON_INCLUDE_DIRS}
+    ${PIXMAN_INCLUDE_DIRS}
+)
+target_link_libraries(Vazio PUBLIC
+    Splash
+    ${WLROOTS_LIBRARIES}
+    ${WAYLAND_SERVER_LIBRARIES}
+    ${LIBDRM_LIBRARIES}
+    ${XKBCOMMON_LIBRARIES}
+)
+
+# --- Clouds: the things running in the environment. Transitional. -------------
+# Depends on: Splash (and Nova through it). NOT on Vazio: a tenant programs
+# against the SDK, never against the compositor's internals. Sibling of Vazio.
+#
+# Clouds/apps/ImGuiEngineOverlay.cpp is the one SDL/ImGui-calling member of this
+# archive, and this target deliberately links NEITHER. The archive member simply
+# carries undefined ImGui_*/SDL_* symbols; a target that pulls it must supply
+# them (link NovaSDL and compile the ImGui vendor blob) and fails loudly at link
+# time otherwise, while a target that never references the overlay - `vazio`,
+# test_scene_input - never pulls the member and never acquires SDL. Same
+# construction as the NovaCoreLegacy member inside libNova.a, and it is what
+# keeps `ldd vazio` SDL-free by construction rather than by luck.
+add_library(Clouds STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/apps/SpatialFilesystem.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/DynamicSceneManager.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/apps/ImGuiEngineOverlay.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIComponents.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIDockBar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIMenuBar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIWindow.cpp"
 )
+target_compile_options(Clouds PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 
-set(CLOUDS_FIRST_PARTY_SOURCES
-    ${CLOUDS_SESSION_SOURCES}
-    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/apps/ImGuiEngineOverlay.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/vazio_dev_main.cpp"
+# PRIVATE: only ImGuiEngineOverlay.cpp includes <imgui.h> and the backends.
+# ImGuiEngineOverlay.h exposes SDL_Window*/SDL_Event, whose header comes through
+# Nova's PUBLIC ${SDL2_INCLUDE_DIRS} - an include path, not a link edge.
+target_include_directories(Clouds PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui/backends
 )
+target_link_libraries(Clouds PUBLIC Splash)
 
-set(CLOUDS_VENDOR_SOURCES
+# ==========================================
+# vazio-dev - the nested SDL/ImGui development harness
+#
+# Renamed from the executable `Clouds`, which collided with the source directory
+# of the same name now that Clouds/ is a real layer with its own archive.
+# ==========================================
+set(VAZIO_DEV_VENDOR_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui/imgui.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui/imgui_demo.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui/imgui_draw.cpp"
@@ -475,105 +576,79 @@ set(CLOUDS_VENDOR_SOURCES
 )
 
 # Wholly third-party translation units: nothing in them is ours to fix.
-set_source_files_properties(${CLOUDS_VENDOR_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
+set_source_files_properties(${VAZIO_DEV_VENDOR_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
 set_source_files_properties("${PROTOCOL_GEN_DIR}/xdg-shell-protocol.c" PROPERTIES COMPILE_OPTIONS "-w")
 
-add_executable(Clouds
-    ${CLOUDS_FIRST_PARTY_SOURCES}
-    ${CLOUDS_VENDOR_SOURCES}
+# vazio_dev_main.cpp is a composition root, not a library member: it is one of
+# the two files in the tree that reaches across the Vazio/Clouds fork. It is
+# compiled straight into the executable, which is what puts it above both
+# siblings on the link line. The ImGui vendor blob and the xdg-shell private
+# code are likewise this binary's own sources - the only binary that needs them.
+add_executable(vazio-dev
+    "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/vazio_dev_main.cpp"
+    ${VAZIO_DEV_VENDOR_SOURCES}
     "${PROTOCOL_GEN_DIR}/xdg-shell-protocol.c"
-    "${PROTOCOL_GEN_DIR}/xdg-shell-protocol.h"
 )
-add_dependencies(Clouds nova_shaders)
+add_dependencies(vazio-dev nova_shaders)
 
-target_compile_options(Clouds PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+target_compile_options(vazio-dev PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 
-target_compile_definitions(Clouds PRIVATE
-    WLR_USE_UNSTABLE
-)
-
-target_include_directories(Clouds PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
+target_include_directories(vazio-dev PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui
     ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui/backends
-    ${PROTOCOL_GEN_DIR}
-    ${Vulkan_INCLUDE_DIRS}
-    ${SDL2_INCLUDE_DIRS}
-    ${FREETYPE_INCLUDE_DIRS}
-    ${WLROOTS_INCLUDE_DIRS}
-    ${WAYLAND_SERVER_INCLUDE_DIRS}
-    ${LIBDRM_INCLUDE_DIRS}
-    ${XKBCOMMON_INCLUDE_DIRS}
-    ${PIXMAN_INCLUDE_DIRS}
 )
 
-target_link_libraries(Clouds PRIVATE
+# Vazio and Clouds are the two layer archives; NovaSDL is what supplies the
+# SDL_* symbols that the ImGuiEngineOverlay member of libClouds.a leaves
+# undefined. Everything else - Splash, Nova, wlroots, Vulkan, freetype, OATS -
+# arrives through the PUBLIC edges the layers declare, which is the whole point
+# of declaring them.
+target_link_libraries(vazio-dev PRIVATE
+    Vazio
+    Clouds
     NovaSDL
-    oats_ffi
-    nlohmann_json::nlohmann_json
-    ${WLROOTS_LIBRARIES}
-    ${WAYLAND_SERVER_LIBRARIES}
-    ${LIBDRM_LIBRARIES}
-    ${XKBCOMMON_LIBRARIES}
-    ${Vulkan_LIBRARIES}
-    ${SDL2_LIBRARIES}
-    ${FREETYPE_LIBRARIES}
-    ${CMAKE_DL_LIBS}
 )
 
 # ==========================================
 # vazio - the staged boot entry (plan section B)
 #
-# Same session layer as Clouds, different composition: no ImGui, no window, and
-# no source of its own that calls SDL. It presents into wlroots' own output
-# buffers (plan D.2) and holds the session latent until a readiness token
-# arrives. Deliberately a second TARGET and not a second copy of anything: every
-# line it shares with Clouds is shared through CLOUDS_SESSION_SOURCES.
+# Same layers as vazio-dev, different composition: no ImGui, no window, and no
+# source of its own that calls SDL. It presents into wlroots' own output buffers
+# (plan D.2) and holds the session latent until a readiness token arrives. Not a
+# second copy of anything - every line it shares with vazio-dev is shared through
+# libVazio.a, libClouds.a and libSplash.a.
 #
-# It links no libSDL2: verified by `ldd vazio` and enforced by construction -
-# Nova carries no SDL link edge in any scope, and the only SDL-calling
-# translation unit lives in the separate NovaSDL archive, which this target does
-# not link. It still COMPILES against SDL2's headers, because Nova/nova_graphics.h
-# reaches Nova/modules/camera/camera.h and that declares
-# Camera::processEvents(SDL_Event&). An include path is not a runtime dependency.
-# This distinction matters here and nowhere else: an early-userspace boot binary
-# carrying an unnecessary shared object is a boot-time fact, not a cosmetic one.
+# It links no libSDL2, and now by two independent constructions. Nova carries no
+# SDL link edge in any scope and the SDL-calling engine TUs live in the separate
+# NovaSDL archive, which this target does not link; and the one SDL-calling
+# member of libClouds.a - the ImGui overlay - is not referenced from
+# vazio_main.cpp, so the linker never extracts it. Adding a reference to it here
+# would fail to link rather than quietly grow a DT_NEEDED.
+#
+# It still COMPILES against SDL2's headers, because Nova/nova_graphics.h reaches
+# Nova/modules/camera/camera.h and that declares Camera::processEvents(SDL_Event&).
+# An include path is not a runtime dependency. This distinction matters here and
+# nowhere else: an early-userspace boot binary carrying an unnecessary shared
+# object is a boot-time fact, not a cosmetic one. Enforced by nova_link_hygiene.
+#
+# vazio_main.cpp is the second composition root and, like its sibling, is
+# compiled into the executable rather than into libVazio.a.
 # ==========================================
 add_executable(vazio
-    ${CLOUDS_SESSION_SOURCES}
     "${CMAKE_CURRENT_SOURCE_DIR}/Vazio/vazio_main.cpp"
-    "${PROTOCOL_GEN_DIR}/xdg-shell-protocol.h"
 )
 add_dependencies(vazio nova_shaders)
 
 target_compile_options(vazio PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
-target_compile_definitions(vazio PRIVATE WLR_USE_UNSTABLE)
 
-target_include_directories(vazio PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
-    ${PROTOCOL_GEN_DIR}
-    ${Vulkan_INCLUDE_DIRS}
-    ${FREETYPE_INCLUDE_DIRS}
-    ${WLROOTS_INCLUDE_DIRS}
-    ${WAYLAND_SERVER_INCLUDE_DIRS}
-    ${LIBDRM_INCLUDE_DIRS}
-    ${XKBCOMMON_INCLUDE_DIRS}
-    ${PIXMAN_INCLUDE_DIRS}
-)
-
+# The layer chain, named in dependency order. Nova is listed even though Vazio
+# and Clouds both reach it PUBLIC-ly through Splash: this binary is the
+# architecture's statement of what it is built out of, and the engine is part of
+# that statement.
 target_link_libraries(vazio PRIVATE
+    Vazio
+    Clouds
     Nova
-    oats_ffi
-    nlohmann_json::nlohmann_json
-    ${WLROOTS_LIBRARIES}
-    ${WAYLAND_SERVER_LIBRARIES}
-    ${LIBDRM_LIBRARIES}
-    ${XKBCOMMON_LIBRARIES}
-    ${Vulkan_LIBRARIES}
-    ${FREETYPE_LIBRARIES}
-    ${CMAKE_DL_LIBS}
 )
 
 # ==========================================
@@ -599,10 +674,6 @@ add_executable(test_seam_math_raycast
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_seam_math_raycast.cpp"
 )
 target_compile_options(test_seam_math_raycast PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
-target_include_directories(test_seam_math_raycast PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
-)
 target_link_libraries(test_seam_math_raycast PRIVATE
     Nova
     ${CMAKE_DL_LIBS}
@@ -614,38 +685,27 @@ add_executable(test_seam_ffi_roundtrip
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_seam_ffi_roundtrip.cpp"
 )
 target_compile_options(test_seam_ffi_roundtrip PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
-target_include_directories(test_seam_ffi_roundtrip PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
-)
 target_link_libraries(test_seam_ffi_roundtrip PRIVATE
     Nova
     oats_ffi
     ${CMAKE_DL_LIBS}
 )
 
-# Scene-graph input routing. Builds the Clouds scene sources it exercises
-# directly rather than linking the Clouds executable: the test needs no Vulkan
-# device, no wlroots and no compositor, and saying so in the target is how that
-# stays true.
+# Scene-graph input routing. It LINKS Splash and Clouds rather than carrying a
+# hand-copied list of their sources: the copy had to be kept in step by hand and
+# said nothing about why those seven files and not others. The claim the target
+# makes now is a layering claim - this test needs the SDK and its tenants and
+# nothing above them, so it does not link Vazio and therefore has no compositor
+# and no wlroots. That claim is enforced: adding a compositor call here stops
+# resolving. It also never pulls the ImGui overlay member out of libClouds.a, so
+# it acquires no SDL.
 add_executable(test_scene_input
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_scene_input.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/SpatialNode.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/SpatialScene.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Splash/Primitives.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIComponents.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIWindow.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIDockBar.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Clouds/ui/UIMenuBar.cpp"
 )
 target_compile_options(test_scene_input PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
-target_include_directories(test_scene_input PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
-)
 target_link_libraries(test_scene_input PRIVATE
-    Nova
-    ${CMAKE_DL_LIBS}
+    Splash
+    Clouds
 )
 
 add_test(NAME seam_math_raycast COMMAND test_seam_math_raycast)
@@ -673,44 +733,28 @@ set_tests_properties(seam_math_raycast seam_ffi_roundtrip scene_input PROPERTIES
 # ==========================================
 set(NOVA_TEST_RUNTIME_ROOT "${CMAKE_CURRENT_BINARY_DIR}/trt")
 
-# The session layer these harnesses drive. Same sources as `vazio`, compiled
-# once more for the tests rather than linked out of an executable - identical
-# defines and warning flags, so no ODR hazard, and the tests stay independent of
-# how the product binaries happen to be composed.
-# The generated protocol code is NOT listed here: it lives in the
-# nova_client_protocols library above, which every harness links.
-set(NOVA_INTEGRATION_SESSION_SOURCES
-    ${CLOUDS_SESSION_SOURCES}
-)
-
+# The harnesses LINK the layer archives rather than recompiling them. Each one
+# used to list the whole upper-layer source blob, so the same eighteen
+# translation units were built five times over and every harness carried its own
+# copy of the compositor. They now drive the same libVazio.a/libClouds.a the
+# product binaries do, which is the stronger claim: a harness that passes has
+# exercised the shipped object code, not a private rebuild of it that happens to
+# use the same flags. The generated CLIENT protocol code is not listed here
+# either - it lives in nova_client_protocols, which every harness links.
+#
+# The harnesses are clients as well as servers, so they add the client-side
+# wayland include dir and their own tests/integration root on top of what the
+# layers already export PUBLIC-ly.
 set(NOVA_INTEGRATION_INCLUDES
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Nova
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration
-    ${PROTOCOL_GEN_DIR}
-    ${Vulkan_INCLUDE_DIRS}
-    ${FREETYPE_INCLUDE_DIRS}
-    ${WLROOTS_INCLUDE_DIRS}
-    ${WAYLAND_SERVER_INCLUDE_DIRS}
     ${WAYLAND_CLIENT_INCLUDE_DIRS}
-    ${LIBDRM_INCLUDE_DIRS}
-    ${XKBCOMMON_INCLUDE_DIRS}
-    ${PIXMAN_INCLUDE_DIRS}
 )
 
 set(NOVA_INTEGRATION_LIBS
-    Nova
+    Vazio
+    Clouds
     nova_client_protocols
-    oats_ffi
-    nlohmann_json::nlohmann_json
-    ${WLROOTS_LIBRARIES}
-    ${WAYLAND_SERVER_LIBRARIES}
     ${WAYLAND_CLIENT_LIBRARIES}
-    ${LIBDRM_LIBRARIES}
-    ${XKBCOMMON_LIBRARIES}
-    ${Vulkan_LIBRARIES}
-    ${FREETYPE_LIBRARIES}
-    ${CMAKE_DL_LIBS}
 )
 
 # p1-class: protocol completeness and seat routing, server + forked real client.
@@ -719,11 +763,9 @@ add_executable(test_protocol_seat
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/protocol_client_shell.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/protocol_client_seat.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/wl_client_kit.cpp"
-    ${NOVA_INTEGRATION_SESSION_SOURCES}
 )
 add_dependencies(test_protocol_seat nova_shaders nova_client_protocol_headers)
 target_compile_options(test_protocol_seat PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
-target_compile_definitions(test_protocol_seat PRIVATE WLR_USE_UNSTABLE)
 target_include_directories(test_protocol_seat PRIVATE ${NOVA_INTEGRATION_INCLUDES})
 target_link_libraries(test_protocol_seat PRIVATE ${NOVA_INTEGRATION_LIBS})
 
@@ -732,11 +774,9 @@ target_link_libraries(test_protocol_seat PRIVATE ${NOVA_INTEGRATION_LIBS})
 add_executable(test_disconnect_cycle
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/test_disconnect_cycle.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/wl_client_kit.cpp"
-    ${NOVA_INTEGRATION_SESSION_SOURCES}
 )
 add_dependencies(test_disconnect_cycle nova_shaders nova_client_protocol_headers)
 target_compile_options(test_disconnect_cycle PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
-target_compile_definitions(test_disconnect_cycle PRIVATE WLR_USE_UNSTABLE)
 target_include_directories(test_disconnect_cycle PRIVATE ${NOVA_INTEGRATION_INCLUDES})
 target_link_libraries(test_disconnect_cycle PRIVATE ${NOVA_INTEGRATION_LIBS})
 
@@ -760,11 +800,9 @@ target_link_libraries(probe_font_leak PRIVATE Nova ${CMAKE_DL_LIBS})
 # through a product binary that creates exactly one output and never changes mode.
 add_executable(probe_present_loop
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/probe_present_loop.cpp"
-    ${NOVA_INTEGRATION_SESSION_SOURCES}
 )
 add_dependencies(probe_present_loop nova_shaders nova_client_protocol_headers)
 target_compile_options(probe_present_loop PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
-target_compile_definitions(probe_present_loop PRIVATE WLR_USE_UNSTABLE)
 target_include_directories(probe_present_loop PRIVATE ${NOVA_INTEGRATION_INCLUDES})
 target_link_libraries(probe_present_loop PRIVATE ${NOVA_INTEGRATION_LIBS})
 
@@ -865,6 +903,13 @@ set_tests_properties(disconnect_cycle PROPERTIES
 # --------------------------------------------------------------------------
 
 # Link hygiene: the boot binary must never acquire an SDL runtime dependency.
-# Referenced by the NovaSDL rationale comment above the NovaSDL target.
+# Still named for the binary it guards - `vazio` - which the vazio-dev rename
+# did not touch; $<TARGET_FILE:vazio> resolves to the same staged-boot entry it
+# always did. Two constructions now have to hold for this to pass, and this test
+# is what notices if either stops: Nova carries no SDL link edge in any scope
+# (see the NovaSDL rationale above that target), and the one SDL-calling member
+# of libClouds.a is never referenced from vazio_main.cpp (see the Clouds
+# library). A test that only ever passed by construction is worth keeping
+# precisely because the construction can be broken by a one-line link change.
 add_test(NAME nova_link_hygiene
     COMMAND sh -c "! ldd $<TARGET_FILE:vazio> | grep -q libSDL2")

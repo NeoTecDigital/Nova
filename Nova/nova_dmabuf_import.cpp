@@ -99,15 +99,16 @@ static VkMemoryRequirements planeRequirements(VkDevice device, VkImage image, in
 // A memory type the image and the fd both accept, or UINT32_MAX.
 uint32_t Graphics::importMemoryTypeFor(int fd, const VkMemoryRequirements& requirements)
 {
-    PFN_vkGetMemoryFdPropertiesKHR get_fd_properties = loadGetMemoryFdProperties(logical_device);
-    if (get_fd_properties == nullptr) {
+    // This instance's entry point, resolved against this instance's device at
+    // device creation. Nothing here is shared with a second Graphics.
+    if (get_memory_fd_properties == nullptr) {
         report(LOGGER::ERROR, "dmabuf import: vkGetMemoryFdPropertiesKHR unavailable");
         return UINT32_MAX;
     }
 
     VkMemoryFdPropertiesKHR fd_properties = { .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR };
-    if (get_fd_properties(logical_device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-                          fd, &fd_properties) != VK_SUCCESS) {
+    if (get_memory_fd_properties(logical_device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+                                 fd, &fd_properties) != VK_SUCCESS) {
         report(LOGGER::ERROR, "dmabuf import: fd is not importable as a dmabuf");
         return UINT32_MAX;
     }

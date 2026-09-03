@@ -1,4 +1,5 @@
 #include "./nova_graphics.h"
+#include "./nova_dmabuf_query.h"
 namespace Nova {
 // No window-system header belongs in this translation unit. The SDL-window
 // constructor lives in Nova/nova_sdl.cpp, which is the one place in Nova that
@@ -25,6 +26,7 @@ void Graphics::completeSurfaceBackedInit()
 {
     createPhysicalDevice(true, surface);   // Need presentation support
     createLogicalDevice(true);             // Need swapchain extension
+    resolveDmabufEntryPoints();
     createSharedCommandPools();
     createImmediateContext();
 
@@ -38,6 +40,35 @@ void Graphics::completeSurfaceBackedInit()
     createRenderPass();
     createFramebuffers();
     createFrameSyncObjects();
+}
+
+/**
+ * Bind this instance's device-level dmabuf entry points to this instance.
+ *
+ * One lookup, at the only moment when the answer is both knowable and final:
+ * the logical device exists and its enabled extension set is fixed. Nothing is
+ * cached across instances because there is nothing shared to cache - the thunk
+ * belongs to the VkDevice, and a second Graphics has a second device.
+ *
+ * Silent when the extensions are absent: that is not a failure, it is the
+ * capability supportsDmabufImport() already reports, and every import path
+ * checks the pointer before it uses it.
+ */
+void Graphics::resolveDmabufEntryPoints()
+{
+    if (!supportsDmabufImport()) {
+        return;
+    }
+
+    get_memory_fd_properties = loadGetMemoryFdProperties(logical_device);
+    if (get_memory_fd_properties == nullptr) {
+        report(LOGGER::WARN,
+               "NovaGraphics - VK_KHR_external_memory_fd is enabled but "
+               "vkGetMemoryFdPropertiesKHR did not resolve; imports will be refused");
+        return;
+    }
+
+    report(LOGGER::VERBOSE, "NovaGraphics - dmabuf entry points resolved for this device");
 }
 
 Graphics::~Graphics()

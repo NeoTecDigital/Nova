@@ -18,20 +18,30 @@ VkImageAspectFlagBits memoryPlaneAspect(int plane)
     return ASPECTS[plane];
 }
 
-// vkGetMemoryFdPropertiesKHR ships with VK_KHR_external_memory_fd and is not in
-// the loader's exported set, so it is resolved per device on first use.
+/**
+ * Resolve vkGetMemoryFdPropertiesKHR for one device. Nothing is remembered here.
+ *
+ * The entry point ships with VK_KHR_external_memory_fd and is not in the
+ * loader's exported set, so it has to come from vkGetDeviceProcAddr. The result
+ * is DEVICE state, not process state: a dispatchable device handle carries its
+ * own dispatch table, and a loader with more than one ICD or a layer stack
+ * hands out a different thunk per device. This function therefore performs the
+ * lookup and returns it; the caller stores it beside the VkDevice it belongs to
+ * (Graphics::get_memory_fd_properties, resolved once at device creation).
+ *
+ * A process-static one-entry cache keyed on the last device used to live here.
+ * With two live devices it either thrashed or, when both handles happened to be
+ * live at once, handed device A's thunk to device B - which is exactly the
+ * two-sessions-in-one-process case probe_offscreen now exercises.
+ */
 PFN_vkGetMemoryFdPropertiesKHR loadGetMemoryFdProperties(VkDevice device)
 {
-    static PFN_vkGetMemoryFdPropertiesKHR cached = nullptr;
-    static VkDevice cached_for = VK_NULL_HANDLE;
-
-    if (cached_for != device) {
-        cached = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
-            vkGetDeviceProcAddr(device, "vkGetMemoryFdPropertiesKHR"));
-        cached_for = device;
+    if (device == VK_NULL_HANDLE) {
+        return nullptr;
     }
 
-    return cached;
+    return reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
+        vkGetDeviceProcAddr(device, "vkGetMemoryFdPropertiesKHR"));
 }
 
 // Every modifier the device reports for `format`. Two-call idiom: count, then fill.

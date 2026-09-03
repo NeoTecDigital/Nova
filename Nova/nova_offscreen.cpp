@@ -210,6 +210,7 @@ Graphics::Graphics(const OffscreenConfig& config, const std::string& debug_level
 
     createPhysicalDevice(request);
     createLogicalDevice(false);   // no VK_KHR_swapchain: there is no surface
+    resolveDmabufEntryPoints();   // per-instance, and only this instance's
     createSharedCommandPools();
     createImmediateContext();
 

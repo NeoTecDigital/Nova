@@ -28,7 +28,12 @@ inline const std::unordered_map<std::string, DEBUG_LEVEL> DEBUG_MAP = {
 
 // Adds a safety check to ensure that the debug level is set to a valid value.
 inline DEBUG_LEVEL getDebugLevel (const char* dbg_lvl) {
-    printf("Logger - Debug Level set to %s ..", dbg_lvl);
+    // Terminated and flushed: without the newline this line had no end of its
+    // own and glued itself to the front of whatever the logger printed next,
+    // and without the flush it sat in stdout's buffer until something else
+    // happened to flush it - which, at SILENT, is process exit.
+    printf("Logger - Debug Level set to %s ..\n", dbg_lvl);
+    fflush(stdout);
     if (DEBUG_MAP.find(dbg_lvl) != DEBUG_MAP.end()) 
         { return DEBUG_MAP.at(dbg_lvl); } 
     else 

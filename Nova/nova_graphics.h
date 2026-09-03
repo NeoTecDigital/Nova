@@ -51,6 +51,33 @@ private:
     // caller let its ImportedImage go out of scope unreleased.
     std::vector<ImportedImage> imported_images;
 
+    /**
+     * vkGetMemoryFdPropertiesKHR for THIS instance's logical device.
+     *
+     * Per-instance, not per-process. A dispatchable VkDevice carries its own
+     * dispatch table, so the thunk the loader returns belongs to the device it
+     * was asked about and to no other; two Graphics instances in one process
+     * hold two devices and therefore two entry points. It used to be a
+     * function-local `static` pair in nova_dmabuf_query.cpp keyed on the last
+     * device seen, which under two live devices thrashed on every alternation
+     * and could hand one device's thunk to the other.
+     *
+     * Resolved once by resolveDmabufEntryPoints(), immediately after the
+     * logical device exists, on both the surface-backed and the offscreen path.
+     * Stays nullptr when the external-memory extensions were not enabled here,
+     * which importMemoryTypeFor() reports rather than dereferences.
+     */
+    PFN_vkGetMemoryFdPropertiesKHR get_memory_fd_properties = nullptr;
+
+    /**
+     * Resolve the device-level dmabuf entry points this instance will use.
+     *
+     * Called once, straight after createLogicalDevice(), by every constructor.
+     * Doing it at device creation rather than on first use keeps the lookup off
+     * the import path entirely and leaves no lazily-written state behind.
+     */
+    void resolveDmabufEntryPoints();
+
     const VkClearValue CLEAR_COLOR = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
     unsigned int frame_ct = 0;
 

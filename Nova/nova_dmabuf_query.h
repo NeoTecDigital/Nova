@@ -41,7 +41,9 @@ bool validateDmabufRequest(const DmabufAttributes& attrs, VkFormat& format_out);
 // First memory type index allowed by `allowed_bits`, or UINT32_MAX.
 uint32_t firstAllowedMemoryType(VkPhysicalDevice physical, uint32_t allowed_bits);
 
-// vkGetMemoryFdPropertiesKHR for `device`, resolved once per device.
+// Resolve vkGetMemoryFdPropertiesKHR for `device`. Stateless: the result is
+// per-device and belongs on whatever owns the device. nullptr when the
+// extension is not enabled there. See the definition.
 PFN_vkGetMemoryFdPropertiesKHR loadGetMemoryFdProperties(VkDevice device);
 
 } // namespace Nova

@@ -1,3 +1,4 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
 #include "Splash/SpatialNode.h"
@@ -24,30 +25,40 @@ struct MenuCategory {
 
 class UIMenuDropdown : public Splash::SpatialNode {
 public:
-    UIMenuDropdown(const std::vector<MenuItem>& items,
+    UIMenuDropdown(const UITheme& ui_theme,
+                   const std::vector<MenuItem>& items,
                    float width,
                    std::shared_ptr<Splash::SpatialFont> font_ptr,
                    std::function<void()> on_item_selected = nullptr);
 
+    const UITheme& theme() const { return *theme_; }
+
     void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
+    const UITheme* theme_;
     std::shared_ptr<Splash::SpatialPanel> panel_;
     std::vector<std::shared_ptr<UIButton>> item_buttons_;
+
+    void syncChromeToTheme();
 };
 
 class UIMenuBar : public Splash::SpatialNode {
 public:
-    UIMenuBar(float bar_width,
+    UIMenuBar(const UITheme& ui_theme,
+              float bar_width,
               std::shared_ptr<Splash::SpatialFont> font_ptr);
 
     void addMenu(const std::string& category_name, const std::vector<MenuItem>& items);
     void setTelemetryText(const std::string& text);
     void closeAllDropdowns();
 
+    const UITheme& theme() const { return *theme_; }
+
     void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
+    const UITheme* theme_;
     std::shared_ptr<Splash::SpatialFont> font_;
     std::shared_ptr<Splash::SpatialPanel> bar_panel_;
     std::shared_ptr<UILabel> brand_label_;
@@ -61,6 +72,10 @@ private:
     float current_x_offset_ = -1.25f;
 
     void toggleDropdown(int index);
+
+    // Pushes the resolved material onto the bar's own panel, once per frame
+    // from collectRender. See the seam contract at the foot of UITheme.h.
+    void syncChromeToTheme();
 };
 
 } // namespace Clouds::UI

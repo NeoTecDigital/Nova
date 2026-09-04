@@ -57,8 +57,10 @@ using Clouds::UI::UIButton;
 using Clouds::UI::UIDockBar;
 using Clouds::UI::UILabel;
 using Clouds::UI::UIMenuBar;
+using Clouds::UI::UITheme;
 using Clouds::UI::UIWindow;
-using Clouds::UI::g_Theme;
+using Clouds::UI::TextRole;
+using Clouds::UI::TextTone;
 
 constexpr float kScreenW = 1600.0f;
 constexpr float kScreenH = 1000.0f;
@@ -181,7 +183,8 @@ void testParentIsNotShadowedByItsChild() {
 // ---------------------------------------------------------------------------
 void testConstructorWiredChildrenAreParented() {
     auto scene = makeScene();
-    auto window = std::make_shared<UIWindow>("Parented", glm::vec2(0.6f, 0.4f), nullptr);
+    const UITheme theme;
+    auto window = std::make_shared<UIWindow>(theme, "Parented", glm::vec2(0.6f, 0.4f), nullptr);
     scene->root->addChild(window);
 
     CHECK(!window->children.empty(), "the window built its chrome");
@@ -201,10 +204,11 @@ void testConstructorWiredChildrenAreParented() {
 // ---------------------------------------------------------------------------
 void testTitlebarDragReachesTheWindow() {
     auto scene = makeScene();
-    auto window = std::make_shared<UIWindow>("Drag Me", glm::vec2(0.6f, 0.4f), nullptr);
+    const UITheme theme;
+    auto window = std::make_shared<UIWindow>(theme, "Drag Me", glm::vec2(0.6f, 0.4f), nullptr);
     scene->root->addChild(window);
 
-    const float tb_h = Clouds::UI::g_Theme.titlebar_height;
+    const float tb_h = theme.titlebar_height;
     const float tb_centre_y = window->window_size.y * 0.5f - tb_h * 0.5f;
 
     // Hover the titlebar: geometry lands on titlebar_panel_, routing must not.
@@ -232,12 +236,13 @@ void testTitlebarDragReachesTheWindow() {
 
 void testChildButtonStillGetsItsClick() {
     auto scene = makeScene();
-    auto window = std::make_shared<UIWindow>("Closable", glm::vec2(0.6f, 0.4f), nullptr);
+    const UITheme theme;
+    auto window = std::make_shared<UIWindow>(theme, "Closable", glm::vec2(0.6f, 0.4f), nullptr);
     scene->root->addChild(window);
 
     // Close button: titlebar-local (+w/2 - 0.045, 0, 0.003) under a titlebar at
     // (0, body_h/2, 0.003) in window space.
-    const float body_h = window->window_size.y - Clouds::UI::g_Theme.titlebar_height;
+    const float body_h = window->window_size.y - theme.titlebar_height;
     const glm::vec3 close_at(window->window_size.x * 0.5f - 0.045f, body_h * 0.5f, 0.006f);
 
     aimAt(*scene, close_at);
@@ -254,14 +259,15 @@ void testChildButtonStillGetsItsClick() {
 void testCaptureYieldsToAClaimingChild() {
     auto scene = makeScene();
 
-    auto button = std::make_shared<UIButton>("Ok", glm::vec2(0.30f, 0.16f), nullptr, nullptr);
+    const UITheme theme;
+    auto button = std::make_shared<UIButton>(theme, "Ok", glm::vec2(0.30f, 0.16f), nullptr, nullptr);
     int clicks = 0;
     button->on_click = [&clicks]() { ++clicks; };
     scene->root->addChild(button);
 
     // Stand-in for the caption a font-backed button carries: a nearer child
     // covering the whole face. It is chrome, so it does not claim.
-    auto caption = std::make_shared<UILabel>("Ok", nullptr);
+    auto caption = std::make_shared<UILabel>(theme, "Ok", nullptr);
     caption->name = "ButtonCaption";
     caption->transform.position = glm::vec3(0.0f, 0.0f, 0.002f);
     caption->claims_pointer_input = false;
@@ -288,10 +294,11 @@ void testCaptureYieldsToAClaimingChild() {
 // ---------------------------------------------------------------------------
 void testGrabHoldsADragThatLeavesTheNode() {
     auto scene = makeScene();
-    auto window = std::make_shared<UIWindow>("Runaway", glm::vec2(0.6f, 0.4f), nullptr);
+    const UITheme theme;
+    auto window = std::make_shared<UIWindow>(theme, "Runaway", glm::vec2(0.6f, 0.4f), nullptr);
     scene->root->addChild(window);
 
-    const float tb_centre_y = window->window_size.y * 0.5f - Clouds::UI::g_Theme.titlebar_height * 0.5f;
+    const float tb_centre_y = window->window_size.y * 0.5f - theme.titlebar_height * 0.5f;
     aimAt(*scene, glm::vec3(0.0f, tb_centre_y, 0.0f));
     scene->processPointerButton(1, true);
 
@@ -451,7 +458,8 @@ void testKeyboardFocusSurvivesHoverMovingAway() {
 // ---------------------------------------------------------------------------
 void testIsFocusedIsSingleSourced() {
     auto scene = makeScene();
-    auto window = std::make_shared<UIWindow>("Focus", glm::vec2(0.6f, 0.4f), nullptr);
+    const UITheme theme;
+    auto window = std::make_shared<UIWindow>(theme, "Focus", glm::vec2(0.6f, 0.4f), nullptr);
     scene->root->addChild(window);
 
     const SpatialNode* base = window.get();
@@ -570,7 +578,8 @@ void checkFlowRun(const std::vector<std::shared_ptr<UIButton>>& run,
 void testDockBarFlowsFromItsLeftInset() {
     auto font = std::make_shared<Splash::SpatialFont>(nullptr, nullptr);
     const float width = 2.20f;
-    auto dock = std::make_shared<UIDockBar>(width, font);
+    const UITheme theme;
+    auto dock = std::make_shared<UIDockBar>(theme, width, font);
 
     int clicks = 0;
     dock->addItem("A", [&clicks]() { ++clicks; });
@@ -593,7 +602,8 @@ void testDockBarFlowsFromItsLeftInset() {
 void testMenuBarFlowsAndOpensOneDropdownAtATime() {
     auto font = std::make_shared<Splash::SpatialFont>(nullptr, nullptr);
     const float width = 2.60f;
-    auto bar = std::make_shared<UIMenuBar>(width, font);
+    const UITheme theme;
+    auto bar = std::make_shared<UIMenuBar>(theme, width, font);
 
     int fired = 0;
     bar->addMenu("Windows", {{ "Reset", "R", [&fired]() { ++fired; } }});
@@ -641,6 +651,71 @@ void testMenuBarFlowsAndOpensOneDropdownAtATime() {
     CHECK(labels[1]->text == "tick 7", "and says exactly what it is given");
 }
 
+// ---------------------------------------------------------------------------
+// 9. The theme is read, never remembered.
+//
+//    A widget resolves colour, material and typography from the theme it was
+//    handed, at the moment it is asked -- so an edit to a live theme reaches
+//    widgets that are already in the scene. That used to be false: UIButton's
+//    corner radius and border thickness were in-class initialisers reading a
+//    global theme, and every label's colour and scale were constructor
+//    arguments copied out of the same global, so a theme edit moved only the
+//    nodes built after it. Five snapshot sites, and this is what holds the
+//    ground they used to occupy.
+//
+//    Every accessor checked here is the one collectRender itself calls, so a
+//    green run says the frame would be drawn with these values -- not that a
+//    parallel path in the test agrees with itself. GPU-free for the same
+//    reason the rest of this file is: nothing here records a frame.
+// ---------------------------------------------------------------------------
+void testThemeEditsReachWidgetsThatAlreadyExist() {
+    UITheme theme;
+    auto font = std::make_shared<Splash::SpatialFont>(nullptr, nullptr);
+
+    auto button = std::make_shared<UIButton>(theme, "Live", glm::vec2(0.30f, 0.10f), font);
+    auto label = std::make_shared<UILabel>(theme, "Live", font, TextRole::SMALL, TextTone::MUTED);
+    auto window = std::make_shared<UIWindow>(theme, "Live", glm::vec2(0.6f, 0.4f), font);
+    window->setFocused(true);
+
+    const float width_before = label->getDimensions().x;
+    CHECK(width_before > 0.0f, "a fontless font still measures a fixed advance per character");
+
+    // Every widget above already exists. Now move the theme under it.
+    theme.radius_button = 0.077f;
+    theme.border_button = 0.0099f;
+    theme.primary = glm::vec4(0.11f, 0.22f, 0.33f, 0.44f);
+    theme.text_muted = glm::vec4(0.55f, 0.66f, 0.77f, 0.88f);
+    theme.scale_small = 0.00099f;
+    theme.window_titlebar_active = glm::vec4(0.12f, 0.34f, 0.56f, 0.78f);
+
+    CHECK_NEAR(button->resolvedCornerRadius(), theme.radius_button, 1e-9,
+               "a live theme edit reaches the corner radius of a button that already exists");
+    CHECK_NEAR(button->resolvedBorderThickness(), theme.border_button, 1e-9,
+               "and its border thickness");
+    CHECK(button->resolvedFillColor() == theme.primary,
+          "and the fill its variant names");
+    CHECK(label->resolvedColor() == theme.text_muted,
+          "a label resolves the tone it carries, not a colour it was handed once");
+    CHECK_NEAR(label->resolvedScale(), theme.scale_small, 1e-9,
+               "and the scale its role names");
+    CHECK(label->getDimensions().x > width_before,
+          "so the metric the layout measures moves with the theme too");
+    CHECK(window->resolvedTitlebarColor() == theme.window_titlebar_active,
+          "and window chrome follows, focus state and all");
+
+    // Two themes in one process, which is the point of per-Desktop theming:
+    // the second widget must not see the first theme's edits.
+    const UITheme untouched;
+    auto other = std::make_shared<UIButton>(untouched, "Other", glm::vec2(0.30f, 0.10f), font);
+    CHECK_NEAR(other->resolvedCornerRadius(), untouched.radius_button, 1e-9,
+               "a widget built against a second theme reads that one and only that one");
+    CHECK(other->resolvedCornerRadius() != button->resolvedCornerRadius(),
+          "which is a claim with content only because the two themes now differ");
+    fprintf(stdout, "  theme edit -> radius %.5f vs sibling theme %.5f\n",
+            static_cast<double>(button->resolvedCornerRadius()),
+            static_cast<double>(other->resolvedCornerRadius()));
+}
+
 } // namespace
 
 int main() {
@@ -664,6 +739,7 @@ int main() {
     testRaiseChildDecidesTheHit();
     testDockBarFlowsFromItsLeftInset();
     testMenuBarFlowsAndOpensOneDropdownAtATime();
+    testThemeEditsReachWidgetsThatAlreadyExist();
 
     if (g_failures == 0) {
         std::cout << " [SCENE INPUT STATUS] Input routing PASSED with zero failures." << std::endl;

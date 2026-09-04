@@ -1,3 +1,4 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "./UIComponents.h"
 #include "Splash/content/mesh_generators.h"
 #include <algorithm>
@@ -7,48 +8,77 @@ namespace Clouds::UI {
 // ---------------------------------------------------------------------------
 // UILabel Implementation
 // ---------------------------------------------------------------------------
-UILabel::UILabel(const std::string& label_text,
+UILabel::UILabel(const UITheme& ui_theme,
+                 const std::string& label_text,
                  std::shared_ptr<Splash::SpatialFont> font_ptr,
-                 float scale,
-                 const glm::vec4& text_color,
+                 TextRole text_role,
+                 TextTone text_tone,
                  TextAlignment align)
-    : text(label_text), color(text_color), font_scale(scale), alignment(align), font(font_ptr) {
+    : text(label_text), role(text_role), tone(text_tone), alignment(align),
+      font(font_ptr), theme_(&ui_theme) {
     name = "UILabel: " + text;
     if (font) {
-        size = font->measureText(text, font_scale);
+        size = font->measureText(text, resolvedScale());
     }
+}
+
+float UILabel::resolvedScale() const {
+    switch (role) {
+        case TextRole::TITLE:  return theme_->scale_title;
+        case TextRole::HEADER: return theme_->scale_header;
+        case TextRole::BODY:   return theme_->scale_body;
+        case TextRole::SMALL:  return theme_->scale_small;
+        case TextRole::MONO:   return theme_->scale_mono;
+    }
+    return theme_->scale_body;
+}
+
+glm::vec4 UILabel::resolvedColor() const {
+    switch (tone) {
+        case TextTone::PRIMARY:   return theme_->text_primary;
+        case TextTone::SECONDARY: return theme_->text_secondary;
+        case TextTone::MUTED:     return theme_->text_muted;
+        case TextTone::HIGHLIGHT: return theme_->text_highlight;
+    }
+    return theme_->text_primary;
 }
 
 void UILabel::setText(const std::string& new_text) {
     text = new_text;
     name = "UILabel: " + text;
     if (font) {
-        size = font->measureText(text, font_scale);
+        size = font->measureText(text, resolvedScale());
     }
 }
 
 glm::vec2 UILabel::getDimensions() const {
     if (!font) return glm::vec2(0.0f);
-    return font->measureText(text, font_scale);
+    return font->measureText(text, resolvedScale());
 }
 
 void UILabel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
                             std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible || text.empty() || !font) return;
 
+    const float scale = resolvedScale();
+
+    // Re-measured, not remembered: the scale is the theme's and the theme can
+    // change under a label that is already on screen. The extent the pointer is
+    // tested against has to be the extent that was just drawn.
+    const glm::vec2 dims = font->measureText(text, scale);
+    size = dims;
+
     Nova::Math::QuatTransform world_xf = getWorldTransform();
-    
+
     // Offset world position based on alignment
     if (alignment == TextAlignment::LEFT) {
-        glm::vec2 dims = font->measureText(text, font_scale);
         world_xf.position += world_xf.orientation * glm::vec3(dims.x * 0.5f, 0.0f, 0.0f);
     } else if (alignment == TextAlignment::RIGHT) {
-        glm::vec2 dims = font->measureText(text, font_scale);
         world_xf.position -= world_xf.orientation * glm::vec3(dims.x * 0.5f, 0.0f, 0.0f);
     }
 
     glm::mat4 model = world_xf.toMatrix();
-    auto text_mesh = font->createTextMesh(text, font_scale, color, true);
+    auto text_mesh = font->createTextMesh(text, scale, resolvedColor(), true);
 
     uint32_t first_idx, idx_count;
     mesh_buf->append(text_mesh, first_idx, idx_count);
@@ -67,12 +97,14 @@ void UILabel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
 // ---------------------------------------------------------------------------
 // UIButton Implementation
 // ---------------------------------------------------------------------------
-UIButton::UIButton(const std::string& btn_label,
+UIButton::UIButton(const UITheme& ui_theme,
+                   const std::string& btn_label,
                    const glm::vec2& btn_size,
                    std::shared_ptr<Splash::SpatialFont> font_ptr,
                    std::function<void()> click_handler,
                    ButtonVariant btn_variant)
-    : label(btn_label), variant(btn_variant), on_click(click_handler), font_(font_ptr) {
+    : label(btn_label), variant(btn_variant), on_click(click_handler),
+      theme_(&ui_theme), font_(font_ptr) {
     size = btn_size;
     name = "UIButton: " + label;
 
@@ -83,10 +115,11 @@ UIButton::UIButton(const std::string& btn_label,
 
     if (font_) {
         label_node_ = std::make_shared<UILabel>(
+            *theme_,
             label,
             font_,
-            g_Theme.scale_body,
-            g_Theme.text_primary,
+            TextRole::BODY,
+            TextTone::PRIMARY,
             TextAlignment::CENTER
         );
         label_node_->transform.position = glm::vec3(0.0f, 0.0f, 0.002f);
@@ -109,47 +142,59 @@ void UIButton::setVariant(ButtonVariant new_variant) {
 
 glm::vec4 UIButton::getBaseColor() const {
     switch (variant) {
-        case ButtonVariant::PRIMARY:   return g_Theme.primary;
-        case ButtonVariant::SECONDARY: return g_Theme.secondary;
-        case ButtonVariant::SUCCESS:   return g_Theme.accent_success;
-        case ButtonVariant::DANGER:    return g_Theme.accent_danger;
+        case ButtonVariant::PRIMARY:   return theme_->primary;
+        case ButtonVariant::SECONDARY: return theme_->secondary;
+        case ButtonVariant::SUCCESS:   return theme_->accent_success;
+        case ButtonVariant::DANGER:    return theme_->accent_danger;
         case ButtonVariant::GHOST:     return glm::vec4(0.12f, 0.16f, 0.24f, 0.30f);
     }
-    return g_Theme.primary;
+    return theme_->primary;
 }
 
 glm::vec4 UIButton::getHoverColor() const {
     switch (variant) {
-        case ButtonVariant::PRIMARY:   return g_Theme.primary_hover;
-        case ButtonVariant::SECONDARY: return g_Theme.secondary_hover;
+        case ButtonVariant::PRIMARY:   return theme_->primary_hover;
+        case ButtonVariant::SECONDARY: return theme_->secondary_hover;
         case ButtonVariant::SUCCESS:   return glm::vec4(0.24f, 0.85f, 0.50f, 1.0f);
         case ButtonVariant::DANGER:    return glm::vec4(0.95f, 0.35f, 0.40f, 1.0f);
         case ButtonVariant::GHOST:     return glm::vec4(0.20f, 0.28f, 0.42f, 0.70f);
     }
-    return g_Theme.primary_hover;
+    return theme_->primary_hover;
 }
 
 glm::vec4 UIButton::getActiveColor() const {
-    return g_Theme.primary_active;
+    return theme_->primary_active;
 }
 
-void UIButton::onRayEnter(const Nova::Math::RayHit&) {
-    hover_factor_ = 1.0f;
+glm::vec4 UIButton::resolvedFillColor() const {
+    if (!enabled) return glm::vec4(0.15f, 0.18f, 0.24f, 0.50f);
+    if (is_pressed) return getActiveColor();
+    return is_hovered ? getHoverColor() : getBaseColor();
 }
 
-void UIButton::onRayLeave() {
-    hover_factor_ = 0.0f;
-    is_pressed_ = false;
+float UIButton::resolvedCornerRadius() const {
+    return theme_->radius_button;
 }
 
+float UIButton::resolvedBorderThickness() const {
+    return theme_->border_button;
+}
+
+// Deliberately does not chain to SpatialNode::onRayButton. The base would
+// write is_pressed unconditionally, and the click latch below needs to read the
+// value the press left before the release overwrites it; the base also takes
+// is_focused on press, which a disabled button must not do. Hover and leave are
+// not overridden at all -- the base owns is_hovered and clears is_pressed when
+// the pointer leaves, which is exactly what a held button that is walked away
+// from should do.
 void UIButton::onRayButton(const Nova::Math::RayHit&, uint32_t button, bool pressed) {
     if (!enabled) return;
 
     if (button == 1) { // Left click
         if (pressed) {
-            is_pressed_ = true;
-        } else if (is_pressed_) {
-            is_pressed_ = false;
+            is_pressed = true;
+        } else if (is_pressed) {
+            is_pressed = false;
             if (on_click) {
                 on_click();
             }
@@ -161,21 +206,14 @@ void UIButton::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
                              std::vector<Splash::SpatialRenderCommand>& out_commands) {
     if (!visible) return;
 
-    glm::vec4 current_color = is_pressed_ ? getActiveColor() :
-                              (hover_factor_ > 0.5f ? getHoverColor() : getBaseColor());
-    
-    if (!enabled) {
-        current_color = glm::vec4(0.15f, 0.18f, 0.24f, 0.50f);
-    }
-
     Nova::Math::QuatTransform world_xf = getWorldTransform();
     glm::mat4 model = world_xf.toMatrix();
 
     auto quad_mesh = Splash::SpatialMeshGenerator::createPlanarQuad(
         size,
-        current_color,
-        border_thickness,
-        corner_radius,
+        resolvedFillColor(),
+        resolvedBorderThickness(),
+        resolvedCornerRadius(),
         0.0f
     );
 

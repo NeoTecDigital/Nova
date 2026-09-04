@@ -1,3 +1,4 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
 #include <glm/glm.hpp>
@@ -72,6 +73,39 @@ struct UITheme {
     float dockbar_height = 0.065f;
 };
 
-inline UITheme g_Theme;
+// --- The theme seam ---------------------------------------------------------
+//
+// There is no global theme and no default theme. A UITheme is owned by whoever
+// composes a UI and is handed to every widget it builds, by const reference, at
+// construction; the widget keeps a NON-OWNING pointer to it and reads it when
+// it resolves a colour or a material, never copying a field out. That is what
+// makes an edit to a live theme -- a YAML reload, a per-Desktop swap -- reach
+// the widgets that already exist. The single mutable `inline UITheme` global
+// that used to live at the foot of this header was read in five in-class
+// initialisers, so every widget snapshotted the theme at construction and a
+// live edit moved nothing that was already on screen.
+//
+// Why a reference parameter and not a pointer with a fallback: a reference has
+// no null, so "this widget was never given a theme" is a compile error rather
+// than a runtime branch, and there is no static default instance for a theme to
+// silently drift back to. A fallback theme is a mutable global wearing a hat.
+//
+// Why non-owning and not shared_ptr<const UITheme>: the owner mutates the theme
+// in place and every widget reads through it, so one write updates the whole
+// tree with no traversal. Shared ownership of a *const* theme would make a
+// hot-swap mean re-pointing every widget -- the same per-node walk this change
+// exists to delete, and torn if it were ever partial. Lifetime is safe by
+// construction: whoever owns the scene owns the theme, and the widgets are in
+// the scene.
+//
+// Where this goes next: Phase 4 (B3) puts the theme on the Desktop. The Desktop
+// will hand its own theme in through this same construction parameter, and no
+// widget will change. This is that seam.
+//
+// What resolves when: MATERIAL (colours, radii, border thickness) resolves per
+// frame from the live theme. GEOMETRY (titlebar height, bar heights, the
+// text-measured widths a flow layout packs against) is resolved once at
+// construction, because changing it means re-running a layout, which is the
+// anchored-Layout work in Phase 1 and not this seam's job.
 
 } // namespace Clouds::UI

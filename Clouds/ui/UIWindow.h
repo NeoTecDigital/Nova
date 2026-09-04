@@ -1,3 +1,4 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
 #include "Splash/SpatialNode.h"
@@ -21,7 +22,8 @@ public:
 
     std::shared_ptr<Splash::SpatialNode> content_area;
 
-    UIWindow(const std::string& window_title,
+    UIWindow(const UITheme& ui_theme,
+             const std::string& window_title,
              const glm::vec2& content_size,
              std::shared_ptr<Splash::SpatialFont> font_ptr);
     virtual ~UIWindow() = default;
@@ -31,9 +33,23 @@ public:
     // Writes SpatialNode::is_focused -- the base member, not a second copy of
     // it. A derived shadow used to sit alongside it, so this setter and
     // SpatialNode::onRayButton wrote different bools and disagreed in silence.
+    //
+    // It writes the flag and nothing else. The chrome colours that follow from
+    // focus are resolved from the theme every frame by the two accessors below,
+    // so there is no second place for the focused look to be decided from and
+    // no way for a focus change that arrived through the base to be missed.
     void setFocused(bool focused);
     void toggleMinimize();
     void close();
+
+    // Resolved from the live theme and the live focus flag on every call.
+    // syncChromeToTheme() -- the only thing that writes the panels' material --
+    // uses exactly these, so what a caller reads here is what the frame draws.
+    glm::vec4 resolvedTitlebarColor() const;
+    glm::vec4 resolvedBorderColor() const;
+    glm::vec4 resolvedBodyColor() const;
+
+    const UITheme& theme() const { return *theme_; }
 
     // Interaction overrides
     void onRayMove(const Nova::Math::RayHit& hit) override;
@@ -42,6 +58,7 @@ public:
     void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
+    const UITheme* theme_;
     std::shared_ptr<Splash::SpatialFont> font_;
 
     // Window chrome
@@ -61,6 +78,12 @@ private:
     void buildTitlebar(float body_h, float tb_h);
     void buildWindowControls();
     void onLeftPress(const Nova::Math::RayHit& hit);
+
+    // Pushes the resolved material onto the SpatialPanels the window draws
+    // itself with. Called from collectRender, so it runs once per frame against
+    // whatever the theme says at that moment. SpatialPanel keys its mesh cache
+    // on these fields' values, so re-writing the same numbers costs nothing.
+    void syncChromeToTheme();
 };
 
 } // namespace Clouds::UI

@@ -1,12 +1,13 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
+#include "Splash/Registry.h"
 #include "Splash/SpatialNode.h"
 #include "Splash/content/spatial_font.h"
 #include "./UITheme.h"
 #include <functional>
-#include <vector>
 #include <string>
+#include <vector>
 
 namespace Clouds::UI {
 
@@ -59,7 +60,8 @@ public:
     TextAlignment alignment = TextAlignment::LEFT;
     std::shared_ptr<Splash::SpatialFont> font;
 
-    UILabel(const UITheme& ui_theme,
+    UILabel(Splash::Registry& reg, Splash::NodeId self,
+            const UITheme& ui_theme,
             const std::string& label_text,
             std::shared_ptr<Splash::SpatialFont> font_ptr,
             TextRole text_role = TextRole::BODY,
@@ -76,7 +78,9 @@ public:
 
     const UITheme& theme() const { return *theme_; }
 
-    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
+    void collectRender(Splash::Registry& reg, Splash::NodeId self,
+                       Nova::SpatialMeshBuffer* mesh_buf,
+                       std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
     const UITheme* theme_;
@@ -99,14 +103,15 @@ public:
 
     bool enabled = true;
 
-    UIButton(const UITheme& ui_theme,
+    UIButton(Splash::Registry& reg, Splash::NodeId self,
+             const UITheme& ui_theme,
              const std::string& btn_label,
              const glm::vec2& btn_size,
              std::shared_ptr<Splash::SpatialFont> font_ptr,
              std::function<void()> click_handler = nullptr,
              ButtonVariant btn_variant = ButtonVariant::PRIMARY);
 
-    void setLabel(const std::string& new_label);
+    void setLabel(Splash::Registry& reg, const std::string& new_label);
     void setVariant(ButtonVariant new_variant);
 
     // Resolved from the live theme and the live interaction state on every
@@ -120,18 +125,45 @@ public:
     // onRayEnter/onRayLeave are NOT overridden: SpatialNode already maintains
     // is_hovered and clears is_pressed on leave, and an override that only
     // forwarded to the base is where the two shadow members used to live.
-    void onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) override;
+    void onRayButton(Splash::Registry& reg, Splash::NodeId self, const Nova::Math::RayHit& hit,
+                     uint32_t button, bool pressed) override;
 
-    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
+    void collectRender(Splash::Registry& reg, Splash::NodeId self,
+                       Nova::SpatialMeshBuffer* mesh_buf,
+                       std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
     const UITheme* theme_;
     std::shared_ptr<Splash::SpatialFont> font_;
-    std::shared_ptr<UILabel> label_node_;
+    Splash::NodeId label_node_;
 
     glm::vec4 getBaseColor() const;
     glm::vec4 getHoverColor() const;
     glm::vec4 getActiveColor() const;
 };
+
+// --- Builders --------------------------------------------------------------
+//
+// The one spelling every caller uses. B2.c replaces the classes above with
+// kinds and rewrites these bodies; nothing that calls them changes.
+
+inline Splash::NodeId makeUILabel(Splash::Registry& reg, Splash::NodeId parent,
+                                  const UITheme& theme, const std::string& text,
+                                  std::shared_ptr<Splash::SpatialFont> font,
+                                  TextRole role = TextRole::BODY,
+                                  TextTone tone = TextTone::PRIMARY,
+                                  TextAlignment align = TextAlignment::LEFT) {
+    return reg.emplace<UILabel>(parent, theme, text, std::move(font), role, tone, align);
+}
+
+inline Splash::NodeId makeUIButton(Splash::Registry& reg, Splash::NodeId parent,
+                                   const UITheme& theme, const std::string& label,
+                                   const glm::vec2& size,
+                                   std::shared_ptr<Splash::SpatialFont> font,
+                                   std::function<void()> on_click = nullptr,
+                                   ButtonVariant variant = ButtonVariant::PRIMARY) {
+    return reg.emplace<UIButton>(parent, theme, label, size, std::move(font),
+                                 std::move(on_click), variant);
+}
 
 } // namespace Clouds::UI

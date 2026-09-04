@@ -21,6 +21,7 @@ add_library(Vazio STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/SpatialPresentSidecar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/SpatialWindowHost.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/SpatialPopupHost.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SpatialSubsurfaceHost.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/SpatialSeatInput.cpp"
 )
 add_dependencies(Vazio nova_xdg_shell_server_header)

@@ -24,16 +24,16 @@ glm::vec2 panelSizeFor(const OatsSpatialPill& pill) {
 
 } // namespace
 
-DynamicSceneManager::DynamicSceneManager(std::shared_ptr<SpatialNode> root_node,
+DynamicSceneManager::DynamicSceneManager(Registry& registry,
+                                         NodeId root_node,
                                          std::shared_ptr<Splash::SpatialFont> font,
                                          std::shared_ptr<OatsBridge> oats_bridge)
-    : root_(root_node), font_(font), oats_bridge_(oats_bridge) {
+    : registry_(registry), root_(root_node), font_(font), oats_bridge_(oats_bridge) {
 }
 
 void DynamicSceneManager::initialize() {
-    dynamic_root_ = std::make_shared<SpatialNode>();
-    dynamic_root_->name = "OatsSpatialPillRoot";
-    root_->addChild(dynamic_root_);
+    dynamic_root_ = registry_.createContainer(root_);
+    registry_[dynamic_root_].name = "OatsSpatialPillRoot";
     syncNodesFromState();
 }
 
@@ -60,7 +60,7 @@ std::string DynamicSceneManager::spawnPill(const std::string& name, const glm::v
 }
 
 void DynamicSceneManager::syncNodesFromState() {
-    if (!oats_bridge_ || !dynamic_root_) {
+    if (!oats_bridge_ || !registry_.alive(dynamic_root_)) {
         return;
     }
     removeStaleNodes();
@@ -80,43 +80,44 @@ void DynamicSceneManager::createNodeFor(const OatsSpatialPill& pill) {
 
     Active3DNode node3d;
     node3d.id = pill.id;
-    node3d.panel = std::make_shared<SpatialPanel>(size, kPanelColor);
-    node3d.panel->corner_radius = kPanelCornerRadius;
-    node3d.panel->border_thickness = kPanelBorderThickness;
-    node3d.panel->transform.position = pill.position;
+    node3d.panel = registry_.emplace<SpatialPanel>(dynamic_root_, size, kPanelColor);
+
+    SpatialPanel& panel = static_cast<SpatialPanel&>(registry_[node3d.panel]);
+    panel.corner_radius = kPanelCornerRadius;
+    panel.border_thickness = kPanelBorderThickness;
+    registry_.transform(node3d.panel).position = pill.position;
 
     const std::string activated_id = pill.id;
-    node3d.button = std::make_shared<SpatialButton>(
+    node3d.button = registry_.emplace<SpatialButton>(
+        node3d.panel,
         pill.name,
         glm::vec2(size.x - 0.04f, size.y - 0.04f),
         font_,
-        [this, activated_id]() {
+        std::function<void()>([this, activated_id]() {
             if (on_node_activated) {
                 on_node_activated(activated_id);
             }
-        }
+        })
     );
-    node3d.button->normal_color = kButtonNormal;
-    node3d.button->hover_color = kButtonHover;
-    node3d.button->press_color = kButtonPress;
+    SpatialButton& button = static_cast<SpatialButton&>(registry_[node3d.button]);
+    button.normal_color = kButtonNormal;
+    button.hover_color = kButtonHover;
+    button.press_color = kButtonPress;
 
-    node3d.label = std::make_shared<SpatialLabel>(pill.name, font_, kLabelScale, kLabelColor);
-    node3d.label->transform.position = glm::vec3(0.0f, 0.0f, 0.003f);
-
-    node3d.button->addChild(node3d.label);
-    node3d.panel->addChild(node3d.button);
-    dynamic_root_->addChild(node3d.panel);
+    node3d.label = registry_.emplace<SpatialLabel>(node3d.button, pill.name, font_,
+                                                   kLabelScale, kLabelColor);
+    registry_.transform(node3d.label).position = glm::vec3(0.0f, 0.0f, 0.003f);
 
     active_nodes_[pill.id] = std::move(node3d);
 }
 
 void DynamicSceneManager::updateNodeFor(Active3DNode& node, const OatsSpatialPill& pill) {
-    if (node.panel) {
-        node.panel->transform.position = pill.position;
-        node.panel->size = panelSizeFor(pill);
+    if (registry_.alive(node.panel)) {
+        registry_.transform(node.panel).position = pill.position;
+        registry_[node.panel].size = panelSizeFor(pill);
     }
-    if (node.label) {
-        node.label->setText(pill.name);
+    if (SpatialLabel* label = registry_.as<SpatialLabel>(node.label)) {
+        label->setText(pill.name);
     }
 }
 
@@ -144,9 +145,9 @@ void DynamicSceneManager::destroyNode(const std::string& id) {
     if (it == active_nodes_.end()) {
         return;
     }
-    if (dynamic_root_ && it->second.panel) {
-        dynamic_root_->removeChild(it->second.panel);
-    }
+    // The panel owns the button which owns the label, so destroying the panel
+    // takes the whole representation with it.
+    registry_.destroy(it->second.panel);
     active_nodes_.erase(it);
 }
 

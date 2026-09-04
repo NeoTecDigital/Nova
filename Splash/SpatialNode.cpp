@@ -1,88 +1,22 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #include "./SpatialNode.h"
-#include <algorithm>
+#include "./Registry.h"
 
 namespace Splash {
 
-void SpatialNode::addChild(std::shared_ptr<SpatialNode> child) {
-    if (!child) return;
-    child->parent = weak_from_this();
-    children.push_back(child);
-
-    // A node that assembled its own children inside its constructor could not
-    // link them: enable_shared_from_this installs its weak reference in the
-    // shared_ptr constructor, which has not run yet, so weak_from_this() was
-    // empty and every one of those links was silently dropped. Attaching the
-    // node is the first moment a shared owner exists, so repair them here.
-    child->relinkChildren();
-}
-
-bool SpatialNode::raiseChild(const std::shared_ptr<SpatialNode>& child, float front_z, float back_z) {
-    if (!child) return false;
-
-    const auto it = std::find(children.begin(), children.end(), child);
-    if (it == children.end()) return false;
-
-    for (const std::shared_ptr<SpatialNode>& sibling : children) {
-        if (sibling) sibling->transform.position.z = back_z;
-    }
-    child->transform.position.z = front_z;
-
-    // Last in `children` is last painted and takes hitTest's tie-break, so the
-    // raised node is moved there rather than merely being marked as raised.
-    std::rotate(it, it + 1, children.end());
-    return true;
-}
-
-void SpatialNode::relinkChildren() {
-    const std::weak_ptr<SpatialNode> self = weak_from_this();
-
-    for (const std::shared_ptr<SpatialNode>& child : children) {
-        if (!child) continue;
-        child->parent = self;      // membership of children IS the parent claim
-        child->relinkChildren();
-    }
-}
-
-void SpatialNode::removeChild(std::shared_ptr<SpatialNode> child) {
-    auto it = std::remove(children.begin(), children.end(), child);
-    if (it == children.end()) return;
-
-    // The parent link is cleared through `child`, never through *it: everything
-    // from `it` to end() is moved-from after std::remove, so *it is a null
-    // shared_ptr whenever the removed node was not the last one - which is
-    // every removal from a node with more than one child.
-    if (child) child->parent.reset();
-    children.erase(it, children.end());
-}
-
-Nova::Math::QuatTransform SpatialNode::getWorldTransform() const {
-    if (auto p = parent.lock()) {
-        return p->getWorldTransform().combine(transform);
-    }
-    return transform;
-}
-
-void SpatialNode::onUpdate(float dt) {
-    for (auto& child : children) {
-        if (child) {
-            child->onUpdate(dt);
-        }
-    }
-}
-
-void SpatialNode::onRayEnter(const Nova::Math::RayHit&) {
+void SpatialNode::onRayEnter(Registry&, NodeId, const Nova::Math::RayHit&) {
     is_hovered = true;
 }
 
-void SpatialNode::onRayMove(const Nova::Math::RayHit&) {
+void SpatialNode::onRayMove(Registry&, NodeId, const Nova::Math::RayHit&) {
 }
 
-void SpatialNode::onRayLeave() {
+void SpatialNode::onRayLeave(Registry&, NodeId) {
     is_hovered = false;
     is_pressed = false;
 }
 
-void SpatialNode::onRayButton(const Nova::Math::RayHit&, uint32_t button, bool pressed) {
+void SpatialNode::onRayButton(Registry&, NodeId, const Nova::Math::RayHit&, uint32_t button, bool pressed) {
     if (button == 1) { // Left mouse button
         is_pressed = pressed;
         if (pressed) {
@@ -91,56 +25,90 @@ void SpatialNode::onRayButton(const Nova::Math::RayHit&, uint32_t button, bool p
     }
 }
 
-void SpatialNode::onKey(uint32_t, bool) {
+void SpatialNode::onKey(Registry&, NodeId, uint32_t, bool) {
 }
 
-bool SpatialNode::hitTest(const Nova::Math::Ray3D& world_ray, Nova::Math::RayHit& out_hit, std::shared_ptr<SpatialNode>& out_node) {
-    if (!visible) return false;
+void SpatialNode::collectRender(Registry&, NodeId, Nova::SpatialMeshBuffer*,
+                                std::vector<SpatialRenderCommand>&) {
+    // A plain node is a container: it has no surface of its own to draw, and
+    // its children are collected by the traversal below.
+}
+
+namespace {
+
+// Push a node's children so a stack pops them in sibling order: last child
+// first, which makes the pop order first-to-last.
+void pushChildrenReversed(Registry& reg, NodeId parent, std::vector<NodeId>& stack) {
+    for (NodeId child = reg.lastChild(parent); child.valid(); child = reg.prevSibling(child)) {
+        stack.push_back(child);
+    }
+}
+
+} // namespace
+
+bool hitTest(Registry& reg, NodeId root, const Nova::Math::Ray3D& world_ray,
+             Nova::Math::RayHit& out_hit, NodeId& out_node) {
+    if (!reg.alive(root)) return false;
 
     // Seeded at infinity, so the first real intersection always wins.
     Nova::Math::RayHit best;
-    std::shared_ptr<SpatialNode> best_node;
+    NodeId best_node;
 
-    // Self first, and on equal terms with the children rather than after them:
-    // testing it last is what let a descendant shadow its own parent whatever
-    // the depths were. A non-interactable node still hosts its children; it
-    // just has no surface of its own to be hit.
-    if (interactable) {
-        Nova::Math::RayHit self_hit;
-        if (Nova::Math::intersectOrientedQuad(world_ray, getWorldTransform(), size, self_hit)) {
-            best = self_hit;
-            best_node = shared_from_this();
+    std::vector<NodeId> stack;
+    stack.push_back(root);
+
+    while (!stack.empty()) {
+        const NodeId id = stack.back();
+        stack.pop_back();
+
+        const SpatialNode& node = reg[id];
+        if (!node.visible) continue;   // an invisible node prunes its whole subtree
+
+        // Every node on equal terms, none shadowed by its own ancestor: testing
+        // a parent after its children is what let a descendant behind it win.
+        // A non-interactable node still hosts its children; it just has no
+        // surface of its own to be hit.
+        //
+        // Nearest wins, and on an exact tie the LATER node in paint order takes
+        // it -- which is why the comparison replaces on equality and the walk
+        // runs in the same order collectSubtree paints in.
+        if (node.interactable) {
+            Nova::Math::RayHit hit;
+            if (Nova::Math::intersectOrientedQuad(world_ray, reg.worldOf(id), node.size, hit) &&
+                hit.distance <= best.distance) {
+                best = hit;
+                best_node = id;
+            }
         }
+        pushChildrenReversed(reg, id, stack);
     }
 
-    // Nearest wins. On an exact tie the later sibling takes it, matching the
-    // order collectRender paints them in: last drawn is on top.
-    for (const std::shared_ptr<SpatialNode>& child : children) {
-        if (!child) continue;
-
-        Nova::Math::RayHit child_hit;
-        std::shared_ptr<SpatialNode> child_node;
-        if (!child->hitTest(world_ray, child_hit, child_node)) continue;
-        if (child_hit.distance > best.distance) continue;
-
-        best = child_hit;
-        best_node = child_node;
-    }
-
-    if (!best_node) return false;
-
+    if (!best_node.valid()) return false;
     out_hit = best;
     out_node = best_node;
     return true;
 }
 
-void SpatialNode::collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) {
-    if (!visible) return;
+void collectSubtree(Registry& reg, NodeId root, Nova::SpatialMeshBuffer* mesh_buf,
+                    std::vector<SpatialRenderCommand>& out_commands) {
+    if (!reg.alive(root) || mesh_buf == nullptr) return;
 
-    for (auto& child : children) {
-        if (child) {
-            child->collectRender(mesh_buf, out_commands);
-        }
+    // Structural mutation from inside a collect hook would be editing the list
+    // this walk is standing in; the registry refuses it for the walk's duration.
+    Registry::TraversalScope traversal(reg);
+
+    std::vector<NodeId> stack;
+    stack.push_back(root);
+
+    while (!stack.empty()) {
+        const NodeId id = stack.back();
+        stack.pop_back();
+
+        SpatialNode& node = reg[id];
+        if (!node.visible) continue;
+
+        node.collectRender(reg, id, mesh_buf, out_commands);
+        pushChildrenReversed(reg, id, stack);
     }
 }
 

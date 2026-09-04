@@ -7,6 +7,8 @@
 
 namespace Splash {
 
+class Registry;
+
 /**
  * SpatialPanel - 3D Floating Glass/Acrylic UI Surface
  */
@@ -17,9 +19,12 @@ public:
     float corner_radius = 0.04f;
     float border_thickness = 0.005f;
 
-    SpatialPanel(const glm::vec2& panel_size, const glm::vec4& bg_col = glm::vec4(0.10f, 0.12f, 0.18f, 0.85f));
+    SpatialPanel(Registry& reg, NodeId self,
+                 const glm::vec2& panel_size,
+                 const glm::vec4& bg_col = glm::vec4(0.10f, 0.12f, 0.18f, 0.85f));
 
-    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) override;
+    void collectRender(Registry& reg, NodeId self, Nova::SpatialMeshBuffer* mesh_buf,
+                       std::vector<SpatialRenderCommand>& out_commands) override;
 
 private:
     // Quad geometry is a pure function of the public fields above; the cache
@@ -44,16 +49,19 @@ public:
     float border_thickness = 0.003f;
     std::shared_ptr<Splash::SpatialFont> font;
 
-    SpatialButton(const std::string& btn_label,
+    SpatialButton(Registry& reg, NodeId self,
+                  const std::string& btn_label,
                   const glm::vec2& btn_size,
                   std::shared_ptr<Splash::SpatialFont> spatial_font,
                   std::function<void()> click_handler = nullptr);
 
-    void onRayEnter(const Nova::Math::RayHit& hit) override;
-    void onRayLeave() override;
-    void onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) override;
+    void onRayEnter(Registry& reg, NodeId self, const Nova::Math::RayHit& hit) override;
+    void onRayLeave(Registry& reg, NodeId self) override;
+    void onRayButton(Registry& reg, NodeId self, const Nova::Math::RayHit& hit,
+                     uint32_t button, bool pressed) override;
 
-    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) override;
+    void collectRender(Registry& reg, NodeId self, Nova::SpatialMeshBuffer* mesh_buf,
+                       std::vector<SpatialRenderCommand>& out_commands) override;
 
 private:
     float hover_anim_ = 0.0f;
@@ -78,14 +86,16 @@ public:
     bool center_aligned = true;
     std::shared_ptr<Splash::SpatialFont> font;
 
-    SpatialLabel(const std::string& label_text,
+    SpatialLabel(Registry& reg, NodeId self,
+                 const std::string& label_text,
                  std::shared_ptr<Splash::SpatialFont> spatial_font,
                  float scale = 0.002f,
                  const glm::vec4& col = glm::vec4(1.0f));
 
     void setText(const std::string& new_text);
 
-    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) override;
+    void collectRender(Registry& reg, NodeId self, Nova::SpatialMeshBuffer* mesh_buf,
+                       std::vector<SpatialRenderCommand>& out_commands) override;
 
 private:
     // Keyed on the glyph string as well as scale, colour and alignment.
@@ -111,17 +121,21 @@ public:
     std::function<void(uint32_t button, bool pressed)> on_surface_button;
     std::function<void(uint32_t key, bool pressed)> on_surface_key;
 
-    SpatialSurfaceHost(const glm::vec2& surface_size, std::shared_ptr<Nova::TextureHandle> tex = nullptr);
+    SpatialSurfaceHost(Registry& reg, NodeId self,
+                       const glm::vec2& surface_size,
+                       std::shared_ptr<Nova::TextureHandle> tex = nullptr);
 
     void setTexture(std::shared_ptr<Nova::TextureHandle> tex);
 
-    void onRayEnter(const Nova::Math::RayHit& hit) override;
-    void onRayMove(const Nova::Math::RayHit& hit) override;
-    void onRayLeave() override;
-    void onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) override;
-    void onKey(uint32_t key, bool pressed) override;
+    void onRayEnter(Registry& reg, NodeId self, const Nova::Math::RayHit& hit) override;
+    void onRayMove(Registry& reg, NodeId self, const Nova::Math::RayHit& hit) override;
+    void onRayLeave(Registry& reg, NodeId self) override;
+    void onRayButton(Registry& reg, NodeId self, const Nova::Math::RayHit& hit,
+                     uint32_t button, bool pressed) override;
+    void onKey(Registry& reg, NodeId self, uint32_t key, bool pressed) override;
 
-    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands) override;
+    void collectRender(Registry& reg, NodeId self, Nova::SpatialMeshBuffer* mesh_buf,
+                       std::vector<SpatialRenderCommand>& out_commands) override;
 
 private:
     // The hosted texture changes every frame; the quad it is sampled onto does

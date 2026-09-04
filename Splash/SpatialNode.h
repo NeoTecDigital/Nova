@@ -1,3 +1,4 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
 #include "Nova/math/quaternion_transform.h"
@@ -6,12 +7,14 @@
 #include "Nova/pipeline/spatial_pipeline.h"
 #include "Nova/pipeline/mesh_buffer.h"
 #include "Splash/content/spatial_font.h"
-#include <vector>
+#include "./NodeId.h"
 #include <memory>
-#include <functional>
 #include <string>
+#include <vector>
 
 namespace Splash {
+
+class Registry;
 
 struct SpatialRenderCommand {
     glm::mat4 model;
@@ -21,9 +24,17 @@ struct SpatialRenderCommand {
     uint32_t index_count;
 };
 
-class SpatialNode : public std::enable_shared_from_this<SpatialNode> {
+/**
+ * SpatialNode - the behaviour half of a node.
+ *
+ * Identity, ownership and the hierarchy live in Splash::Registry; this object
+ * is what a NodeId resolves to. It holds no parent pointer and no child list:
+ * a tree whose links live in two places is a tree that can disagree with
+ * itself, and the after-the-fact repair pass that used to re-point every
+ * descendant's parent link is what that disagreement cost.
+ */
+class SpatialNode {
 public:
-    Nova::Math::QuatTransform transform;
     Nova::Math::PhaseState8 phase_state; // Dual [a, b, c, w] primordial state: Spatial/Real + Chromatic/Phase
     glm::vec2 size{1.0f, 1.0f}; // Dimensions in 3D world units (meters)
     std::string name = "SpatialNode";
@@ -49,68 +60,75 @@ public:
     bool captures_subtree_input = false;
     bool claims_pointer_input = true;
 
-    std::weak_ptr<SpatialNode> parent;
-    std::vector<std::shared_ptr<SpatialNode>> children;
-
-    SpatialNode() = default;
+    // Every node is constructed by Registry::emplace, which allocates and links
+    // the slot BEFORE this runs -- so a constructor that assembles children
+    // attaches them under `self` and there is no moment at which a node has
+    // children but no identity. Both parameters are unused by the base and
+    // named in the signature only because every subclass needs them.
+    SpatialNode(Registry&, NodeId) {}
     virtual ~SpatialNode() = default;
 
-    void addChild(std::shared_ptr<SpatialNode> child);
-    void removeChild(std::shared_ptr<SpatialNode> child);
+    SpatialNode(const SpatialNode&) = delete;
+    SpatialNode& operator=(const SpatialNode&) = delete;
 
-    // --- Sibling stacking ---
+    // Read-only view of this node's pose in its parent's frame.
     //
-    // Raise `child` above its siblings: it moves to the end of `children` and
-    // takes `front_z`, every other child takes `back_z`. False if `child` is
-    // not one of this node's children.
-    //
-    // Depth and paint order are written together on purpose. hitTest resolves
-    // by distance and falls back to sibling order only on an exact tie, while
-    // collectRender paints in sibling order outright -- so setting one without
-    // the other leaves what the pointer hits and what is drawn on top free to
-    // disagree.
-    //
-    // Both z values are the caller's. How far apart a shell separates its
-    // top-levels is that shell's layout; a node has no basis for a default.
-    //
-    // is_focused is deliberately untouched. SpatialScene already owns it and
-    // keeps it exclusive (setKeyboardFocus clears the previous holder), so a
-    // second writer here would race it. This is the z half alone -- the half
-    // the tree had nowhere else to put.
-    bool raiseChild(const std::shared_ptr<SpatialNode>& child, float front_z, float back_z);
-
-    // Re-points every descendant's parent link at its actual owner. addChild
-    // runs this on whatever it attaches, which is what makes a subtree built
-    // inside a constructor -- where weak_from_this() is still empty and the
-    // links it writes are dropped on the floor -- correct once it is attached.
-    // Public so a node used detached can put its own tree right.
-    void relinkChildren();
+    // Registry::transform(id) is the ONLY write path, because a write has to
+    // invalidate the world-transform cache of this node's whole subtree and a
+    // public mutable field is a write that does not. Making the field private
+    // is what turns that from a convention into a fact.
+    const Nova::Math::QuatTransform& transform() const { return local_; }
 
     // Evolve complex phase distribution non-linearly
     void evolvePhase(float dt, float coupling = 1.0f) {
         phase_state = phase_state.coupleNonLinear(dt, coupling);
     }
 
-    // Compute cumulative world transform
-    Nova::Math::QuatTransform getWorldTransform() const;
+    // --- Interactive event hooks ---
+    //
+    // Every hook takes the registry and its own id, because that is the only
+    // thing a node has to reach the rest of the tree with -- and because it is
+    // the signature the facet vtables of B2 dispatch through, so the bodies
+    // move to those without their call sites moving.
+    virtual void onRayEnter(Registry& reg, NodeId self, const Nova::Math::RayHit& hit);
+    virtual void onRayMove(Registry& reg, NodeId self, const Nova::Math::RayHit& hit);
+    virtual void onRayLeave(Registry& reg, NodeId self);
+    virtual void onRayButton(Registry& reg, NodeId self, const Nova::Math::RayHit& hit,
+                             uint32_t button, bool pressed);
+    virtual void onKey(Registry& reg, NodeId self, uint32_t key, bool pressed);
 
-    // Interactive event hooks
-    virtual void onUpdate(float dt);
-    virtual void onRayEnter(const Nova::Math::RayHit& hit);
-    virtual void onRayMove(const Nova::Math::RayHit& hit);
-    virtual void onRayLeave();
-    virtual void onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed);
-    virtual void onKey(uint32_t key, bool pressed);
+    // Emit THIS node's geometry. Children are the traversal's job (see
+    // collectSubtree), so a node that draws nothing is a container and the base
+    // implementation is empty rather than a recursion every override chained to.
+    virtual void collectRender(Registry& reg, NodeId self, Nova::SpatialMeshBuffer* mesh_buf,
+                               std::vector<SpatialRenderCommand>& out_commands);
 
-    // Raycast hit test against this node and its children. Reports the NEAREST
-    // intersection in the subtree -- self included, not shadowed by it -- so
-    // depth decides what the pointer is on. Ties go to the later sibling, which
-    // is the one painted on top. Answers geometry only; which node the event is
-    // routed to is SpatialScene's decision.
-    virtual bool hitTest(const Nova::Math::Ray3D& world_ray, Nova::Math::RayHit& out_hit, std::shared_ptr<SpatialNode>& out_node);
-
-    // Batch render collector: appends geometry to mesh_buf and adds draw calls to out_commands
-    virtual void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<SpatialRenderCommand>& out_commands);
+private:
+    friend class Registry;
+    Nova::Math::QuatTransform local_;
 };
+
+/**
+ * Raycast the subtree rooted at `root`. Reports the NEAREST intersection in the
+ * subtree -- every node on equal terms, none shadowed by its own parent -- so
+ * depth decides what the pointer is on. Ties go to the later sibling, which is
+ * the one painted on top. Answers geometry only; which node the event is routed
+ * to is SpatialScene's decision.
+ *
+ * Iterative: a scene graph's depth is a client's to choose, and the stack is
+ * not.
+ */
+bool hitTest(Registry& reg, NodeId root, const Nova::Math::Ray3D& world_ray,
+             Nova::Math::RayHit& out_hit, NodeId& out_node);
+
+/**
+ * Depth-first render collection over the subtree rooted at `root`.
+ *
+ * Pre-order, siblings forward: a node is painted before its children and a
+ * later sibling over an earlier one, which is the order hitTest breaks its ties
+ * in. An invisible node prunes its whole subtree, exactly as it always did.
+ */
+void collectSubtree(Registry& reg, NodeId root, Nova::SpatialMeshBuffer* mesh_buf,
+                    std::vector<SpatialRenderCommand>& out_commands);
 
 } // namespace Splash

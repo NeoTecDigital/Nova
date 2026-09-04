@@ -162,8 +162,11 @@ int main(int argc, char** argv) {
     auto pipeline = std::make_unique<Nova::SpatialPipeline>(graphics, graphics->getRenderPass(), texture_bridge.get());
     pipeline->build("shaders/spatial/spatial_ui_vert.spv", "shaders/spatial/spatial_ui_frag.spv");
 
+    // Before the scene, so it is destroyed after it and can take its subtree.
+    Splash::Registry registry;
+
     // Initialize 3D Spatial Scene
-    auto scene = std::make_shared<Splash::SpatialScene>(graphics, texture_bridge.get());
+    auto scene = std::make_shared<Splash::SpatialScene>(registry, graphics, texture_bridge.get());
     scene->initialize();
 
     // Initialize Rust OATS-rs FFI Delta Bridge
@@ -175,7 +178,7 @@ int main(int argc, char** argv) {
 
     // Initialize 3D Filesystem Explorer with Parametric 3D Pills
     report(LOGGER::INFO, "Filesystem scan root: %s", cli.scan_root.c_str());
-    auto filesystem_3d = std::make_shared<Clouds::SpatialFilesystem>(scene->root, scene->font);
+    auto filesystem_3d = std::make_shared<Clouds::SpatialFilesystem>(registry, scene->root, scene->font);
     filesystem_3d->scanAndBuild3DTree(cli.scan_root, 2);
 
     // Initialize Dear ImGui Engine Overlay

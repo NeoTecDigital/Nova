@@ -511,11 +511,39 @@ target_link_libraries(test_scene_input PRIVATE
     Clouds
 )
 
+# The node store itself: slot reuse, generation wrap, reparenting, the world
+# cache and deferred destruction. It links Splash alone - the registry is SDK
+# substrate and nothing above it is needed to exercise it, which is a layering
+# claim the link line enforces exactly as test_scene_input's does.
+add_executable(test_registry
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_registry.cpp"
+)
+target_compile_options(test_registry PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+target_link_libraries(test_registry PRIVATE
+    Splash
+)
+
+# The scheduled-node refusals, split from test_registry.cpp: destroy() unlinks
+# now and frees at the next drain, so there is a window in which a node is
+# alive, out of the tree and about to be recycled, and every structural edit has
+# to refuse it. Its own binary because the two files are two claims - the store's
+# mechanics, and the window - and a failure should say which.
+add_executable(test_registry_lifetime
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_registry_lifetime.cpp"
+)
+target_compile_options(test_registry_lifetime PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
+target_link_libraries(test_registry_lifetime PRIVATE
+    Splash
+)
+
 add_test(NAME seam_math_raycast COMMAND test_seam_math_raycast)
 add_test(NAME seam_ffi_roundtrip COMMAND test_seam_ffi_roundtrip)
 add_test(NAME scene_input COMMAND test_scene_input)
+add_test(NAME registry COMMAND test_registry)
+add_test(NAME registry_lifetime COMMAND test_registry_lifetime)
 
-set_tests_properties(seam_math_raycast seam_ffi_roundtrip scene_input PROPERTIES
+set_tests_properties(seam_math_raycast seam_ffi_roundtrip scene_input registry
+                     registry_lifetime PROPERTIES
     TIMEOUT 120
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 )

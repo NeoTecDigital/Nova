@@ -8,14 +8,15 @@ namespace Clouds::UI {
 // ---------------------------------------------------------------------------
 // UILabel Implementation
 // ---------------------------------------------------------------------------
-UILabel::UILabel(const UITheme& ui_theme,
+UILabel::UILabel(Splash::Registry& reg, Splash::NodeId self,
+                 const UITheme& ui_theme,
                  const std::string& label_text,
                  std::shared_ptr<Splash::SpatialFont> font_ptr,
                  TextRole text_role,
                  TextTone text_tone,
                  TextAlignment align)
-    : text(label_text), role(text_role), tone(text_tone), alignment(align),
-      font(font_ptr), theme_(&ui_theme) {
+    : SpatialNode(reg, self), text(label_text), role(text_role), tone(text_tone),
+      alignment(align), font(font_ptr), theme_(&ui_theme) {
     name = "UILabel: " + text;
     if (font) {
         size = font->measureText(text, resolvedScale());
@@ -56,9 +57,10 @@ glm::vec2 UILabel::getDimensions() const {
     return font->measureText(text, resolvedScale());
 }
 
-void UILabel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+void UILabel::collectRender(Splash::Registry& reg, Splash::NodeId self,
+                            Nova::SpatialMeshBuffer* mesh_buf,
                             std::vector<Splash::SpatialRenderCommand>& out_commands) {
-    if (!visible || text.empty() || !font) return;
+    if (text.empty() || !font) return;
 
     const float scale = resolvedScale();
 
@@ -68,7 +70,7 @@ void UILabel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
     const glm::vec2 dims = font->measureText(text, scale);
     size = dims;
 
-    Nova::Math::QuatTransform world_xf = getWorldTransform();
+    Nova::Math::QuatTransform world_xf = reg.worldOf(self);
 
     // Offset world position based on alignment
     if (alignment == TextAlignment::LEFT) {
@@ -90,21 +92,20 @@ void UILabel::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
         .first_index = first_idx,
         .index_count = idx_count
     });
-
-    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 // ---------------------------------------------------------------------------
 // UIButton Implementation
 // ---------------------------------------------------------------------------
-UIButton::UIButton(const UITheme& ui_theme,
+UIButton::UIButton(Splash::Registry& reg, Splash::NodeId self,
+                   const UITheme& ui_theme,
                    const std::string& btn_label,
                    const glm::vec2& btn_size,
                    std::shared_ptr<Splash::SpatialFont> font_ptr,
                    std::function<void()> click_handler,
                    ButtonVariant btn_variant)
-    : label(btn_label), variant(btn_variant), on_click(click_handler),
-      theme_(&ui_theme), font_(font_ptr) {
+    : SpatialNode(reg, self), label(btn_label), variant(btn_variant),
+      on_click(click_handler), theme_(&ui_theme), font_(font_ptr) {
     size = btn_size;
     name = "UIButton: " + label;
 
@@ -114,25 +115,20 @@ UIButton::UIButton(const UITheme& ui_theme,
     captures_subtree_input = true;
 
     if (font_) {
-        label_node_ = std::make_shared<UILabel>(
-            *theme_,
-            label,
-            font_,
-            TextRole::BODY,
-            TextTone::PRIMARY,
-            TextAlignment::CENTER
-        );
-        label_node_->transform.position = glm::vec3(0.0f, 0.0f, 0.002f);
-        label_node_->claims_pointer_input = false;
-        addChild(label_node_);
+        // Built under `self`, which already exists: the caption is parented from
+        // the instant it is created and there is nothing left to relink.
+        label_node_ = makeUILabel(reg, self, *theme_, label, font_,
+                                  TextRole::BODY, TextTone::PRIMARY, TextAlignment::CENTER);
+        reg.transform(label_node_).position = glm::vec3(0.0f, 0.0f, 0.002f);
+        reg[label_node_].claims_pointer_input = false;
     }
 }
 
-void UIButton::setLabel(const std::string& new_label) {
+void UIButton::setLabel(Splash::Registry& reg, const std::string& new_label) {
     label = new_label;
     name = "UIButton: " + label;
-    if (label_node_) {
-        label_node_->setText(label);
+    if (UILabel* caption = reg.as<UILabel>(label_node_)) {
+        caption->setText(label);
     }
 }
 
@@ -187,7 +183,8 @@ float UIButton::resolvedBorderThickness() const {
 // not overridden at all -- the base owns is_hovered and clears is_pressed when
 // the pointer leaves, which is exactly what a held button that is walked away
 // from should do.
-void UIButton::onRayButton(const Nova::Math::RayHit&, uint32_t button, bool pressed) {
+void UIButton::onRayButton(Splash::Registry&, Splash::NodeId, const Nova::Math::RayHit&,
+                           uint32_t button, bool pressed) {
     if (!enabled) return;
 
     if (button == 1) { // Left click
@@ -202,12 +199,10 @@ void UIButton::onRayButton(const Nova::Math::RayHit&, uint32_t button, bool pres
     }
 }
 
-void UIButton::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
+void UIButton::collectRender(Splash::Registry& reg, Splash::NodeId self,
+                             Nova::SpatialMeshBuffer* mesh_buf,
                              std::vector<Splash::SpatialRenderCommand>& out_commands) {
-    if (!visible) return;
-
-    Nova::Math::QuatTransform world_xf = getWorldTransform();
-    glm::mat4 model = world_xf.toMatrix();
+    glm::mat4 model = reg.worldOf(self).toMatrix();
 
     auto quad_mesh = Splash::SpatialMeshGenerator::createPlanarQuad(
         size,
@@ -227,8 +222,6 @@ void UIButton::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
         .first_index = first_idx,
         .index_count = idx_count
     });
-
-    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 } // namespace Clouds::UI

@@ -61,7 +61,7 @@ public:
     SpatialCompositor(Nova::Core* core,
                       Nova::TextureBridge* texture_bridge,
                       std::shared_ptr<Splash::SpatialScene> scene,
-                      std::shared_ptr<Splash::SpatialNode> portal_root = nullptr,
+                      Splash::NodeId portal_root = Splash::INVALID_NODE,
                       SpatialCompositorConfig config = {});
     ~SpatialCompositor();
 
@@ -293,8 +293,14 @@ public:
     // A no-op when the group was already closed, so no empty frame is ever sent.
     void notifySeatPointerFrame();
 
-    // Node mapped surfaces are parented to. Never null once a scene exists.
-    const std::shared_ptr<Splash::SpatialNode>& portalRoot() const;
+    // Node mapped surfaces are parented to. Valid once a scene exists.
+    Splash::NodeId portalRoot() const;
+
+    // The node store this session's scene lives in; null when it has no scene.
+    Splash::Registry* registry() const { return scene_ ? &scene_->registry() : nullptr; }
+
+    // The scene node a hosted surface is drawn on, INVALID when it hosts none.
+    Splash::NodeId hostNodeForSurface(struct wlr_surface* surface) const;
 
 private:
     bool initDisplay();
@@ -344,14 +350,10 @@ private:
     // Import the committed buffer of any hosted surface into its host node.
     // Toplevels and popups differ in placement, never in how pixels arrive.
     void importSurfaceContent(struct wlr_surface* surface,
-                              const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
+                              Splash::NodeId host,
                               std::shared_ptr<Nova::TextureHandle>& texture,
                               uint32_t& unsupported_format,
                               WindowHandle handle);
-
-    // The scene node a hosted surface is drawn on, or null when the surface is
-    // not one this session hosts. Popups anchor to the node this returns.
-    std::shared_ptr<Splash::SpatialSurfaceHost> hostNodeForSurface(struct wlr_surface* surface) const;
 
     // Release everything on the kill lists. Must never be called from inside a
     // wl_listener callback.
@@ -361,16 +363,16 @@ private:
     void drainRemovedInputDevices();
     void drainRemovedOutputs();
 
-    // Release the scene-side half of a hosted surface: out of the tree, out of
-    // every focus and grab that names it, texture returned to the bridge.
-    void releaseChildHost(const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
-                          std::shared_ptr<Nova::TextureHandle>& texture);
+    // Release the scene-side half of a hosted surface: out of every focus and
+    // grab that names it, input routing severed, texture returned to the
+    // bridge, node subtree destroyed.
+    void releaseChildHost(Splash::NodeId host, std::shared_ptr<Nova::TextureHandle>& texture);
 
     // Place a hosted child quad on its parent's quad from surface-local pixels.
     // The parent's quad spans its local [-w/2, w/2] x [-h/2, h/2] and maps onto
     // the parent surface's pixels, y down; this is that one change of basis.
-    void placeChildOnParentQuad(Splash::SpatialSurfaceHost& child,
-                                const Splash::SpatialSurfaceHost& anchor,
+    void placeChildOnParentQuad(Splash::NodeId child,
+                                Splash::NodeId anchor,
                                 const struct wlr_surface& parent_surface,
                                 const struct wlr_box& child_box,
                                 float depth_bias);
@@ -399,8 +401,7 @@ private:
 
     // Input routing for a hosted child surface: popups and subsurfaces route
     // identically, so the wiring is written once.
-    void bindChildSurfaceInput(const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
-                               struct wlr_surface* surface);
+    void bindChildSurfaceInput(Splash::NodeId host, struct wlr_surface* surface);
 
     // Popups and subsurfaces are one hosted-child lifetime with two placement
     // rules, so draining and release are written once over the element type.
@@ -413,7 +414,7 @@ private:
     Nova::Core* core_ = nullptr;
     Nova::TextureBridge* texture_bridge_ = nullptr;
     std::shared_ptr<Splash::SpatialScene> scene_;
-    std::shared_ptr<Splash::SpatialNode> portal_root_;
+    Splash::NodeId portal_root_;
     SpatialCompositorConfig config_;
 
     std::string socket_name_;

@@ -1,9 +1,10 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 //
-// Hosted child surfaces: xdg_popups and wl_subsurfaces. Both are a client's
-// second buffer placed in its parent's own coordinates, both map and unmap with
-// the parent and both are torn down by the same deferred path - so the lifetime
-// is written once and only the rule that decides their rectangle differs.
+// xdg_popups, and the kill-list plumbing they share with wl_subsurfaces. Both
+// are a client's second buffer placed in its parent's own coordinates, both map
+// and unmap with the parent and both are torn down by the same deferred path -
+// so the drain and release halves are written once, over the element type, and
+// live here; the subsurface's own lifetime is in SpatialSubsurfaceHost.cpp.
 //
 // SCOPE, stated plainly. A popup is anchored where its positioner says and
 // nothing more. Constraint solving - the flip/slide/resize policy an xdg
@@ -31,15 +32,6 @@ constexpr float kPopupDepthBias = 0.004f;
 // units. Only used for the single frame between map and the parent's first
 // geometry, and replaced as soon as real pixel dimensions exist.
 constexpr float kPopupFallbackExtent = 0.3f;
-
-// Is `node` the subtree rooted at `root`, or anywhere inside it?
-bool nodeWithin(const std::shared_ptr<Splash::SpatialNode>& node, const std::shared_ptr<Splash::SpatialNode>& root) {
-    if (!node || !root) return false;
-    for (std::shared_ptr<Splash::SpatialNode> walk = node; walk; walk = walk->parent.lock()) {
-        if (walk == root) return true;
-    }
-    return false;
-}
 
 template <typename Child>
 size_t countMappedChildren(const std::vector<std::shared_ptr<Child>>& list) {
@@ -112,26 +104,18 @@ void SpatialXdgPopup::onCommit(void*) {
 void SpatialXdgPopup::onMap(void*) {
     if (mapped) return;
     mapped = true;
-    if (compositor) {
-        compositor->attachPopupToParent(*this);
-    }
+    if (compositor) compositor->attachPopupToParent(*this);
 }
 
 void SpatialXdgPopup::onUnmap(void*) {
     if (!mapped) return;
     mapped = false;
-    if (compositor) {
-        compositor->detachPopupFromParent(*this);
-    }
+    if (compositor) compositor->detachPopupFromParent(*this);
 }
 
-void SpatialXdgPopup::onSurfaceDestroy(void*) {
-    beginDestruction();
-}
+void SpatialXdgPopup::onSurfaceDestroy(void*) { beginDestruction(); }
 
-void SpatialXdgPopup::onDestroy(void*) {
-    beginDestruction();
-}
+void SpatialXdgPopup::onDestroy(void*) { beginDestruction(); }
 
 void SpatialXdgPopup::onReposition(void*) {
     // reposition replaces the positioner and expects the popup to be placed
@@ -141,59 +125,6 @@ void SpatialXdgPopup::onReposition(void*) {
 }
 
 void SpatialXdgPopup::onNewSubsurface(void* data) {
-    if (compositor) compositor->onNewSubsurface(surface, data);
-}
-
-// --- SpatialSubsurface ---
-// Same discipline again, with no configure to answer and no positioner to
-// consult: the position is applied by the parent's commit and the size is
-// whatever the child committed, so onCommit is import-and-place.
-
-void SpatialSubsurface::beginDestruction() {
-    detachListeners();
-    subsurface = nullptr;
-    surface = nullptr;
-    parent_surface = nullptr;
-
-    mapped = false;
-    if (destroy_scheduled) return;
-    destroy_scheduled = true;
-    if (compositor) {
-        compositor->removeSubsurface(handle);
-    }
-}
-
-void SpatialSubsurface::onCommit(void*) {
-    if (!surface || !compositor || !wlr_surface_has_buffer(surface)) return;
-    compositor->importSubsurfaceBuffer(*this);
-    // Re-place every commit: offset is parent state, extent is the child's own,
-    // and either can change without anything remapping.
-    compositor->placeSubsurfaceOnParent(*this);
-}
-
-void SpatialSubsurface::onMap(void*) {
-    if (mapped) return;
-    mapped = true;
-    if (!compositor) return;
-    compositor->attachSubsurfaceToParent(*this);
-    // A subsurface's first commit is applied by its PARENT's commit - the same
-    // one that puts it in the parent's current state - so that signal can fire
-    // before this object exists to hear it. Map is the first moment a buffer is
-    // guaranteed. Measured: without this the node drew the fallback forever.
-    onCommit(nullptr);
-}
-
-void SpatialSubsurface::onUnmap(void*) {
-    if (!mapped) return;
-    mapped = false;
-    if (compositor) compositor->detachSubsurfaceFromParent(*this);
-}
-
-void SpatialSubsurface::onSurfaceDestroy(void*) { beginDestruction(); }
-
-void SpatialSubsurface::onDestroy(void*) { beginDestruction(); }
-
-void SpatialSubsurface::onNewSubsurface(void* data) {
     if (compositor) compositor->onNewSubsurface(surface, data);
 }
 
@@ -221,12 +152,14 @@ void SpatialCompositor::onNewXdgPopup(void* data) {
     }
 
     // A popup is its own pixels: no frame, no title, no chrome. Whatever a menu
-    // wants around its edges, it draws.
-    hosted->surface_host = std::make_shared<Splash::SpatialSurfaceHost>(
+    // wants around its edges, it draws. Detached until it maps onto its anchor.
+    Splash::Registry* reg = registry();
+    if (!reg) return;   // no scene: there is no tree for a popup to be drawn in
+    hosted->surface_host = reg->emplace<Splash::SpatialSurfaceHost>(
+        Splash::INVALID_NODE,
         glm::vec2(kPopupFallbackExtent, kPopupFallbackExtent), fallback_texture);
-    hosted->surface_host->name = "XdgPopup";
-
-    hosted->surface_host->claims_pointer_input = true;
+    (*reg)[hosted->surface_host].name = "XdgPopup";
+    (*reg)[hosted->surface_host].claims_pointer_input = true;
     bindPopupListeners(*hosted, surface);
     bindChildSurfaceInput(hosted->surface_host, surface);
 
@@ -253,8 +186,11 @@ void SpatialCompositor::bindPopupListeners(SpatialXdgPopup& popup, struct wlr_su
                                        &surface->events.new_subsurface);
 }
 
-void SpatialCompositor::bindChildSurfaceInput(const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
+void SpatialCompositor::bindChildSurfaceInput(Splash::NodeId host_node,
                                               struct wlr_surface* surface) {
+    Splash::Registry* reg = registry();
+    Splash::SpatialSurfaceHost* host =
+        reg ? reg->as<Splash::SpatialSurfaceHost>(host_node) : nullptr;
     if (!host || !surface) return;
 
     // The captured raw pointers are cleared the moment either destroy signal
@@ -285,9 +221,8 @@ void SpatialCompositor::bindChildSurfaceInput(const std::shared_ptr<Splash::Spat
     };
 }
 
-std::shared_ptr<Splash::SpatialSurfaceHost> SpatialCompositor::hostNodeForSurface(
-        struct wlr_surface* surface) const {
-    if (!surface) return nullptr;
+Splash::NodeId SpatialCompositor::hostNodeForSurface(struct wlr_surface* surface) const {
+    if (!surface) return Splash::INVALID_NODE;
 
     for (const auto& win : windows_) {
         if (win && win->surface == surface) return win->surface_host;
@@ -300,19 +235,20 @@ std::shared_ptr<Splash::SpatialSurfaceHost> SpatialCompositor::hostNodeForSurfac
     for (const auto& sub : subsurfaces_) {
         if (sub && sub->surface == surface) return sub->surface_host;
     }
-    return nullptr;
+    return Splash::INVALID_NODE;
 }
 
 void SpatialCompositor::attachPopupToParent(SpatialXdgPopup& popup) {
-    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(popup.parent_surface);
-    if (!anchor || !popup.surface_host) {
+    Splash::Registry* reg = registry();
+    const Splash::NodeId anchor = hostNodeForSurface(popup.parent_surface);
+    if (!reg || !reg->alive(anchor) || !reg->alive(popup.surface_host)) {
         report(LOGGER::ERROR, "SpatialCompositor - Popup %u has no hosted parent node; not shown",
                popup.handle);
         return;
     }
 
     placePopupOnParent(popup);
-    anchor->addChild(popup.surface_host);
+    reg->reparent(popup.surface_host, anchor);
     // A grabbing popup is what typing is about while it is up. This names it to
     // the seat and to the scene; wlroots' own xdg keyboard grab may decline to
     // move the seat's focus off the surface the grab started on, which is why
@@ -324,10 +260,10 @@ void SpatialCompositor::attachPopupToParent(SpatialXdgPopup& popup) {
 }
 
 void SpatialCompositor::detachPopupFromParent(SpatialXdgPopup& popup) {
-    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(popup.parent_surface);
-    if (!anchor || !popup.surface_host) return;
+    Splash::Registry* reg = registry();
+    if (!reg || !reg->alive(popup.surface_host)) return;
 
-    anchor->removeChild(popup.surface_host);
+    reg->reparent(popup.surface_host, Splash::INVALID_NODE);
     report(LOGGER::INFO, "SpatialCompositor - Popup %u unmapped from its parent surface node",
            popup.handle);
 
@@ -339,55 +275,40 @@ void SpatialCompositor::detachPopupFromParent(SpatialXdgPopup& popup) {
     }
 }
 
-void SpatialCompositor::attachSubsurfaceToParent(SpatialSubsurface& sub) {
-    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(sub.parent_surface);
-    if (!anchor || !sub.surface_host) {
-        report(LOGGER::ERROR, "SpatialCompositor - Subsurface %u has no hosted parent; not shown", sub.handle);
-        return;
-    }
-
-    placeSubsurfaceOnParent(sub);
-    anchor->addChild(sub.surface_host);
-    report(LOGGER::INFO, "SpatialCompositor - Subsurface %u mapped onto its parent surface node", sub.handle);
-}
-
-void SpatialCompositor::detachSubsurfaceFromParent(SpatialSubsurface& sub) {
-    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(sub.parent_surface);
-    if (!anchor || !sub.surface_host) return;
-
-    anchor->removeChild(sub.surface_host);
-    report(LOGGER::INFO, "SpatialCompositor - Subsurface %u unmapped from its parent node", sub.handle);
-}
-
-void SpatialCompositor::placeChildOnParentQuad(Splash::SpatialSurfaceHost& child,
-                                               const Splash::SpatialSurfaceHost& anchor,
+void SpatialCompositor::placeChildOnParentQuad(Splash::NodeId child,
+                                               Splash::NodeId anchor,
                                                const struct wlr_surface& parent_surface,
                                                const struct wlr_box& child_box,
                                                float depth_bias) {
+    Splash::Registry* reg = registry();
+    if (!reg || !reg->alive(child) || !reg->alive(anchor)) return;
+
     const int parent_w = parent_surface.current.width;
     const int parent_h = parent_surface.current.height;
     if (parent_w <= 0 || parent_h <= 0 || child_box.width <= 0 || child_box.height <= 0) return;
 
     // Surface pixels to the anchor node's local space, on both axes.
-    const float px_to_x = anchor.size.x / static_cast<float>(parent_w);
-    const float px_to_y = anchor.size.y / static_cast<float>(parent_h);
-    child.size = glm::vec2(static_cast<float>(child_box.width) * px_to_x,
-                           static_cast<float>(child_box.height) * px_to_y);
+    const glm::vec2 anchor_size = (*reg)[anchor].size;
+    const float px_to_x = anchor_size.x / static_cast<float>(parent_w);
+    const float px_to_y = anchor_size.y / static_cast<float>(parent_h);
+    (*reg)[child].size = glm::vec2(static_cast<float>(child_box.width) * px_to_x,
+                                   static_cast<float>(child_box.height) * px_to_y);
 
     // The box is top-left anchored in parent surface pixels; the node is
     // positioned by its centre, hence the half-extent shift.
     const float centre_px = static_cast<float>(child_box.x) + static_cast<float>(child_box.width) * 0.5f;
     const float centre_py = static_cast<float>(child_box.y) + static_cast<float>(child_box.height) * 0.5f;
-    child.transform.position = glm::vec3(
-        (centre_px / static_cast<float>(parent_w) - 0.5f) * anchor.size.x,
-        (0.5f - centre_py / static_cast<float>(parent_h)) * anchor.size.y,
+    reg->transform(child).position = glm::vec3(
+        (centre_px / static_cast<float>(parent_w) - 0.5f) * anchor_size.x,
+        (0.5f - centre_py / static_cast<float>(parent_h)) * anchor_size.y,
         depth_bias);
 }
 
 void SpatialCompositor::placePopupOnParent(SpatialXdgPopup& popup) {
-    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(popup.parent_surface);
-    if (!anchor || !popup.surface_host || !popup.popup || !popup.surface) return;
-    if (!popup.parent_surface) return;
+    Splash::Registry* reg = registry();
+    const Splash::NodeId anchor = hostNodeForSurface(popup.parent_surface);
+    if (!reg || !reg->alive(anchor) || !reg->alive(popup.surface_host)) return;
+    if (!popup.popup || !popup.surface || !popup.parent_surface) return;
 
     // Where the positioner put it, in the parent surface's own pixels. The
     // scheduled geometry is the size the client was configured with; the
@@ -402,7 +323,7 @@ void SpatialCompositor::placePopupOnParent(SpatialXdgPopup& popup) {
         geometry.width > 0 ? geometry.width : popup.surface->current.width,
         geometry.height > 0 ? geometry.height : popup.surface->current.height
     };
-    placeChildOnParentQuad(*popup.surface_host, *anchor, *popup.parent_surface, box, kPopupDepthBias);
+    placeChildOnParentQuad(popup.surface_host, anchor, *popup.parent_surface, box, kPopupDepthBias);
 }
 
 void SpatialCompositor::importPopupBuffer(SpatialXdgPopup& popup) {
@@ -420,21 +341,26 @@ void SpatialCompositor::drainDestroyedSubsurfaces() { drainHostedChildren(pendin
 
 void SpatialCompositor::releaseSubsurfaces() { releaseHostedChildren(subsurfaces_, pending_destroy_subsurfaces_); }
 
-void SpatialCompositor::releaseChildHost(const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
+void SpatialCompositor::releaseChildHost(Splash::NodeId host_node,
                                         std::shared_ptr<Nova::TextureHandle>& texture) {
-    if (host) {
-        // The parent node may already be gone - a client that destroys its
-        // toplevel takes its children with it - so detach from whatever parent
-        // the node still records rather than looking it up. Removal from the
-        // tree is not enough either: focus and the grab are references too.
-        if (auto parent = host->parent.lock()) parent->removeChild(host);
-        if (scene_) scene_->releaseNode(host);
-        host->on_surface_pointer_enter = nullptr;
-        host->on_surface_pointer_motion = nullptr;
-        host->on_surface_pointer_leave = nullptr;
-        host->on_surface_button = nullptr;
-        host->on_surface_key = nullptr;
-        host->setTexture(nullptr);
+    Splash::Registry* reg = registry();
+    if (reg) {
+        // Being out of the tree is not enough: focus and the grab are references
+        // held outside it, and the raw seat/surface pointers the routing lambdas
+        // captured must be dropped before either can go away.
+        if (scene_) scene_->releaseNode(host_node);
+        if (Splash::SpatialSurfaceHost* host = reg->as<Splash::SpatialSurfaceHost>(host_node)) {
+            host->on_surface_pointer_enter = nullptr;
+            host->on_surface_pointer_motion = nullptr;
+            host->on_surface_pointer_leave = nullptr;
+            host->on_surface_button = nullptr;
+            host->on_surface_key = nullptr;
+            host->setTexture(nullptr);
+        }
+        // Unlinks now from whatever parent the node still has - a client that
+        // destroys its toplevel takes its children with it - and frees at the
+        // registry's own drain, outside every listener dispatch.
+        reg->destroy(host_node);
     }
     if (texture_bridge_ && texture) texture_bridge_->releaseTexture(texture);
 }
@@ -467,8 +393,9 @@ void SpatialCompositor::releaseHostedChildren(std::vector<std::shared_ptr<Child>
 }
 
 void SpatialCompositor::dismissPopupsOutsidePointer() {
-    if (popups_.empty() || !scene_) return;
-    const std::shared_ptr<Splash::SpatialNode> focus = scene_->getPointerFocus();
+    Splash::Registry* reg = registry();
+    if (popups_.empty() || !scene_ || !reg) return;
+    const Splash::NodeId focus = scene_->getPointerFocus();
 
     // Copied first: wlr_xdg_popup_destroy runs the popup's own destroy path,
     // which mutates popups_ underneath the iteration. Nested menus fall out of
@@ -477,7 +404,7 @@ void SpatialCompositor::dismissPopupsOutsidePointer() {
     std::vector<std::shared_ptr<SpatialXdgPopup>> candidates = popups_;
     for (const auto& popup : candidates) {
         if (!popup || !popup->mapped || !popup->popup || !popup->grabbed()) continue;
-        if (nodeWithin(focus, popup->surface_host)) continue;
+        if (reg->isDescendant(focus, popup->surface_host)) continue;
         report(LOGGER::INFO, "SpatialCompositor - Popup %u dismissed: input landed outside its grab",
                popup->handle);
         wlr_xdg_popup_destroy(popup->popup);   // sends xdg_popup.popup_done

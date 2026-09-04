@@ -42,8 +42,20 @@ std::string resolveWindowTitle(const struct wlr_xdg_toplevel* toplevel) {
 // --- SpatialXdgWindow ---
 // INVARIANT: no wl_listener callback may destroy the object that owns the
 // listener being dispatched. The destroy paths below only detach and schedule;
-// the shared_ptr is released by SpatialCompositor::drainDestroyedWindows(),
-// which runs once per frame strictly outside signal dispatch.
+// the window is released by drainDestroyedWindows() and its nodes by the
+// registry's own drain, both strictly outside signal dispatch.
+
+void SpatialXdgWindow::clearInputRouting() {
+    Splash::Registry* reg = compositor ? compositor->registry() : nullptr;
+    Splash::SpatialSurfaceHost* host = reg ? reg->as<Splash::SpatialSurfaceHost>(surface_host) : nullptr;
+    if (!host) return;
+
+    host->on_surface_pointer_enter = nullptr;
+    host->on_surface_pointer_motion = nullptr;
+    host->on_surface_pointer_leave = nullptr;
+    host->on_surface_button = nullptr;
+    host->on_surface_key = nullptr;
+}
 
 void SpatialXdgWindow::beginDestruction() {
     // Both signal owners (wlr_surface, wlr_xdg_surface) are still alive on the
@@ -83,31 +95,29 @@ void SpatialXdgWindow::onCommit(void*) {
     struct wlr_surface* commit_surface = base->surface;
     if (!wlr_surface_has_buffer(commit_surface)) return;
 
-    if (compositor) {
-        compositor->importSurfaceBuffer(*this);
-    }
+    if (compositor) compositor->importSurfaceBuffer(*this);
     applySurfaceGeometry(commit_surface->current.width, commit_surface->current.height);
 }
 
 void SpatialXdgWindow::applySurfaceGeometry(int width, int height) {
-    if (width <= 0 || height <= 0 || !surface_host) return;
+    Splash::Registry* reg = compositor ? compositor->registry() : nullptr;
+    if (width <= 0 || height <= 0 || !reg || !reg->alive(surface_host)) return;
 
-    float aspect = static_cast<float>(width) / static_cast<float>(height);
-    surface_host->size = glm::vec2(1.2f, 1.2f / aspect);
-    if (!frame_panel) return;
+    const float aspect = static_cast<float>(width) / static_cast<float>(height);
+    const glm::vec2 host_size(1.2f, 1.2f / aspect);
+    (*reg)[surface_host].size = host_size;
+    if (!reg->alive(frame_panel)) return;
 
-    frame_panel->size = glm::vec2(surface_host->size.x + 0.06f, surface_host->size.y + 0.12f);
-    if (title_label) {
-        title_label->transform.position = glm::vec3(0.0f, frame_panel->size.y * 0.5f - 0.04f, 0.003f);
-    }
+    const glm::vec2 frame_size(host_size.x + 0.06f, host_size.y + 0.12f);
+    (*reg)[frame_panel].size = frame_size;
+    if (!reg->alive(title_label)) return;
+    reg->transform(title_label).position = glm::vec3(0.0f, frame_size.y * 0.5f - 0.04f, 0.003f);
 }
 
 void SpatialXdgWindow::onMap(void*) {
     if (mapped) return;
     mapped = true;
-    if (compositor && !minimized) {
-        compositor->attachWindowToPortal(*this);
-    }
+    if (compositor && !minimized) compositor->attachWindowToPortal(*this);
 }
 
 void SpatialXdgWindow::onUnmap(void*) {
@@ -115,9 +125,7 @@ void SpatialXdgWindow::onUnmap(void*) {
     mapped = false;
     // Unmapping is not destruction: the client may commit a buffer again and be
     // remapped with the same nodes, listeners and texture.
-    if (compositor) {
-        compositor->detachWindowFromPortal(*this);
-    }
+    if (compositor) compositor->detachWindowFromPortal(*this);
 }
 
 uint32_t SpatialXdgWindow::answerStateRequest() {
@@ -152,11 +160,8 @@ void SpatialXdgWindow::onRequestMinimize(void*) {
     // scene and off the frame-callback list, which is as close to unmapped as a
     // still-mapped surface gets. Buffer, texture and listeners stay.
     if (!mapped || !compositor) return;
-    if (minimized) {
-        compositor->detachWindowFromPortal(*this);
-    } else {
-        compositor->attachWindowToPortal(*this);
-    }
+    if (minimized) compositor->detachWindowFromPortal(*this);
+    else compositor->attachWindowToPortal(*this);
 }
 
 void SpatialXdgWindow::adoptDecoration(struct wlr_xdg_toplevel_decoration_v1* dec) {
@@ -187,8 +192,9 @@ void SpatialXdgWindow::answerDecorationMode() {
 }
 
 void SpatialXdgWindow::applyTitle() {
-    if (!title_label) return;
-    title_label->setText(resolveWindowTitle(toplevel));
+    Splash::Registry* reg = compositor ? compositor->registry() : nullptr;
+    Splash::SpatialLabel* label = reg ? reg->as<Splash::SpatialLabel>(title_label) : nullptr;
+    if (label) label->setText(resolveWindowTitle(toplevel));
 }
 
 void SpatialXdgWindow::onNewSubsurface(void* data) {
@@ -270,27 +276,32 @@ void SpatialCompositor::bindWindowListeners(SpatialXdgWindow& window,
 }
 
 void SpatialCompositor::attachWindowToPortal(SpatialXdgWindow& win) {
-    const std::shared_ptr<Splash::SpatialNode>& root = portalRoot();
-    if (!root || !win.frame_panel) return;
+    Splash::Registry* reg = registry();
+    const Splash::NodeId root = portalRoot();
+    if (!reg || !reg->alive(root) || !reg->alive(win.frame_panel)) return;
 
-    root->addChild(win.frame_panel);
+    reg->reparent(win.frame_panel, root);
     report(LOGGER::INFO, "SpatialCompositor - Window %u mapped into the portal root", win.handle);
     focusSurface(win.surface);
 }
 
 void SpatialCompositor::detachWindowFromPortal(SpatialXdgWindow& win) {
-    const std::shared_ptr<Splash::SpatialNode>& root = portalRoot();
-    if (!root || !win.frame_panel) return;
+    Splash::Registry* reg = registry();
+    if (!reg || !reg->alive(win.frame_panel)) return;
 
-    root->removeChild(win.frame_panel);
+    // Out of the tree, not destroyed: an unmapped window is remapped into the
+    // same nodes.
+    reg->reparent(win.frame_panel, Splash::INVALID_NODE);
     report(LOGGER::INFO, "SpatialCompositor - Window %u unmapped from the portal root", win.handle);
 }
 
 void SpatialCompositor::buildWindowNodes(SpatialXdgWindow& win, struct wlr_xdg_toplevel* toplevel) {
-    win.frame_panel = std::make_shared<Splash::SpatialPanel>(
-        glm::vec2(1.26f, 0.92f),
-        glm::vec4(0.08f, 0.10f, 0.16f, 0.92f)
-    );
+    Splash::Registry* reg = registry();
+    if (!reg) return;   // no scene: onNewXdgToplevel's portal-root check already refused
+
+    // Detached: scene insertion is the map path's decision, not construction's.
+    win.frame_panel = reg->emplace<Splash::SpatialPanel>(
+        Splash::INVALID_NODE, glm::vec2(1.26f, 0.92f), glm::vec4(0.08f, 0.10f, 0.16f, 0.92f));
 
     // Compositor-side chrome follows the same rule the UI toolkit's windows do:
     // the frame is the input target for the decoration it draws, so a click on
@@ -298,38 +309,36 @@ void SpatialCompositor::buildWindowNodes(SpatialXdgWindow& win, struct wlr_xdg_t
     // callbacks. The client's own surface claims below and stays its own
     // target, which is the whole point - a capture that swallowed the client's
     // input would make the window undrivable.
-    win.frame_panel->captures_subtree_input = true;
+    (*reg)[win.frame_panel].captures_subtree_input = true;
 
     // Position the window in 3D Quaternionic space with a staggered layout
     float offset_x = (static_cast<float>(windows_.size() % 3) - 1.0f) * 0.4f;
     float offset_y = (static_cast<float>(windows_.size() % 2) - 0.5f) * 0.3f;
     float offset_z = -0.08f * static_cast<float>(windows_.size());
-    win.frame_panel->transform.position = glm::vec3(offset_x, offset_y, offset_z);
+    reg->transform(win.frame_panel).position = glm::vec3(offset_x, offset_y, offset_z);
 
     std::shared_ptr<Nova::TextureHandle> fallback_texture;
-    if (texture_bridge_) {
-        fallback_texture = texture_bridge_->getFallbackTexture();
-    } else {
-        report(LOGGER::ERROR, "SpatialCompositor - Texture bridge unavailable; surface hosted without fallback texture");
-    }
+    if (texture_bridge_) fallback_texture = texture_bridge_->getFallbackTexture();
+    else report(LOGGER::ERROR,
+                "SpatialCompositor - Texture bridge unavailable; surface hosted without fallback texture");
 
-    win.surface_host = std::make_shared<Splash::SpatialSurfaceHost>(glm::vec2(1.20f, 0.80f), fallback_texture);
-    win.surface_host->transform.position = glm::vec3(0.0f, -0.04f, 0.002f);
+    win.surface_host = reg->emplace<Splash::SpatialSurfaceHost>(
+        win.frame_panel, glm::vec2(1.20f, 0.80f), fallback_texture);
+    reg->transform(win.surface_host).position = glm::vec3(0.0f, -0.04f, 0.002f);
     // Stated rather than inherited: this is the node the frame's capture must
     // not take, and the default that makes it so is one edit away from anyone.
-    win.surface_host->claims_pointer_input = true;
-    win.frame_panel->addChild(win.surface_host);
+    (*reg)[win.surface_host].claims_pointer_input = true;
 
     if (!scene_ || !scene_->font) {
         report(LOGGER::ERROR, "SpatialCompositor - Spatial font unavailable; XDG toplevel hosted without a title label");
         return;
     }
 
-    win.title_label = std::make_shared<Splash::SpatialLabel>(resolveWindowTitle(toplevel), scene_->font,
-                                                     0.0011f, glm::vec4(0.85f, 0.92f, 1.0f, 1.0f));
-    win.title_label->transform.position = glm::vec3(0.0f, 0.42f, 0.003f);
-    win.title_label->claims_pointer_input = false;   // text is not a grab handle
-    win.frame_panel->addChild(win.title_label);
+    win.title_label = reg->emplace<Splash::SpatialLabel>(
+        win.frame_panel, resolveWindowTitle(toplevel), scene_->font,
+        0.0011f, glm::vec4(0.85f, 0.92f, 1.0f, 1.0f));
+    reg->transform(win.title_label).position = glm::vec3(0.0f, 0.42f, 0.003f);
+    (*reg)[win.title_label].claims_pointer_input = false;   // text is not a grab handle
 }
 
 // --- SpatialCompositor - client buffer import (SHM only this phase) ---
@@ -340,10 +349,13 @@ void SpatialCompositor::importSurfaceBuffer(SpatialXdgWindow& win) {
 }
 
 void SpatialCompositor::importSurfaceContent(struct wlr_surface* surface,
-                                             const std::shared_ptr<Splash::SpatialSurfaceHost>& host,
+                                             Splash::NodeId host_node,
                                              std::shared_ptr<Nova::TextureHandle>& texture,
                                              uint32_t& unsupported_format,
                                              WindowHandle handle) {
+    Splash::Registry* reg = registry();
+    Splash::SpatialSurfaceHost* host =
+        reg ? reg->as<Splash::SpatialSurfaceHost>(host_node) : nullptr;
     if (!texture_bridge_ || !surface || !host) return;
 
     struct wlr_client_buffer* client_buffer = surface->buffer;
@@ -456,18 +468,17 @@ void SpatialCompositor::drainDestroyedWindows() {
     std::vector<std::shared_ptr<SpatialXdgWindow>> doomed;
     doomed.swap(pending_destroy_);
 
+    Splash::Registry* reg = registry();
     for (auto& win : doomed) {
         if (!win) continue;
         win->detachListeners();
-        if (portalRoot() && win->frame_panel) {
-            portalRoot()->removeChild(win->frame_panel);
-        }
-        // Out of the scene first, texture second: releaseTexture waits for the
-        // device to idle, so nothing can still be sampling it by then. Removal
-        // from the tree is not enough - focus and the implicit grab are strong
-        // references held outside it, and the frame panel can hold both.
+        // Focus and the grab first - they are references the tree does not hold
+        // and the frame panel can carry both - texture second, because
+        // releaseTexture waits for the device to idle. The frame is destroyed
+        // last and takes the title label and the rest of its subtree.
         if (scene_) scene_->releaseNode(win->frame_panel);
         releaseChildHost(win->surface_host, win->client_texture);
+        if (reg) reg->destroy(win->frame_panel);
     }
 }
 
@@ -479,6 +490,10 @@ void SpatialCompositor::releaseWindows() {
     }
     windows_.clear();
     drainDestroyedWindows();
+
+    // Last of the three hosted-surface release paths, so this frees what all
+    // three scheduled - while the bridge and font they hold handles into live.
+    if (scene_) scene_->registry().drain();
 }
 
 } // namespace Vazio

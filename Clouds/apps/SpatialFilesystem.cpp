@@ -12,12 +12,14 @@ namespace Clouds {
 // ---------------------------------------------------------------------------
 // SpatialPillNode Implementation
 // ---------------------------------------------------------------------------
-SpatialPillNode::SpatialPillNode(const std::string& name,
+SpatialPillNode::SpatialPillNode(Splash::Registry& reg, Splash::NodeId self,
+                                 const std::string& name,
                                  const std::string& path,
                                  bool is_dir,
                                  uintmax_t size_bytes,
                                  std::shared_ptr<Splash::SpatialFont> font_ptr)
-    : item_name(name), full_path(path), is_directory(is_dir), file_size(size_bytes), font_(font_ptr) {
+    : SpatialNode(reg, self), item_name(name), full_path(path), is_directory(is_dir),
+      file_size(size_bytes), font_(font_ptr) {
     this->name = "3D Pill: " + item_name;
 
     if (is_directory) {
@@ -27,7 +29,7 @@ SpatialPillNode::SpatialPillNode(const std::string& name,
     } else {
         pill_radius = 0.06f;
         pill_height = 0.18f;
-        
+
         // Color by extension
         std::string ext = std::filesystem::path(path).extension().string();
         file_extension = ext;
@@ -42,14 +44,10 @@ SpatialPillNode::SpatialPillNode(const std::string& name,
     size = glm::vec2(pill_radius * 2.0f, pill_height + pill_radius * 2.0f);
 
     if (font_) {
-        auto label_node = std::make_shared<Splash::SpatialLabel>(
-            item_name,
-            font_,
-            0.00045f,
-            glm::vec4(0.95f, 0.98f, 1.0f, 1.0f)
-        );
-        label_node->transform.position = glm::vec3(0.0f, -pill_height * 0.5f - pill_radius - 0.035f, 0.002f);
-        addChild(label_node);
+        const Splash::NodeId label = reg.emplace<Splash::SpatialLabel>(
+            self, item_name, font_, 0.00045f, glm::vec4(0.95f, 0.98f, 1.0f, 1.0f));
+        reg.transform(label).position =
+            glm::vec3(0.0f, -pill_height * 0.5f - pill_radius - 0.035f, 0.002f);
     }
 }
 
@@ -61,15 +59,16 @@ void SpatialPillNode::setHovered(bool hov) {
     is_hovered = hov;
 }
 
-void SpatialPillNode::onRayEnter(const Nova::Math::RayHit&) {
+void SpatialPillNode::onRayEnter(Splash::Registry&, Splash::NodeId, const Nova::Math::RayHit&) {
     setHovered(true);
 }
 
-void SpatialPillNode::onRayLeave() {
+void SpatialPillNode::onRayLeave(Splash::Registry&, Splash::NodeId) {
     setHovered(false);
 }
 
-void SpatialPillNode::onRayButton(const Nova::Math::RayHit&, uint32_t button, bool pressed) {
+void SpatialPillNode::onRayButton(Splash::Registry&, Splash::NodeId, const Nova::Math::RayHit&,
+                                  uint32_t button, bool pressed) {
     if (button == 1 && pressed) {
         setSelected(true);
         if (on_select) {
@@ -78,19 +77,18 @@ void SpatialPillNode::onRayButton(const Nova::Math::RayHit&, uint32_t button, bo
     }
 }
 
-void SpatialPillNode::update(float dt) {
+void SpatialPillNode::update(Splash::Registry& reg, Splash::NodeId self, float dt) {
     phase_angle_ += dt * 1.5f;
     pulse_anim_ = 0.5f + 0.5f * std::sin(phase_angle_);
 
     // Subtle idle orientation oscillation
     glm::quat idle_rot = glm::angleAxis(std::sin(phase_angle_ * 0.5f) * 0.15f, glm::vec3(0.0f, 1.0f, 0.0f));
-    transform.orientation = idle_rot;
+    reg.transform(self).orientation = idle_rot;
 }
 
-void SpatialPillNode::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
-                                   std::vector<Splash::SpatialRenderCommand>& out_commands) {
-    if (!visible) return;
-
+void SpatialPillNode::collectRender(Splash::Registry& reg, Splash::NodeId self,
+                                    Nova::SpatialMeshBuffer* mesh_buf,
+                                    std::vector<Splash::SpatialRenderCommand>& out_commands) {
     glm::vec4 active_color = base_color;
     if (is_selected) {
         active_color = glm::vec4(1.0f, 0.85f, 0.20f, 1.0f); // Glowing Gold
@@ -98,8 +96,7 @@ void SpatialPillNode::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
         active_color = base_color + glm::vec4(0.2f, 0.2f, 0.2f, 0.0f);
     }
 
-    Nova::Math::QuatTransform world_xf = getWorldTransform();
-    glm::mat4 model = world_xf.toMatrix();
+    glm::mat4 model = reg.worldOf(self).toMatrix();
 
     const float render_mode = is_selected ? 2.0f : (is_hovered ? 1.0f : 0.0f);
 
@@ -113,8 +110,6 @@ void SpatialPillNode::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
         .first_index = first_idx,
         .index_count = idx_count
     });
-
-    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
 }
 
 const Nova::MeshData& SpatialPillNode::resolveMesh(const glm::vec4& color, float render_mode) {
@@ -139,12 +134,12 @@ const Nova::MeshData& SpatialPillNode::resolveMesh(const glm::vec4& color, float
 // ---------------------------------------------------------------------------
 // SpatialFilesystem Implementation
 // ---------------------------------------------------------------------------
-SpatialFilesystem::SpatialFilesystem(std::shared_ptr<Splash::SpatialNode> root_scene_node,
+SpatialFilesystem::SpatialFilesystem(Splash::Registry& registry,
+                                     Splash::NodeId root_scene_node,
                                      std::shared_ptr<Splash::SpatialFont> font_ptr)
-    : scene_root_(root_scene_node), font_(font_ptr) {
-    filesystem_3d_root_ = std::make_shared<Splash::SpatialNode>();
-    filesystem_3d_root_->name = "SpatialFilesystem_Root";
-    scene_root_->addChild(filesystem_3d_root_);
+    : registry_(registry), scene_root_(root_scene_node), font_(font_ptr) {
+    filesystem_3d_root_ = registry_.createContainer(scene_root_);
+    registry_[filesystem_3d_root_].name = "SpatialFilesystem_Root";
 }
 
 void SpatialFilesystem::rescan() {
@@ -157,7 +152,15 @@ void SpatialFilesystem::rescan() {
 
 void SpatialFilesystem::scanAndBuild3DTree(const std::string& root_path, int max_depth) {
     all_nodes_.clear();
-    filesystem_3d_root_->children.clear();
+
+    // The selection names a pill that is about to be destroyed. Clearing it here
+    // is not tidiness: getSelectedNode() is read by the inspector every frame,
+    // and a rescan that left it pointing into a freed pill would be handing that
+    // reader a dangling pointer.
+    selected_node_ = nullptr;
+    for (const Splash::NodeId child : registry_.children(filesystem_3d_root_)) {
+        registry_.destroy(child);
+    }
 
     std::filesystem::path rpath(root_path);
     if (!std::filesystem::exists(rpath)) {
@@ -170,30 +173,28 @@ void SpatialFilesystem::scanAndBuild3DTree(const std::string& root_path, int max
 
     report(LOGGER::INFO, "SpatialFilesystem - Building 3D Pill Hierarchy for: %s", root_path.c_str());
 
-    root_pill_ = std::make_shared<SpatialPillNode>(
+    const Splash::NodeId root_pill = registry_.emplace<SpatialPillNode>(
+        filesystem_3d_root_,
         rpath.filename().string().empty() ? rpath.string() : rpath.filename().string(),
-        root_path,
-        true,
-        0,
-        font_
-    );
-    root_pill_->transform.position = glm::vec3(0.0f, 0.0f, -0.3f);
-    root_pill_->on_select = [this](SpatialPillNode* n) { selectNode(n); };
+        root_path, true, uintmax_t{0}, font_);
 
-    filesystem_3d_root_->addChild(root_pill_);
-    all_nodes_.push_back(root_pill_);
+    const glm::vec3 root_position(0.0f, 0.0f, -0.3f);
+    registry_.transform(root_pill).position = root_position;
+    registry_.as<SpatialPillNode>(root_pill)->on_select =
+        [this](SpatialPillNode* n) { selectNode(n); };
 
-    buildSubTree(rpath, root_pill_, 1, max_depth, root_pill_->transform.position, 1.15f);
+    all_nodes_.push_back(root_pill);
+
+    buildSubTree(rpath, 1, max_depth, root_position, 1.15f);
 
     report(LOGGER::INFO, "SpatialFilesystem - Created %zu interactive 3D pills in Quaternionic space.", all_nodes_.size());
 }
 
 void SpatialFilesystem::buildSubTree(const std::filesystem::path& dir_path,
-                                    std::shared_ptr<SpatialPillNode> parent_node,
-                                    int current_depth,
-                                    int max_depth,
-                                    glm::vec3 center_pos,
-                                    float orbit_radius) {
+                                     int current_depth,
+                                     int max_depth,
+                                     glm::vec3 center_pos,
+                                     float orbit_radius) {
     if (current_depth > max_depth) return;
 
     std::vector<std::filesystem::directory_entry> entries;
@@ -228,24 +229,22 @@ void SpatialFilesystem::buildSubTree(const std::filesystem::path& dir_path,
             -0.15f + float(current_depth) * 0.10f
         );
 
-        auto pill = std::make_shared<SpatialPillNode>(
-            entry.path().filename().string(),
-            entry.path().string(),
-            is_dir,
-            sz,
-            font_
-        );
-        pill->transform.position = pill_pos;
-        pill->parent_pill = parent_node;
-        pill->on_select = [this](SpatialPillNode* n) { selectNode(n); };
+        // Every pill hangs off the one filesystem root, flat: the directory
+        // structure is expressed by where a pill sits in space, not by the
+        // scene graph, and the pill-to-pill links that used to be kept as well
+        // were never read by anything.
+        const Splash::NodeId pill = registry_.emplace<SpatialPillNode>(
+            filesystem_3d_root_,
+            entry.path().filename().string(), entry.path().string(), is_dir, sz, font_);
+        registry_.transform(pill).position = pill_pos;
+        registry_.as<SpatialPillNode>(pill)->on_select =
+            [this](SpatialPillNode* n) { selectNode(n); };
 
-        filesystem_3d_root_->addChild(pill);
         all_nodes_.push_back(pill);
-        parent_node->children_pills.push_back(pill);
 
         // Recurse into top directories
         if (is_dir && current_depth < max_depth) {
-            buildSubTree(entry.path(), pill, current_depth + 1, max_depth, pill_pos, orbit_radius * 0.45f);
+            buildSubTree(entry.path(), current_depth + 1, max_depth, pill_pos, orbit_radius * 0.45f);
         }
     }
 }
@@ -266,8 +265,10 @@ void SpatialFilesystem::selectNode(SpatialPillNode* node) {
 }
 
 void SpatialFilesystem::update(float dt) {
-    for (auto& node : all_nodes_) {
-        node->update(dt);
+    for (const Splash::NodeId id : all_nodes_) {
+        if (SpatialPillNode* pill = registry_.as<SpatialPillNode>(id)) {
+            pill->update(registry_, id, dt);
+        }
     }
 }
 

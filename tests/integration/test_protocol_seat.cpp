@@ -42,6 +42,8 @@ constexpr uint32_t kBtnLeft = 0x110;
 constexpr int kScanStep = 8;
 
 struct Server {
+    // Declared first, destroyed last: every scene node lives in it.
+    Splash::Registry registry;
     std::shared_ptr<Splash::SpatialScene> scene;
     std::unique_ptr<Vazio::SpatialCompositor> compositor;
     std::string socket_name;
@@ -56,14 +58,18 @@ struct Server {
     }
 };
 
-std::shared_ptr<Splash::SpatialSurfaceHost> findSurfaceHost(
-    const std::shared_ptr<Splash::SpatialNode>& node) {
-    if (!node) return nullptr;
-    if (auto host = std::dynamic_pointer_cast<Splash::SpatialSurfaceHost>(node)) return host;
-    for (const auto& child : node->children) {
-        if (auto found = findSurfaceHost(child)) return found;
+// Kind scan over the registry subtree: the first node in the portal that is a
+// hosted client surface. The compositor names the same node internally, but
+// asking the SCENE for it is the point - it is what proves the node reached the
+// tree rather than only the compositor's own bookkeeping.
+Splash::NodeId findSurfaceHost(Splash::Registry& reg, Splash::NodeId node) {
+    if (!reg.alive(node)) return Splash::INVALID_NODE;
+    if (reg.as<Splash::SpatialSurfaceHost>(node)) return node;
+    for (Splash::NodeId child = reg.firstChild(node); child.valid(); child = reg.nextSibling(child)) {
+        const Splash::NodeId found = findSurfaceHost(reg, child);
+        if (found.valid()) return found;
     }
-    return nullptr;
+    return Splash::INVALID_NODE;
 }
 
 /**
@@ -74,7 +80,7 @@ std::shared_ptr<Splash::SpatialSurfaceHost> findSurfaceHost(
  * which this test is about. Hard-coding a pixel would make an unrelated layout
  * change look like a seat regression.
  */
-bool findPixelHitting(Server& server, const std::shared_ptr<Splash::SpatialNode>& target,
+bool findPixelHitting(Server& server, Splash::NodeId target,
                       double& out_x, double& out_y) {
     const struct wlr_box& box = server.compositor->outputBox();
     for (int y = kScanStep; y < box.height; y += kScanStep) {
@@ -159,7 +165,7 @@ struct Script {
     Server& server;
     PhaseChannel& channel;
     CheckLog& log;
-    std::shared_ptr<Splash::SpatialSurfaceHost> host;
+    Splash::NodeId host;
 };
 
 bool serverToplevelPhase(Script& s, size_t portal_children_before) {
@@ -169,26 +175,28 @@ bool serverToplevelPhase(Script& s, size_t portal_children_before) {
     }
 
     auto& compositor = *s.server.compositor;
+    Splash::Registry& reg = s.server.registry;
     s.log.check(compositor.windowCount() == 1, "server: one xdg_toplevel hosted (%zu)",
                 compositor.windowCount());
     s.log.check(compositor.mappedWindowCount() == 1, "server: the toplevel is mapped (%zu)",
                 compositor.mappedWindowCount());
-    s.log.check(compositor.portalRoot()->children.size() == portal_children_before + 1,
+    s.log.check(reg.children(compositor.portalRoot()).size() == portal_children_before + 1,
                 "server: exactly one node was inserted under the portal root");
 
-    s.host = findSurfaceHost(compositor.portalRoot());
-    s.log.check(s.host != nullptr, "server: a SpatialSurfaceHost exists in the scene for the client");
-    if (!s.host) return true;
+    s.host = findSurfaceHost(reg, compositor.portalRoot());
+    s.log.check(s.host.valid(), "server: a SpatialSurfaceHost exists in the scene for the client");
+    if (!s.host.valid()) return true;
 
     // applySurfaceGeometry: 1.2 world units wide, height driven by the committed
     // buffer's aspect. This is the committed geometry reaching the scene, which
     // is the observable half of the import.
     const float expected_h = 1.2f / (static_cast<float>(VazioTest::kToplevelWidth) /
                                      static_cast<float>(VazioTest::kToplevelHeight));
-    s.log.check(std::abs(s.host->size.x - 1.2f) < 1e-4f &&
-                    std::abs(s.host->size.y - expected_h) < 1e-4f,
+    const glm::vec2 host_size = reg[s.host].size;
+    s.log.check(std::abs(host_size.x - 1.2f) < 1e-4f &&
+                    std::abs(host_size.y - expected_h) < 1e-4f,
                 "server: surface host sized from the committed buffer (%.4f x %.4f, expected %.4f x %.4f)",
-                s.host->size.x, s.host->size.y, 1.2f, expected_h);
+                host_size.x, host_size.y, 1.2f, expected_h);
     return true;
 }
 
@@ -231,7 +239,7 @@ bool serverKeyboardPhase(Script& s) {
     // Focus the surface explicitly: the press above moved scene focus onto the
     // host, and this states the precondition the phase depends on instead of
     // inheriting it.
-    if (s.host) s.server.scene->setKeyboardFocus(s.host);
+    if (s.host.valid()) s.server.scene->setKeyboardFocus(s.host);
     driveKeySequence(s.server);
     s.channel.send(VazioTest::Phase::kGoKeyboard);
     return expectToken(s.server, s.channel, VazioTest::Phase::kKeyboardDone, s.log, "keyboard");
@@ -306,8 +314,9 @@ int runServer(Server& server, PhaseChannel& channel, CheckLog& log) {
 
     if (!expectToken(server, channel, VazioTest::Phase::kClientBound, log, "bind")) return 1;
 
-    Script script = { server, channel, log, nullptr };
-    const size_t portal_children_before = server.compositor->portalRoot()->children.size();
+    Script script = { server, channel, log, Splash::INVALID_NODE };
+    const size_t portal_children_before =
+        server.registry.children(server.compositor->portalRoot()).size();
 
     if (!serverToplevelPhase(script, portal_children_before)) return 1;
     if (!serverPointerPhase(script)) return 1;
@@ -327,7 +336,7 @@ namespace {
 // compositor with no GPU, on the headless backend, opened on its own socket.
 bool buildServer(Server& server, CheckLog& log) {
     server.socket_name = "wayland-vzt-" + std::to_string(getpid());
-    server.scene = std::make_shared<Splash::SpatialScene>(nullptr, nullptr);
+    server.scene = std::make_shared<Splash::SpatialScene>(server.registry, nullptr, nullptr);
 
     const Vazio::SpatialCompositorConfig config = {
         .headless = true, .virtual_width = kOutputWidth, .virtual_height = kOutputHeight

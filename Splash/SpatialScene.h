@@ -1,21 +1,23 @@
+// Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
+#include "./Registry.h"
 #include "./SpatialNode.h"
 #include "Nova/pipeline/spatial_pipeline.h"
 #include "Nova/pipeline/mesh_buffer.h"
 #include "Splash/content/spatial_font.h"
 #include "Nova/pipeline/texture_bridge.h"
 #include "Nova/math/engine_physics.h"
-#include "Nova/math/spatial_cluster.h"
 #include "Nova/math/input_filter.h"
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace Splash {
 
 class SpatialScene {
 public:
-    std::shared_ptr<SpatialNode> root;
+    NodeId root;
     std::shared_ptr<Splash::SpatialFont> font;
 
     glm::vec3 camera_pos{0.0f, 0.0f, 2.5f};
@@ -27,10 +29,19 @@ public:
 
     Nova::Math::EnginePhysicsConfig physics_config;
     Nova::Math::InputRayFilter input_filter;
-    Nova::Math::SpatialClusterIndex spatial_cluster_index{1.0f, 4};
 
-    SpatialScene(Nova::Core* core, Nova::TextureBridge* texture_bridge);
+    /**
+     * @param registry The node store this scene's tree lives in. Held by
+     *        reference and NOT owned: one registry serves a whole session, and
+     *        it must outlive every scene built against it.
+     */
+    SpatialScene(Registry& registry, Nova::Core* core, Nova::TextureBridge* texture_bridge);
     ~SpatialScene();
+
+    SpatialScene(const SpatialScene&) = delete;
+    SpatialScene& operator=(const SpatialScene&) = delete;
+
+    Registry& registry() const { return registry_; }
 
     void initialize(const std::string& font_path = "/usr/share/fonts/TTF/SpaceMonoNerdFont-Regular.ttf");
 
@@ -39,7 +50,7 @@ public:
     void processPointerButton(uint32_t button, bool pressed);
     void processKey(uint32_t key, bool pressed);
 
-    // Update scene dynamics, cluster spatial index, and phase physics
+    // Update scene dynamics and phase physics
     void update(float dt);
 
     // Render 3D spatial scene to Vulkan command buffer
@@ -57,15 +68,15 @@ public:
     // Pointer focus follows the pointer; keyboard focus follows activation.
     // Conflating them means moving the pointer off a window steals its typing,
     // which is neither what a seat does nor what anyone expects.
-    void setPointerFocus(std::shared_ptr<SpatialNode> node, const Nova::Math::RayHit& enter_hit);
-    void setPointerFocus(std::shared_ptr<SpatialNode> node) { setPointerFocus(std::move(node), last_hit_); }
-    void setKeyboardFocus(std::shared_ptr<SpatialNode> node);
+    void setPointerFocus(NodeId node, const Nova::Math::RayHit& enter_hit);
+    void setPointerFocus(NodeId node) { setPointerFocus(node, last_hit_); }
+    void setKeyboardFocus(NodeId node);
 
     // Drop every reference this scene holds to a node that is going away.
-    // Focus and the implicit grab are the only strong references it keeps
-    // outside the tree: a node removed from the tree while one of them names
-    // it would go on receiving motion, and go on existing, indefinitely.
-    void releaseNode(const std::shared_ptr<SpatialNode>& node);
+    // Focus and the implicit grab are the only references it keeps outside the
+    // tree: a node removed from the tree while one of them named it would go on
+    // receiving motion. Safe on an id that is already dead.
+    void releaseNode(NodeId node);
 
     // --- Implicit pointer grab ---
     //
@@ -73,19 +84,20 @@ public:
     // release itself go to the pressed node however far the pointer wanders,
     // so a drag that leaves the quad still gets its release. Public because a
     // gesture recogniser or a menu may need to take the pointer explicitly.
-    void grabPointer(std::shared_ptr<SpatialNode> node);
+    void grabPointer(NodeId node);
     void releasePointer();
 
-    std::shared_ptr<SpatialNode> getPointerFocus() const { return pointer_focus_; }
-    std::shared_ptr<SpatialNode> getKeyboardFocus() const { return keyboard_focus_; }
-    std::shared_ptr<SpatialNode> getPointerGrab() const { return pointer_grab_; }
+    NodeId getPointerFocus() const { return pointer_focus_; }
+    NodeId getKeyboardFocus() const { return keyboard_focus_; }
+    NodeId getPointerGrab() const { return pointer_grab_; }
 
     // Retained spelling of getKeyboardFocus(): this always returned the node
     // set on press, which is keyboard focus.
-    std::shared_ptr<SpatialNode> getFocusedNode() const { return keyboard_focus_; }
+    NodeId getFocusedNode() const { return keyboard_focus_; }
     const Nova::Math::RayHit& getLastHit() const { return last_hit_; }
 
 private:
+    Registry& registry_;
     Nova::Core* core_ = nullptr;
     Nova::TextureBridge* texture_bridge_ = nullptr;
     std::unique_ptr<Nova::SpatialMeshBuffer> mesh_buffer_;
@@ -93,9 +105,9 @@ private:
     Nova::MeshData lookat_reticle_mesh_;
     Nova::MeshData cursor_reticle_mesh_;
 
-    std::shared_ptr<SpatialNode> pointer_focus_;
-    std::shared_ptr<SpatialNode> keyboard_focus_;
-    std::shared_ptr<SpatialNode> pointer_grab_;
+    NodeId pointer_focus_;
+    NodeId keyboard_focus_;
+    NodeId pointer_grab_;
 
     // One bit per button index. The grab lasts until every button is up, so
     // releasing one of two held buttons does not drop the drag.
@@ -111,12 +123,16 @@ private:
     float fps_accumulator_ = 0.0f;
     uint32_t fps_frames_ = 0;
 
-    void rebuildSpatialIndex(std::shared_ptr<SpatialNode> node, uint32_t& out_node_count);
+    // Focus and the grab name nodes they do not own, and a node may be
+    // destroyed by anything that can reach the registry -- including its own
+    // input handler. Every entry point below starts here rather than assuming
+    // the ids it is holding still resolve.
+    void dropDeadReferences();
 
     Nova::Math::Ray3D buildPointerRay(const glm::vec2& screen_pixel, const glm::vec2& screen_size);
     bool castPointerRay(const Nova::Math::Ray3D& world_ray,
                         Nova::Math::RayHit& out_hit,
-                        std::shared_ptr<SpatialNode>& out_target);
+                        NodeId& out_target);
     void updateHover(const Nova::Math::Ray3D& world_ray);
     void deliverGrabMotion(const Nova::Math::Ray3D& world_ray);
     void placeCursorOnMissedRay(const Nova::Math::Ray3D& world_ray);

@@ -159,58 +159,57 @@ private:
  * fact this process actually knows.
  */
 struct BootDesktop {
-    std::shared_ptr<Splash::SpatialNode> root;
-    std::shared_ptr<Splash::SpatialLabel> status;
-    std::vector<std::shared_ptr<Splash::SpatialPanel>> orbiters;
+    Splash::NodeId root;
+    Splash::NodeId status;
+    std::vector<Splash::NodeId> orbiters;
     float elapsed = 0.0f;
 
-    void build(const std::shared_ptr<Splash::SpatialFont>& font, const char* channel) {
-        root = std::make_shared<Splash::SpatialNode>();
-        root->name = "BootDesktop";
+    void build(Splash::Registry& reg, Splash::NodeId parent,
+               const std::shared_ptr<Splash::SpatialFont>& font, const char* channel) {
+        root = reg.createContainer(parent);
+        reg[root].name = "BootDesktop";
 
-        auto title = std::make_shared<Splash::SpatialLabel>("VAZIO", font, 0.006f);
-        title->transform.position = glm::vec3(0.0f, 0.55f, 0.0f);
-        root->addChild(title);
+        const Splash::NodeId title = reg.emplace<Splash::SpatialLabel>(root, "VAZIO", font, 0.006f);
+        reg.transform(title).position = glm::vec3(0.0f, 0.55f, 0.0f);
 
-        status = std::make_shared<Splash::SpatialLabel>("", font, 0.0022f);
-        status->transform.position = glm::vec3(0.0f, -0.55f, 0.0f);
-        root->addChild(status);
+        status = reg.emplace<Splash::SpatialLabel>(root, "", font, 0.0022f);
+        reg.transform(status).position = glm::vec3(0.0f, -0.55f, 0.0f);
 
-        auto channel_line = std::make_shared<Splash::SpatialLabel>(
-            std::string("readiness channel: ") + channel, font, 0.0016f,
+        const Splash::NodeId channel_line = reg.emplace<Splash::SpatialLabel>(
+            root, std::string("readiness channel: ") + channel, font, 0.0016f,
             glm::vec4(0.55f, 0.62f, 0.78f, 1.0f));
-        channel_line->transform.position = glm::vec3(0.0f, -0.68f, 0.0f);
-        root->addChild(channel_line);
+        reg.transform(channel_line).position = glm::vec3(0.0f, -0.68f, 0.0f);
 
         for (int i = 0; i < 5; ++i) {
-            auto orbiter = std::make_shared<Splash::SpatialPanel>(
-                glm::vec2(0.14f, 0.14f), glm::vec4(0.16f, 0.34f, 0.62f, 0.9f));
-            orbiter->name = "BootOrbiter";
-            orbiter->interactable = false;
+            const Splash::NodeId orbiter = reg.emplace<Splash::SpatialPanel>(
+                root, glm::vec2(0.14f, 0.14f), glm::vec4(0.16f, 0.34f, 0.62f, 0.9f));
+            Splash::SpatialNode& node = reg[orbiter];
+            node.name = "BootOrbiter";
+            node.interactable = false;
             // Each orbiter starts at a different point on the phase circle, so
             // evolvePhase moves them independently rather than in lockstep.
-            orbiter->phase_state = Nova::Math::PhaseState8::fromComplexPhase(
+            node.phase_state = Nova::Math::PhaseState8::fromComplexPhase(
                 std::cos(static_cast<float>(i) * 1.2566371f),
                 std::sin(static_cast<float>(i) * 1.2566371f),
                 static_cast<float>(i) * 0.7f);
-            root->addChild(orbiter);
             orbiters.push_back(orbiter);
         }
-        root->relinkChildren();
     }
 
-    void update(float dt) {
+    void update(Splash::Registry& reg, float dt) {
         elapsed += dt;
         const int index_count = static_cast<int>(orbiters.size());
         for (int i = 0; i < index_count; ++i) {
             const float phase = elapsed * 1.1f + static_cast<float>(i) * 6.2831853f / index_count;
-            orbiters[i]->transform.position =
+            reg.transform(orbiters[i]).position =
                 glm::vec3(std::cos(phase) * 0.55f, std::sin(phase) * 0.28f, std::sin(phase * 0.5f) * 0.2f);
-            orbiters[i]->evolvePhase(dt, 1.0f);
+            reg[orbiters[i]].evolvePhase(dt, 1.0f);
         }
         char line[96];
         std::snprintf(line, sizeof(line), "waiting for readiness signal - %.1fs elapsed", elapsed);
-        status->setText(line);
+        if (Splash::SpatialLabel* label = reg.as<Splash::SpatialLabel>(status)) {
+            label->setText(line);
+        }
     }
 };
 
@@ -255,6 +254,10 @@ int openDrmHint(const std::string& node) {
 namespace {
 
 struct Runtime {
+    // FIRST, so it is destroyed LAST: every node in this process lives in it,
+    // and the scene's own teardown hands its subtree back through it.
+    Splash::Registry registry;
+
     std::unique_ptr<Nova::Graphics> graphics;
     std::unique_ptr<Nova::TextureBridge> bridge;
     std::unique_ptr<Nova::SpatialPipeline> pipeline;
@@ -265,7 +268,7 @@ struct Runtime {
     // Session stage only; absent for the whole of the splash.
     std::shared_ptr<Splash::OatsBridge> oats;
     std::shared_ptr<Clouds::SpatialFilesystem> filesystem;
-    std::shared_ptr<Splash::SpatialNode> session_root;
+    Splash::NodeId session_root;
 
     BootDesktop boot;
 };
@@ -282,7 +285,7 @@ bool buildGraphics(Runtime& rt, const CommandLine& cli, int drm_fd) {
 
     // No font file: SpatialFont falls back to its built-in atlas, which is what
     // makes the splash independent of anything on disk (plan B.3.7).
-    rt.scene = std::make_shared<Splash::SpatialScene>(rt.graphics.get(), rt.bridge.get());
+    rt.scene = std::make_shared<Splash::SpatialScene>(rt.registry, rt.graphics.get(), rt.bridge.get());
     rt.scene->initialize("");
     rt.scene->show_lookat_reticle = false;
     rt.scene->show_cursor_reticle = false;
@@ -325,14 +328,13 @@ bool bindPresentation(Runtime& rt) {
  * not made here.
  */
 void enterSessionStage(Runtime& rt, const CommandLine& cli) {
-    rt.scene->root->removeChild(rt.boot.root);
-    rt.boot.root.reset();
-    rt.boot.status.reset();
+    rt.registry.destroy(rt.boot.root);
+    rt.boot.root = Splash::INVALID_NODE;
+    rt.boot.status = Splash::INVALID_NODE;
     rt.boot.orbiters.clear();
 
-    rt.session_root = std::make_shared<Splash::SpatialNode>();
-    rt.session_root->name = "SessionDesktop";
-    rt.scene->root->addChild(rt.session_root);
+    rt.session_root = rt.registry.createContainer(rt.scene->root);
+    rt.registry[rt.session_root].name = "SessionDesktop";
 
     // OATS degrades, never aborts (plan B.3.2): a runtime that will not start
     // costs this session its presenters, not its display.
@@ -342,7 +344,7 @@ void enterSessionStage(Runtime& rt, const CommandLine& cli) {
         rt.oats.reset();
     }
 
-    rt.filesystem = std::make_shared<Clouds::SpatialFilesystem>(rt.session_root, rt.scene->font);
+    rt.filesystem = std::make_shared<Clouds::SpatialFilesystem>(rt.registry, rt.session_root, rt.scene->font);
     rt.filesystem->scanAndBuild3DTree(cli.session_root, 2);
     report(LOGGER::INFO, "vazio - Session Desktop built from '%s' (%zu nodes)",
            cli.session_root.c_str(), rt.filesystem->getNodeCount());
@@ -373,8 +375,7 @@ bool enterSplashStage(Runtime& rt, const CommandLine& cli, const ReadinessChanne
     }
     if (!bindPresentation(rt)) return false;
 
-    rt.boot.build(rt.scene->font, readiness.describe());
-    rt.scene->root->addChild(rt.boot.root);
+    rt.boot.build(rt.registry, rt.scene->root, rt.scene->font, readiness.describe());
     report(LOGGER::INFO, "vazio - Splash stage on %zu output(s) over %s; readiness channel: %s",
            rt.compositor->outputCount(), Vazio::presentPathName(rt.present->path()),
            readiness.describe());
@@ -427,7 +428,7 @@ int runStagedLoop(Runtime& rt, const CommandLine& cli, ReadinessChannel& readine
         // the switch back is seen; nothing is drawn and nothing is stepped.
         if (!active) continue;
 
-        if (rt.boot.root) rt.boot.update(dt);
+        if (rt.registry.alive(rt.boot.root)) rt.boot.update(rt.registry, dt);
         rt.scene->update(dt);
         stepSession(rt, dt);
 

@@ -9,6 +9,7 @@
 
 #include "Splash/WaylandListener.h"
 #include "Splash/Primitives.h"
+#include "Splash/Registry.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -98,9 +99,12 @@ struct SpatialXdgWindow {
     WindowHandle handle = INVALID_WINDOW_HANDLE;
     struct wlr_xdg_toplevel* toplevel = nullptr;
     struct wlr_surface* surface = nullptr;
-    std::shared_ptr<Splash::SpatialPanel> frame_panel;
-    std::shared_ptr<Splash::SpatialSurfaceHost> surface_host;
-    std::shared_ptr<Splash::SpatialLabel> title_label;
+    // The three scene nodes this window is drawn as. Ids, not owners: the
+    // registry owns every node, and a window that has unmapped keeps naming
+    // nodes that are simply not in the tree at the moment.
+    Splash::NodeId frame_panel;
+    Splash::NodeId surface_host;
+    Splash::NodeId title_label;
 
     // Live client pixels. Allocated on the first commit that carries a buffer
     // and reused in place until the client resizes; owned by the texture bridge.
@@ -215,14 +219,9 @@ struct SpatialXdgWindow {
     }
 
     // Drop the raw wlr_seat / wlr_surface pointers handed to the scene graph.
-    void clearInputRouting() {
-        if (!surface_host) return;
-        surface_host->on_surface_pointer_enter = nullptr;
-        surface_host->on_surface_pointer_motion = nullptr;
-        surface_host->on_surface_pointer_leave = nullptr;
-        surface_host->on_surface_button = nullptr;
-        surface_host->on_surface_key = nullptr;
-    }
+    // Reaches the node through the compositor's registry, so it is a no-op once
+    // the compositor is gone or the node has been destroyed.
+    void clearInputRouting();
 
     // Sever every outbound reference and hand the window to the kill list.
     // Idempotent; safe to call from inside a wl_listener dispatch.
@@ -246,7 +245,7 @@ struct SpatialXdgPopup {
     // another popup's, which is how nested menus stack.
     struct wlr_surface* parent_surface = nullptr;
 
-    std::shared_ptr<Splash::SpatialSurfaceHost> surface_host;
+    Splash::NodeId surface_host;
     std::shared_ptr<Nova::TextureHandle> client_texture;
 
     Splash::WaylandListener<SpatialXdgPopup> commit_listener;
@@ -322,7 +321,7 @@ struct SpatialSubsurface {
     // session hosts - a toplevel, a popup, or another subsurface.
     struct wlr_surface* parent_surface = nullptr;
 
-    std::shared_ptr<Splash::SpatialSurfaceHost> surface_host;
+    Splash::NodeId surface_host;
     std::shared_ptr<Nova::TextureHandle> client_texture;
 
     Splash::WaylandListener<SpatialSubsurface> commit_listener;

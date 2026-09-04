@@ -249,7 +249,9 @@ void ImGuiEngineOverlay::renderMetricsWindow() {
 
             ImGui::Spacing();
             ImGui::Text("Active 3D Entities: %zu", filesystem_3d_ ? filesystem_3d_->getNodeCount() : 0);
-            ImGui::Text("Raycast Tests/Frame: %u", physics_config_->cluster_tests_per_frame);
+            // The broadphase cluster readout that used to sit here reported a
+            // counter nothing writes since the index was retired: a live-looking
+            // zero is worse than no line at all.
 
             ImGui::Spacing();
             ImGui::SeparatorText("Complex Phase & Quaternionic Dynamics");
@@ -297,8 +299,8 @@ void ImGuiEngineOverlay::renderFilesystemWindow() {
 
             ImGui::Spacing();
             ImGui::SeparatorText("3D Spatial Pose");
-            glm::vec3 pos = selected->transform.position;
-            glm::quat rot = selected->transform.orientation;
+            glm::vec3 pos = selected->transform().position;
+            glm::quat rot = selected->transform().orientation;
             ImGui::Text("Position: (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
             ImGui::Text("Orientation: [w=%.2f, x=%.2f, y=%.2f, z=%.2f]", rot.w, rot.x, rot.y, rot.z);
             ImGui::Text("Pill Dimensions: R=%.3f, H=%.3f", selected->pill_radius, selected->pill_height);
@@ -319,11 +321,13 @@ void ImGuiEngineOverlay::renderFilesystemWindow() {
         if (filesystem_3d_) {
             const auto& all_pills = filesystem_3d_->getAllNodes();
             ImGui::BeginChild("PillList", ImVec2(0, 200), true);
-            for (const auto& pill : all_pills) {
-                bool is_cur = (pill.get() == selected);
+            for (const Splash::NodeId id : all_pills) {
+                SpatialPillNode* pill = filesystem_3d_->resolve(id);
+                if (!pill) continue;
+                bool is_cur = (pill == selected);
                 std::string label = (pill->is_directory ? "[DIR] " : "      ") + pill->item_name;
                 if (ImGui::Selectable(label.c_str(), is_cur)) {
-                    filesystem_3d_->selectNode(pill.get());
+                    filesystem_3d_->selectNode(pill);
                 }
             }
             ImGui::EndChild();

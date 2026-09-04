@@ -90,10 +90,13 @@ glm::vec2 surfaceUv(const glm::vec2& size, const glm::vec3& local_point) {
 // answers "where on this node's surface does the pointer correspond to", which
 // is what a capture redirect and a drag past the quad's edge both need. uv is
 // still clamped, so a hosted surface never receives an off-surface coordinate.
-bool projectRayOntoNodePlane(const SpatialNode& node,
+bool projectRayOntoNodePlane(Registry& reg,
+                             NodeId node,
                              const Nova::Math::Ray3D& ray,
                              Nova::Math::RayHit& out_hit) {
-    const Nova::Math::QuatTransform world_xf = node.getWorldTransform();
+    if (!reg.alive(node)) return false;
+
+    const Nova::Math::QuatTransform world_xf = reg.worldOf(node);
     const glm::vec3 local_orig = world_xf.inverseTransformPoint(ray.origin);
     const glm::vec3 local_dir = glm::normalize(glm::conjugate(world_xf.orientation) * ray.direction);
 
@@ -109,7 +112,7 @@ bool projectRayOntoNodePlane(const SpatialNode& node,
     out_hit.local_point = local_hit;
     out_hit.world_point = world_xf.transformPoint(local_hit);
     out_hit.normal = world_xf.orientation * glm::vec3(0.0f, 0.0f, local_dir.z < 0.0f ? 1.0f : -1.0f);
-    out_hit.uv = surfaceUv(node.size, local_hit);
+    out_hit.uv = surfaceUv(reg[node].size, local_hit);
     return true;
 }
 
@@ -117,21 +120,21 @@ bool projectRayOntoNodePlane(const SpatialNode& node,
 // its innermost capturing ancestor -- the window, not its titlebar panel. A
 // node that claims is always its own target, which is what keeps a button
 // inside a capturing window clickable.
-std::shared_ptr<SpatialNode> resolveInputTarget(const std::shared_ptr<SpatialNode>& hit_node) {
-    if (!hit_node || hit_node->claims_pointer_input) return hit_node;
+NodeId resolveInputTarget(Registry& reg, NodeId hit_node) {
+    if (!reg.alive(hit_node) || reg[hit_node].claims_pointer_input) return hit_node;
 
-    for (std::shared_ptr<SpatialNode> owner = hit_node->parent.lock(); owner; owner = owner->parent.lock()) {
-        if (owner->captures_subtree_input) return owner;
+    for (NodeId owner = reg.parentOf(hit_node); owner.valid(); owner = reg.parentOf(owner)) {
+        if (reg[owner].captures_subtree_input) return owner;
     }
     return hit_node;
 }
 
 } // namespace
 
-SpatialScene::SpatialScene(Nova::Core* core, Nova::TextureBridge* texture_bridge)
-    : core_(core), texture_bridge_(texture_bridge) {
-    root = std::make_shared<SpatialNode>();
-    root->name = "SceneRoot";
+SpatialScene::SpatialScene(Registry& registry, Nova::Core* core, Nova::TextureBridge* texture_bridge)
+    : registry_(registry), core_(core), texture_bridge_(texture_bridge) {
+    root = registry_.createContainer(INVALID_NODE);
+    registry_[root].name = "SceneRoot";
 }
 
 SpatialScene::~SpatialScene() {
@@ -146,13 +149,17 @@ SpatialScene::~SpatialScene() {
     mesh_buffer_.reset();
 
     // Consumers before the producer. Nodes hold shared_ptr copies of the font's
-    // atlas texture; ~SpatialFont hands that atlas back to the bridge, so the
-    // tree and the focus/grab references into it are dropped first and no node
-    // is left naming a texture whose handles have just been nulled.
-    pointer_grab_.reset();
-    pointer_focus_.reset();
-    keyboard_focus_.reset();
-    root.reset();
+    // atlas texture; ~SpatialFont hands that atlas back to the bridge, so this
+    // scene's tree is destroyed here - immediately, not deferred - and no node
+    // is left naming a texture whose handles have just been nulled. The
+    // registry outlives the scene, so this is the only place that knows the
+    // subtree is going.
+    pointer_grab_ = INVALID_NODE;
+    pointer_focus_ = INVALID_NODE;
+    keyboard_focus_ = INVALID_NODE;
+    registry_.destroy(root);
+    registry_.drain();
+    root = INVALID_NODE;
 
     font.reset();
 }
@@ -188,21 +195,12 @@ glm::mat4 SpatialScene::getProjectionMatrix(float aspect_ratio) const {
     return proj;
 }
 
-void SpatialScene::rebuildSpatialIndex(std::shared_ptr<SpatialNode> node, uint32_t& out_node_count) {
-    if (!node || !node->visible) return;
-
-    out_node_count++;
-    Nova::Math::QuatTransform world_xf = node->getWorldTransform();
-    glm::vec3 half_extents(node->size.x * 0.5f, node->size.y * 0.5f, 0.05f);
-
-    Nova::Math::ClusterAABB bounds;
-    bounds.min_pt = world_xf.position - half_extents;
-    bounds.max_pt = world_xf.position + half_extents;
-
-    spatial_cluster_index.insert(out_node_count, bounds, physics_config.cluster_depth);
-
-    for (auto& child : node->children) {
-        rebuildSpatialIndex(child, out_node_count);
+void SpatialScene::dropDeadReferences() {
+    if (!registry_.alive(pointer_focus_)) pointer_focus_ = INVALID_NODE;
+    if (!registry_.alive(keyboard_focus_)) keyboard_focus_ = INVALID_NODE;
+    if (!registry_.alive(pointer_grab_)) {
+        pointer_grab_ = INVALID_NODE;
+        pressed_button_mask_ = 0;
     }
 }
 
@@ -216,47 +214,48 @@ Nova::Math::Ray3D SpatialScene::buildPointerRay(const glm::vec2& screen_pixel, c
 
 bool SpatialScene::castPointerRay(const Nova::Math::Ray3D& world_ray,
                                   Nova::Math::RayHit& out_hit,
-                                  std::shared_ptr<SpatialNode>& out_target) {
+                                  NodeId& out_target) {
     Nova::Math::RayHit hit;
-    std::shared_ptr<SpatialNode> hit_node;
+    NodeId hit_node;
 
     // Focused laser check first if LaserFocus mode is active
-    if (physics_config.accel_mode == Nova::Math::AccelerationMode::LaserFocus && keyboard_focus_) {
-        keyboard_focus_->hitTest(world_ray, hit, hit_node);
+    if (physics_config.accel_mode == Nova::Math::AccelerationMode::LaserFocus &&
+        keyboard_focus_.valid()) {
+        Splash::hitTest(registry_, keyboard_focus_, world_ray, hit, hit_node);
     }
 
-    if (!hit_node && root) {
-        root->hitTest(world_ray, hit, hit_node);
+    if (!hit_node.valid()) {
+        Splash::hitTest(registry_, root, world_ray, hit, hit_node);
     }
-    if (!hit_node) return false;
+    if (!hit_node.valid()) return false;
 
     // Geometry named the node; scoped capture names the target. When they
     // differ the hit is re-cast onto the target's own plane, so a redirected
     // press and every motion after it are measured in one frame -- the band
     // test and the drag delta both depend on that.
-    out_target = resolveInputTarget(hit_node);
+    out_target = resolveInputTarget(registry_, hit_node);
     if (out_target != hit_node) {
-        projectRayOntoNodePlane(*out_target, world_ray, hit);
+        projectRayOntoNodePlane(registry_, out_target, world_ray, hit);
     }
     out_hit = hit;
     return true;
 }
 
-void SpatialScene::setPointerFocus(std::shared_ptr<SpatialNode> node, const Nova::Math::RayHit& enter_hit) {
+void SpatialScene::setPointerFocus(NodeId node, const Nova::Math::RayHit& enter_hit) {
     if (pointer_focus_ == node) return;
 
-    if (pointer_focus_) {
-        pointer_focus_->onRayLeave();
+    if (registry_.alive(pointer_focus_)) {
+        registry_[pointer_focus_].onRayLeave(registry_, pointer_focus_);
     }
-    pointer_focus_ = std::move(node);
-    if (pointer_focus_) {
-        pointer_focus_->onRayEnter(enter_hit);
+    pointer_focus_ = node;
+    if (registry_.alive(pointer_focus_)) {
+        registry_[pointer_focus_].onRayEnter(registry_, pointer_focus_, enter_hit);
     }
 }
 
-void SpatialScene::setKeyboardFocus(std::shared_ptr<SpatialNode> node) {
+void SpatialScene::setKeyboardFocus(NodeId node) {
     if (keyboard_focus_ == node) {
-        if (keyboard_focus_) keyboard_focus_->is_focused = true;
+        if (registry_.alive(keyboard_focus_)) registry_[keyboard_focus_].is_focused = true;
         return;
     }
 
@@ -264,17 +263,17 @@ void SpatialScene::setKeyboardFocus(std::shared_ptr<SpatialNode> node) {
     // it: onRayButton raises it on whatever was pressed, and only the node that
     // ends up holding focus may keep it. Clearing the previous holder here is
     // what keeps exactly one node flagged at a time.
-    if (keyboard_focus_) {
-        keyboard_focus_->is_focused = false;
+    if (registry_.alive(keyboard_focus_)) {
+        registry_[keyboard_focus_].is_focused = false;
     }
-    keyboard_focus_ = std::move(node);
-    if (keyboard_focus_) {
-        keyboard_focus_->is_focused = true;
+    keyboard_focus_ = node;
+    if (registry_.alive(keyboard_focus_)) {
+        registry_[keyboard_focus_].is_focused = true;
     }
 }
 
-void SpatialScene::releaseNode(const std::shared_ptr<SpatialNode>& node) {
-    if (!node) return;
+void SpatialScene::releaseNode(NodeId node) {
+    if (!node.valid()) return;
 
     if (pointer_grab_ == node) {
         releasePointer();
@@ -282,36 +281,36 @@ void SpatialScene::releaseNode(const std::shared_ptr<SpatialNode>& node) {
     if (pointer_focus_ == node) {
         // The leave edge is owed even here: the node is losing the pointer, and
         // whatever it does on leave is the last thing it is entitled to do.
-        pointer_focus_->onRayLeave();
-        pointer_focus_.reset();
+        if (registry_.alive(node)) registry_[node].onRayLeave(registry_, node);
+        pointer_focus_ = INVALID_NODE;
     }
     if (keyboard_focus_ == node) {
-        keyboard_focus_->is_focused = false;
-        keyboard_focus_.reset();
+        if (registry_.alive(node)) registry_[node].is_focused = false;
+        keyboard_focus_ = INVALID_NODE;
     }
 }
 
-void SpatialScene::grabPointer(std::shared_ptr<SpatialNode> node) {
-    pointer_grab_ = std::move(node);
+void SpatialScene::grabPointer(NodeId node) {
+    pointer_grab_ = node;
 }
 
 void SpatialScene::releasePointer() {
-    pointer_grab_.reset();
+    pointer_grab_ = INVALID_NODE;
     pressed_button_mask_ = 0;
 }
 
 void SpatialScene::updateHover(const Nova::Math::Ray3D& world_ray) {
     Nova::Math::RayHit hit;
-    std::shared_ptr<SpatialNode> target;
+    NodeId target;
 
     if (!castPointerRay(world_ray, hit, target)) {
-        setPointerFocus(nullptr, hit);
+        setPointerFocus(INVALID_NODE, hit);
         placeCursorOnMissedRay(world_ray);
         return;
     }
 
     if (target == pointer_focus_) {
-        pointer_focus_->onRayMove(hit);
+        registry_[pointer_focus_].onRayMove(registry_, pointer_focus_, hit);
     } else {
         setPointerFocus(target, hit);
     }
@@ -327,12 +326,12 @@ void SpatialScene::deliverGrabMotion(const Nova::Math::Ray3D& world_ray) {
     // plane is invariant under the drag it drives -- the delta it produces
     // lies inside it -- so this does not feed back on itself.
     Nova::Math::RayHit hit = last_hit_;
-    if (projectRayOntoNodePlane(*pointer_grab_, world_ray, hit)) {
+    if (projectRayOntoNodePlane(registry_, pointer_grab_, world_ray, hit)) {
         last_hit_ = hit;
         cursor_3d_pos = hit.world_point + hit.normal * 0.008f;
         physics_config.last_ray_depth = hit.distance;
     }
-    pointer_grab_->onRayMove(last_hit_);
+    registry_[pointer_grab_].onRayMove(registry_, pointer_grab_, last_hit_);
 }
 
 void SpatialScene::placeCursorOnMissedRay(const Nova::Math::Ray3D& world_ray) {
@@ -349,6 +348,7 @@ void SpatialScene::placeCursorOnMissedRay(const Nova::Math::Ray3D& world_ray) {
 }
 
 void SpatialScene::processPointerMotion(const glm::vec2& screen_pixel, const glm::vec2& screen_size) {
+    dropDeadReferences();
     last_screen_pixel_ = screen_pixel;
     last_screen_size_ = screen_size;
 
@@ -356,16 +356,9 @@ void SpatialScene::processPointerMotion(const glm::vec2& screen_pixel, const glm
     last_pointer_ray_ = world_ray;
     has_pointer_sample_ = true;
 
-    // Accelerated broadphase cluster query. SEAM: the candidate set is discarded
-    // and only the probe count kept, so the narrowphase below still walks the
-    // whole graph. Wiring it in is owned by the spatial-index plan, not this pass.
-    uint32_t tests_performed = 0;
-    spatial_cluster_index.queryRay(world_ray, tests_performed);
-    physics_config.cluster_tests_per_frame = tests_performed;
-
     // A grab owns the pointer outright: hover neither moves nor is re-evaluated
     // until the last button comes up.
-    if (pointer_grab_) {
+    if (pointer_grab_.valid()) {
         deliverGrabMotion(world_ray);
         return;
     }
@@ -373,20 +366,21 @@ void SpatialScene::processPointerMotion(const glm::vec2& screen_pixel, const glm
 }
 
 void SpatialScene::processPointerButton(uint32_t button, bool pressed) {
+    dropDeadReferences();
     const uint32_t button_bit = 1u << (button & 31u);
 
     if (pressed) {
         pressed_button_mask_ |= button_bit;
-        if (!pointer_grab_) grabPointer(pointer_focus_);
+        if (!pointer_grab_.valid()) grabPointer(pointer_focus_);
     } else {
         pressed_button_mask_ &= ~button_bit;
     }
 
     // The grab, when one is held, outranks hover: that is the whole point of
     // it, and it is what delivers a release to the node that took the press.
-    const std::shared_ptr<SpatialNode> target = pointer_grab_ ? pointer_grab_ : pointer_focus_;
-    if (target) {
-        target->onRayButton(last_hit_, button, pressed);
+    const NodeId target = pointer_grab_.valid() ? pointer_grab_ : pointer_focus_;
+    if (registry_.alive(target)) {
+        registry_[target].onRayButton(registry_, target, last_hit_, button, pressed);
     }
 
     // Keyboard focus follows activation, so it survives the pointer moving on.
@@ -404,12 +398,14 @@ void SpatialScene::processPointerButton(uint32_t button, bool pressed) {
 }
 
 void SpatialScene::processKey(uint32_t key, bool pressed) {
-    if (keyboard_focus_) {
-        keyboard_focus_->onKey(key, pressed);
+    dropDeadReferences();
+    if (registry_.alive(keyboard_focus_)) {
+        registry_[keyboard_focus_].onKey(registry_, keyboard_focus_, key, pressed);
     }
 }
 
 void SpatialScene::update(float dt) {
+    dropDeadReferences();
     frame_index_++;
 
     // Calculate real-time FPS metric
@@ -421,23 +417,15 @@ void SpatialScene::update(float dt) {
         fps_frames_ = 0;
     }
 
-    // Rebuild hierarchical spatial cluster index
-    spatial_cluster_index.clear();
-    uint32_t node_count = 0;
-    rebuildSpatialIndex(root, node_count);
-    physics_config.active_nodes = node_count;
-
-    // Evolve scene dynamics & non-linear phase physics
-    if (root) {
-        root->onUpdate(dt);
-        if (physics_config.phase_coupling_strength > 0.0f) {
-            root->evolvePhase(dt, physics_config.phase_coupling_strength);
-        }
+    // Evolve non-linear phase physics. Per-frame animation is driven by the
+    // owners that hold their own lists, not by a walk of the whole tree.
+    if (registry_.alive(root) && physics_config.phase_coupling_strength > 0.0f) {
+        registry_[root].evolvePhase(dt, physics_config.phase_coupling_strength);
     }
 }
 
 void SpatialScene::render(Nova::SpatialPipeline* pipeline, VkCommandBuffer cmd, const glm::vec2& screen_size) {
-    if (!root || !pipeline || !mesh_buffer_) return;
+    if (!registry_.alive(root) || !pipeline || !mesh_buffer_) return;
 
     const float aspect = screen_size.x / std::max(screen_size.y, 1.0f);
     const glm::mat4 view_proj = getProjectionMatrix(aspect) * getViewMatrix();
@@ -450,7 +438,7 @@ void SpatialScene::render(Nova::SpatialPipeline* pipeline, VkCommandBuffer cmd, 
 
     // 2. Collect all render commands & geometry across the scene graph
     std::vector<SpatialRenderCommand> commands;
-    root->collectRender(mesh_buffer_.get(), commands);
+    Splash::collectSubtree(registry_, root, mesh_buffer_.get(), commands);
 
     // 3. Append the camera-facing reticles: lookat (green ring, grey crosshair)
     //    and 3D cursor (blue ring, red crosshair).

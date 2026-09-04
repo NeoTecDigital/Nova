@@ -1,6 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
+#include "Splash/Registry.h"
 #include "Splash/SpatialNode.h"
 #include "Nova/pipeline/mesh_buffer.h"
 #include "Splash/content/mesh_cache.h"
@@ -25,15 +26,11 @@ public:
     std::string file_extension;
 
     bool is_selected = false;
-    bool is_expanded = false;
     // NOTE: is_hovered is inherited from SpatialNode - do not redeclare (base-member shadowing).
 
     float pill_radius = 0.07f;
     float pill_height = 0.22f;
     glm::vec4 base_color{0.2f, 0.5f, 0.85f, 0.95f};
-
-    std::vector<std::shared_ptr<SpatialPillNode>> children_pills;
-    std::weak_ptr<SpatialPillNode> parent_pill;
 
     std::function<void(SpatialPillNode*)> on_select;
 
@@ -42,7 +39,8 @@ public:
     static constexpr uint32_t RADIAL_SEGMENTS = 24;
     static constexpr uint32_t CAP_RINGS = 8;
 
-    SpatialPillNode(const std::string& name,
+    SpatialPillNode(Splash::Registry& reg, Splash::NodeId self,
+                    const std::string& name,
                     const std::string& path,
                     bool is_dir,
                     uintmax_t size_bytes,
@@ -51,12 +49,15 @@ public:
     void setSelected(bool sel);
     void setHovered(bool hov);
 
-    void onRayEnter(const Nova::Math::RayHit& hit) override;
-    void onRayLeave() override;
-    void onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) override;
+    void onRayEnter(Splash::Registry& reg, Splash::NodeId self, const Nova::Math::RayHit& hit) override;
+    void onRayLeave(Splash::Registry& reg, Splash::NodeId self) override;
+    void onRayButton(Splash::Registry& reg, Splash::NodeId self, const Nova::Math::RayHit& hit,
+                     uint32_t button, bool pressed) override;
 
-    void update(float dt);
-    void collectRender(Nova::SpatialMeshBuffer* mesh_buf, std::vector<Splash::SpatialRenderCommand>& out_commands) override;
+    void update(Splash::Registry& reg, Splash::NodeId self, float dt);
+    void collectRender(Splash::Registry& reg, Splash::NodeId self,
+                       Nova::SpatialMeshBuffer* mesh_buf,
+                       std::vector<Splash::SpatialRenderCommand>& out_commands) override;
 
 private:
     std::shared_ptr<Splash::SpatialFont> font_;
@@ -76,7 +77,8 @@ private:
  */
 class SpatialFilesystem {
 public:
-    SpatialFilesystem(std::shared_ptr<Splash::SpatialNode> root_scene_node,
+    SpatialFilesystem(Splash::Registry& registry,
+                      Splash::NodeId root_scene_node,
                       std::shared_ptr<Splash::SpatialFont> font_ptr);
     ~SpatialFilesystem() = default;
 
@@ -84,31 +86,39 @@ public:
     void rescan();
     void update(float dt);
 
+    Splash::Registry& registry() const { return registry_; }
+
     const std::string& getScanRoot() const { return scan_root_; }
     int getScanDepth() const { return scan_depth_; }
 
     SpatialPillNode* getSelectedNode() const { return selected_node_; }
     void selectNode(SpatialPillNode* node);
 
-    const std::vector<std::shared_ptr<SpatialPillNode>>& getAllNodes() const { return all_nodes_; }
+    // ONE index, in creation order. The pills used to be held three ways at
+    // once - by this list, by a root_pill_ member and by each parent's own
+    // children_pills - so "which of the three is authoritative" had no answer.
+    // The tree is the registry's; this is only the iteration order the per-frame
+    // animation walks.
+    const std::vector<Splash::NodeId>& getAllNodes() const { return all_nodes_; }
     size_t getNodeCount() const { return all_nodes_.size(); }
+
+    SpatialPillNode* resolve(Splash::NodeId id) const { return registry_.as<SpatialPillNode>(id); }
 
     std::function<void(SpatialPillNode*)> on_node_selected;
 
 private:
-    std::shared_ptr<Splash::SpatialNode> scene_root_;
+    Splash::Registry& registry_;
+    Splash::NodeId scene_root_;
     std::shared_ptr<Splash::SpatialFont> font_;
-    std::shared_ptr<Splash::SpatialNode> filesystem_3d_root_;
+    Splash::NodeId filesystem_3d_root_;
 
-    std::shared_ptr<SpatialPillNode> root_pill_;
-    std::vector<std::shared_ptr<SpatialPillNode>> all_nodes_;
+    std::vector<Splash::NodeId> all_nodes_;
     SpatialPillNode* selected_node_ = nullptr;
 
     std::string scan_root_;
     int scan_depth_ = 2;
 
     void buildSubTree(const std::filesystem::path& dir_path,
-                      std::shared_ptr<SpatialPillNode> parent_node,
                       int current_depth,
                       int max_depth,
                       glm::vec3 center_pos,

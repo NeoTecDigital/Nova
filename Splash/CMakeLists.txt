@@ -3,6 +3,7 @@
 # Depends on: Nova. Knows nothing of the compositor (Vazio) or its tenants
 # (Clouds); those are its consumers, and PUBLIC Nova is the only edge it has.
 add_library(Splash STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/Registry.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/SpatialNode.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/SpatialScene.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Primitives.cpp"

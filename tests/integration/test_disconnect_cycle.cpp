@@ -120,6 +120,9 @@ int runCycleClient(const char* socket_name) {
 }
 
 struct Server {
+    // Declared first, destroyed last: the scene hands its subtree back through
+    // it on the way out.
+    Splash::Registry registry;
     std::shared_ptr<Splash::SpatialScene> scene;
     std::unique_ptr<Vazio::SpatialCompositor> compositor;
     std::string socket_name;
@@ -222,7 +225,7 @@ namespace {
 
 bool buildServer(Server& server, CheckLog& log) {
     server.socket_name = "wayland-vzl-" + std::to_string(getpid());
-    server.scene = std::make_shared<Splash::SpatialScene>(nullptr, nullptr);
+    server.scene = std::make_shared<Splash::SpatialScene>(server.registry, nullptr, nullptr);
 
     const Vazio::SpatialCompositorConfig config = { .headless = true,
                                                      .virtual_width = 800,

@@ -6,43 +6,13 @@
 
 namespace Vazio {
 
-namespace {
-
-// Spacing between a parent quad and the subsurfaces stacked in front of it.
-// Smaller than the popup bias so a menu opened over a subsurface still wins.
-constexpr float kSubsurfaceDepthBias = 0.0008f;
-
-// Extent of a subsurface whose parent has not committed a buffer yet. Replaced
-// by real pixel dimensions on the first commit that carries any.
-constexpr float kSubsurfaceFallbackExtent = 0.3f;
-
-// Paint order within the parent's committed stack. wlroots keeps the protocol's
-// two lists - below the parent and above it - in paint order and reorders them
-// in place, so reading them here is what makes restacking take effect.
-int subsurfacePaintIndex(struct wlr_surface* parent, const struct wlr_subsurface* target) {
-    int index = 0;
-    struct wl_list* stacks[] = { &parent->current.subsurfaces_below,
-                                 &parent->current.subsurfaces_above };
-    for (struct wl_list* stack : stacks) {
-        struct wlr_subsurface_parent_state* state = nullptr;
-        wl_list_for_each(state, stack, link) {
-            struct wlr_subsurface* sibling = wl_container_of(state, sibling, current);
-            if (sibling == target) return index;
-            ++index;
-        }
-    }
-    return index;
-}
-
-} // namespace
-
 SpatialCompositor::SpatialCompositor(Nova::Core* core,
                                      Nova::TextureBridge* texture_bridge,
                                      std::shared_ptr<Splash::SpatialScene> scene,
-                                     std::shared_ptr<Splash::SpatialNode> portal_root,
+                                     Splash::NodeId portal_root,
                                      SpatialCompositorConfig config)
     : core_(core), texture_bridge_(texture_bridge), scene_(scene),
-      portal_root_(std::move(portal_root)), config_(config) {
+      portal_root_(portal_root), config_(config) {
     // The output box is authoritative for pointer clamping from the first
     // motion event onward, which may precede the first output commit.
     output_box_.width = static_cast<int>(config_.virtual_width);
@@ -51,12 +21,11 @@ SpatialCompositor::SpatialCompositor(Nova::Core* core,
     pointer_y_ = output_box_.height * 0.5;
 }
 
-const std::shared_ptr<Splash::SpatialNode>& SpatialCompositor::portalRoot() const {
-    // A null portal root is the single-Desktop default, not an error: the scene
-    // root is exactly the Portal a session with one Desktop would inject.
-    static const std::shared_ptr<Splash::SpatialNode> none;
-    if (portal_root_) return portal_root_;
-    return scene_ ? scene_->root : none;
+Splash::NodeId SpatialCompositor::portalRoot() const {
+    // An unset portal root is the single-Desktop default, not an error: the
+    // scene root is exactly the Portal a session with one Desktop would inject.
+    if (portal_root_.valid()) return portal_root_;
+    return scene_ ? scene_->root : Splash::INVALID_NODE;
 }
 
 SpatialCompositor::~SpatialCompositor() {
@@ -247,8 +216,9 @@ void SpatialCompositor::focusSurface(struct wlr_surface* surface) {
     // A surface this session does not host has no node to focus; clearing the
     // scene's focus on its behalf would be inventing a decision nobody made.
     if (scene_) {
-        if (std::shared_ptr<Splash::SpatialSurfaceHost> host = hostNodeForSurface(surface)) {
-            scene_->setKeyboardFocus(std::move(host));
+        const Splash::NodeId host = hostNodeForSurface(surface);
+        if (host.valid()) {
+            scene_->setKeyboardFocus(host);
         }
     }
 }
@@ -266,6 +236,11 @@ void SpatialCompositor::iterateEventLoop(int timeout_ms) {
     drainDestroyedWindows();
     drainRemovedInputDevices();
     drainRemovedOutputs();
+
+    // Last, after every list that schedules node destruction: this is what turns
+    // "unlinked now" into "the slot is reusable", and it is safe outside
+    // dispatch for exactly the reason the lists above are.
+    if (scene_) scene_->registry().drain();
 }
 
 // --- SpatialCompositor - teardown ---
@@ -289,7 +264,6 @@ void SpatialCompositor::stop() {
         report(LOGGER::INFO, "SpatialCompositor - Stopping Wayland display server");
         wl_display_destroy_clients(wl_display_);
     }
-
     releaseInput();
 
     new_xdg_toplevel_listener_.unbind();  // owned by xdg_shell_->events.new_toplevel
@@ -324,89 +298,6 @@ void SpatialCompositor::stop() {
     virtual_output_host_ = nullptr;
     output_ready_ = nullptr;
     stage_ = SessionStage::Down;
-}
-
-// --- SpatialCompositor - subsurface hosting ---
-//
-// Creation and placement live here, next to the loop that drains the kill list;
-// the SpatialSubsurface lifetime object and the attach/detach it shares with
-// popups live in SpatialPopupHost.cpp. Split only because both files are at the
-// 500-line cap - the whole of it belongs in one TU, and the next hand on this
-// code should make that src/Clouds/SpatialSubsurfaceHost.cpp.
-
-void SpatialCompositor::onNewSubsurface(struct wlr_surface* parent_surface, void* data) {
-    auto subsurface = static_cast<struct wlr_subsurface*>(data);
-    if (!subsurface || !subsurface->surface || !parent_surface) {
-        report(LOGGER::ERROR, "SpatialCompositor - new_subsurface signal delivered no backing surface");
-        return;
-    }
-
-    auto hosted = std::make_shared<SpatialSubsurface>();
-    hosted->compositor = this;
-    hosted->handle = next_window_handle_++;
-    hosted->subsurface = subsurface;
-    hosted->surface = subsurface->surface;
-    hosted->parent_surface = parent_surface;
-
-    std::shared_ptr<Nova::TextureHandle> fallback_texture;
-    if (texture_bridge_) fallback_texture = texture_bridge_->getFallbackTexture();
-
-    // Its own pixels and its own input, exactly like a popup: a subsurface is
-    // a second buffer the client draws, not chrome this compositor owns.
-    hosted->surface_host = std::make_shared<Splash::SpatialSurfaceHost>(
-        glm::vec2(kSubsurfaceFallbackExtent, kSubsurfaceFallbackExtent), fallback_texture);
-    hosted->surface_host->name = "Subsurface";
-    hosted->surface_host->claims_pointer_input = true;
-
-    SpatialSubsurface* child = hosted.get();
-    struct wlr_surface* surface = hosted->surface;
-    child->commit_listener.bind(child, &SpatialSubsurface::onCommit, &surface->events.commit);
-    child->map_listener.bind(child, &SpatialSubsurface::onMap, &surface->events.map);
-    child->unmap_listener.bind(child, &SpatialSubsurface::onUnmap, &surface->events.unmap);
-    child->surface_destroy_listener.bind(child, &SpatialSubsurface::onSurfaceDestroy, &surface->events.destroy);
-    child->destroy_listener.bind(child, &SpatialSubsurface::onDestroy, &subsurface->events.destroy);
-    child->new_subsurface_listener.bind(child, &SpatialSubsurface::onNewSubsurface,
-                                        &surface->events.new_subsurface);
-    bindChildSurfaceInput(hosted->surface_host, surface);
-
-    report(LOGGER::INFO, "SpatialCompositor - New subsurface %u on parent surface %p",
-           child->handle, static_cast<const void*>(parent_surface));
-    subsurfaces_.push_back(std::move(hosted));
-
-    // new_subsurface fires when the subsurface enters the parent's CURRENT
-    // state (wlr_compositor.h:226), which for a client that committed the child
-    // first is after that child has already mapped. Waiting for a map signal
-    // that has been and gone would leave the node out of the scene forever, so
-    // the current state is read once instead of assumed pristine.
-    if (surface->mapped) {
-        child->onMap(nullptr);
-        child->onCommit(nullptr);
-    }
-}
-
-void SpatialCompositor::placeSubsurfaceOnParent(SpatialSubsurface& sub) {
-    std::shared_ptr<Splash::SpatialSurfaceHost> anchor = hostNodeForSurface(sub.parent_surface);
-    if (!anchor || !sub.surface_host || !sub.subsurface || !sub.surface || !sub.parent_surface) return;
-
-    // Offset is parent-relative surface-local pixels, applied by the parent's
-    // commit; extent is the child's own committed size. The popup path's change
-    // of basis carries both because they are in the same pixel space.
-    const struct wlr_box box = { sub.subsurface->current.x, sub.subsurface->current.y,
-                                 sub.surface->current.width, sub.surface->current.height };
-
-    // Paint order, biased in front of the parent quad. wl_subsurface.place_below
-    // can put a sibling behind its parent, which two coplanar quads cannot
-    // express, so every subsurface is drawn in front and only the relative order
-    // is honoured - below-parent siblings sitting closest to it. Stated rather
-    // than hidden: it is the one place this departs from the protocol.
-    const int paint_index = subsurfacePaintIndex(sub.parent_surface, sub.subsurface);
-    placeChildOnParentQuad(*sub.surface_host, *anchor, *sub.parent_surface, box,
-                           kSubsurfaceDepthBias * static_cast<float>(1 + paint_index));
-}
-
-void SpatialCompositor::importSubsurfaceBuffer(SpatialSubsurface& sub) {
-    importSurfaceContent(sub.surface, sub.surface_host, sub.client_texture,
-                         sub.unsupported_format, sub.handle);
 }
 
 // --- SpatialCompositor - decoration negotiation ---

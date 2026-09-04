@@ -1,6 +1,7 @@
 // Written by Richard Christopher, Copyright 2026 NeoTec Digital
 #pragma once
 
+#include "./Registry.h"
 #include "./SpatialNode.h"
 #include "./Primitives.h"
 #include "Splash/oats/OatsBridge.h"
@@ -14,9 +15,9 @@ namespace Splash {
 
 struct Active3DNode {
     std::string id;
-    std::shared_ptr<SpatialPanel> panel;
-    std::shared_ptr<SpatialButton> button;
-    std::shared_ptr<SpatialLabel> label;
+    NodeId panel;
+    NodeId button;
+    NodeId label;
 };
 
 /**
@@ -28,7 +29,8 @@ struct Active3DNode {
  */
 class DynamicSceneManager {
 public:
-    DynamicSceneManager(std::shared_ptr<SpatialNode> root_node,
+    DynamicSceneManager(Registry& registry,
+                        NodeId root_node,
                         std::shared_ptr<Splash::SpatialFont> font,
                         std::shared_ptr<OatsBridge> oats_bridge);
     ~DynamicSceneManager() = default;
@@ -44,11 +46,12 @@ public:
     std::function<void(const std::string&)> on_node_activated;
 
 private:
-    std::shared_ptr<SpatialNode> root_;
+    Registry& registry_;
+    NodeId root_;
     std::shared_ptr<Splash::SpatialFont> font_;
     std::shared_ptr<OatsBridge> oats_bridge_;
 
-    std::shared_ptr<SpatialNode> dynamic_root_;
+    NodeId dynamic_root_;
     std::unordered_map<std::string, Active3DNode> active_nodes_;
 
 

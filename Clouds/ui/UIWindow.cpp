@@ -4,11 +4,12 @@
 
 namespace Clouds::UI {
 
-UIWindow::UIWindow(const UITheme& ui_theme,
+UIWindow::UIWindow(Splash::Registry& reg, Splash::NodeId self,
+                   const UITheme& ui_theme,
                    const std::string& window_title,
                    const glm::vec2& content_size,
                    std::shared_ptr<Splash::SpatialFont> font_ptr)
-    : title(window_title), theme_(&ui_theme), font_(font_ptr) {
+    : SpatialNode(reg, self), title(window_title), theme_(&ui_theme), font_(font_ptr) {
     name = "UIWindow: " + title;
 
     // Geometry, resolved once: the titlebar band and every chrome position
@@ -27,78 +28,71 @@ UIWindow::UIWindow(const UITheme& ui_theme,
     // swallow a button press. See SpatialNode's input-routing block.
     captures_subtree_input = true;
 
-    setupChrome();
+    setupChrome(reg, self);
 
     // Resolve once here as well as every frame, so a window is never briefly
     // wearing SpatialPanel's own defaults between construction and its first
     // render. This is a starting value, not a stored one: collectRender
     // re-resolves regardless, which is what keeps a later theme edit live.
-    syncChromeToTheme();
+    syncChromeToTheme(reg);
 }
 
-void UIWindow::setupChrome() {
+void UIWindow::setupChrome(Splash::Registry& reg, Splash::NodeId self) {
     const float tb_h = theme_->titlebar_height;
     const float body_h = window_size.y - tb_h;
 
-    buildBody(body_h, tb_h);
-    buildTitlebar(body_h, tb_h);
-    buildWindowControls();
+    buildBody(reg, self, body_h, tb_h);
+    buildTitlebar(reg, self, body_h, tb_h);
+    buildWindowControls(reg, self);
 }
 
-void UIWindow::buildBody(float body_h, float tb_h) {
-    body_panel_ = std::make_shared<Splash::SpatialPanel>(
-        glm::vec2(window_size.x, body_h),
-        resolvedBodyColor()
-    );
-    body_panel_->transform.position = glm::vec3(0.0f, -tb_h * 0.5f, 0.0f);
-    body_panel_->claims_pointer_input = false;
-    addChild(body_panel_);
+void UIWindow::buildBody(Splash::Registry& reg, Splash::NodeId self, float body_h, float tb_h) {
+    body_panel_ = reg.emplace<Splash::SpatialPanel>(
+        self, glm::vec2(window_size.x, body_h), resolvedBodyColor());
+    reg.transform(body_panel_).position = glm::vec3(0.0f, -tb_h * 0.5f, 0.0f);
+    reg[body_panel_].claims_pointer_input = false;
 
-    content_area = std::make_shared<Splash::SpatialNode>();
-    content_area->name = "WindowContentArea";
-    content_area->transform.position = glm::vec3(0.0f, 0.0f, 0.002f);
+    content_area = reg.createContainer(body_panel_);
+    reg[content_area].name = "WindowContentArea";
+    reg.transform(content_area).position = glm::vec3(0.0f, 0.0f, 0.002f);
     // A container, not a surface: its default 1x1 extent describes nothing, so
     // it must not be hit-tested. Its children still are.
-    content_area->interactable = false;
-    body_panel_->addChild(content_area);
+    reg[content_area].interactable = false;
 }
 
-void UIWindow::buildTitlebar(float body_h, float tb_h) {
-    titlebar_panel_ = std::make_shared<Splash::SpatialPanel>(
-        glm::vec2(window_size.x, tb_h),
-        resolvedTitlebarColor()
-    );
-    titlebar_panel_->transform.position = glm::vec3(0.0f, body_h * 0.5f, 0.003f);
-    titlebar_panel_->claims_pointer_input = false;
-    addChild(titlebar_panel_);
+void UIWindow::buildTitlebar(Splash::Registry& reg, Splash::NodeId self, float body_h, float tb_h) {
+    titlebar_panel_ = reg.emplace<Splash::SpatialPanel>(
+        self, glm::vec2(window_size.x, tb_h), resolvedTitlebarColor());
+    reg.transform(titlebar_panel_).position = glm::vec3(0.0f, body_h * 0.5f, 0.003f);
+    reg[titlebar_panel_].claims_pointer_input = false;
 
     if (!font_) return;
 
-    title_label_ = std::make_shared<UILabel>(
-        *theme_,
-        title,
-        font_,
-        TextRole::HEADER,
-        TextTone::PRIMARY,
-        TextAlignment::LEFT
-    );
-    title_label_->transform.position = glm::vec3(-window_size.x * 0.5f + 0.04f, 0.0f, 0.002f);
-    title_label_->claims_pointer_input = false;   // text is not a grab handle
-    titlebar_panel_->addChild(title_label_);
+    title_label_ = makeUILabel(reg, titlebar_panel_, *theme_, title, font_,
+                               TextRole::HEADER, TextTone::PRIMARY, TextAlignment::LEFT);
+    reg.transform(title_label_).position = glm::vec3(-window_size.x * 0.5f + 0.04f, 0.0f, 0.002f);
+    reg[title_label_].claims_pointer_input = false;   // text is not a grab handle
 }
 
-void UIWindow::buildWindowControls() {
+void UIWindow::buildWindowControls(Splash::Registry& reg, Splash::NodeId self) {
     const glm::vec2 btn_size(0.040f, 0.032f);
 
-    min_button_ = std::make_shared<UIButton>(
-        *theme_, "-", btn_size, font_, [this]() { toggleMinimize(); }, ButtonVariant::GHOST);
-    min_button_->transform.position = glm::vec3(window_size.x * 0.5f - 0.095f, 0.0f, 0.003f);
-    titlebar_panel_->addChild(min_button_);
+    // The handlers name the window by id, not by `this`: a click arrives long
+    // after construction, and an id that no longer resolves is a no-op rather
+    // than a call through a dangling pointer.
+    min_button_ = makeUIButton(reg, titlebar_panel_, *theme_, "-", btn_size, font_,
+        [&reg, self]() {
+            if (UIWindow* window = reg.as<UIWindow>(self)) window->toggleMinimize(reg);
+        },
+        ButtonVariant::GHOST);
+    reg.transform(min_button_).position = glm::vec3(window_size.x * 0.5f - 0.095f, 0.0f, 0.003f);
 
-    close_button_ = std::make_shared<UIButton>(
-        *theme_, "x", btn_size, font_, [this]() { close(); }, ButtonVariant::DANGER);
-    close_button_->transform.position = glm::vec3(window_size.x * 0.5f - 0.045f, 0.0f, 0.003f);
-    titlebar_panel_->addChild(close_button_);
+    close_button_ = makeUIButton(reg, titlebar_panel_, *theme_, "x", btn_size, font_,
+        [&reg, self]() {
+            if (UIWindow* window = reg.as<UIWindow>(self)) window->close(reg);
+        },
+        ButtonVariant::DANGER);
+    reg.transform(close_button_).position = glm::vec3(window_size.x * 0.5f - 0.045f, 0.0f, 0.003f);
 }
 
 glm::vec4 UIWindow::resolvedTitlebarColor() const {
@@ -113,28 +107,28 @@ glm::vec4 UIWindow::resolvedBodyColor() const {
     return theme_->window_bg;
 }
 
-void UIWindow::syncChromeToTheme() {
+void UIWindow::syncChromeToTheme(Splash::Registry& reg) {
     const glm::vec4 border = resolvedBorderColor();
 
-    if (titlebar_panel_) {
-        titlebar_panel_->background_color = resolvedTitlebarColor();
-        titlebar_panel_->border_color = border;
-        titlebar_panel_->corner_radius = theme_->radius_window;
-        titlebar_panel_->border_thickness = theme_->border_window;
+    if (Splash::SpatialPanel* titlebar = reg.as<Splash::SpatialPanel>(titlebar_panel_)) {
+        titlebar->background_color = resolvedTitlebarColor();
+        titlebar->border_color = border;
+        titlebar->corner_radius = theme_->radius_window;
+        titlebar->border_thickness = theme_->border_window;
     }
-    if (body_panel_) {
-        body_panel_->background_color = resolvedBodyColor();
-        body_panel_->border_color = border;
-        body_panel_->corner_radius = theme_->radius_window;
-        body_panel_->border_thickness = theme_->border_window;
+    if (Splash::SpatialPanel* body = reg.as<Splash::SpatialPanel>(body_panel_)) {
+        body->background_color = resolvedBodyColor();
+        body->border_color = border;
+        body->corner_radius = theme_->radius_window;
+        body->border_thickness = theme_->border_window;
     }
 }
 
-void UIWindow::setTitle(const std::string& new_title) {
+void UIWindow::setTitle(Splash::Registry& reg, const std::string& new_title) {
     title = new_title;
     name = "UIWindow: " + title;
-    if (title_label_) {
-        title_label_->setText(title);
+    if (UILabel* label = reg.as<UILabel>(title_label_)) {
+        label->setText(title);
     }
 }
 
@@ -142,36 +136,37 @@ void UIWindow::setFocused(bool focused) {
     is_focused = focused;   // SpatialNode::is_focused
 }
 
-void UIWindow::toggleMinimize() {
+void UIWindow::toggleMinimize(Splash::Registry& reg) {
     is_minimized = !is_minimized;
-    if (body_panel_) {
-        body_panel_->visible = !is_minimized;
+    if (Splash::SpatialNode* body = reg.get(body_panel_)) {
+        body->visible = !is_minimized;
     }
 }
 
-void UIWindow::close() {
+void UIWindow::close(Splash::Registry&) {
     visible = false;
     if (on_close) {
         on_close(this);
     }
 }
 
-void UIWindow::onRayMove(const Nova::Math::RayHit& hit) {
+void UIWindow::onRayMove(Splash::Registry& reg, Splash::NodeId self, const Nova::Math::RayHit& hit) {
     if (is_dragging_) {
         glm::vec3 delta = hit.world_point - drag_start_hit_;
-        transform.position = drag_start_pos_ + delta;
+        reg.transform(self).position = drag_start_pos_ + delta;
     }
-    Splash::SpatialNode::onRayMove(hit);
+    Splash::SpatialNode::onRayMove(reg, self, hit);
 }
 
-void UIWindow::onRayButton(const Nova::Math::RayHit& hit, uint32_t button, bool pressed) {
+void UIWindow::onRayButton(Splash::Registry& reg, Splash::NodeId self, const Nova::Math::RayHit& hit,
+                           uint32_t button, bool pressed) {
     if (button == 1) { // Left click
-        pressed ? onLeftPress(hit) : (void)(is_dragging_ = false);
+        pressed ? onLeftPress(reg, self, hit) : (void)(is_dragging_ = false);
     }
-    Splash::SpatialNode::onRayButton(hit, button, pressed);
+    Splash::SpatialNode::onRayButton(reg, self, hit, button, pressed);
 }
 
-void UIWindow::onLeftPress(const Nova::Math::RayHit& hit) {
+void UIWindow::onLeftPress(Splash::Registry& reg, Splash::NodeId self, const Nova::Math::RayHit& hit) {
     if (on_focus_gained) {
         on_focus_gained(this);
     }
@@ -185,14 +180,15 @@ void UIWindow::onLeftPress(const Nova::Math::RayHit& hit) {
 
     is_dragging_ = true;
     drag_start_hit_ = hit.world_point;
-    drag_start_pos_ = transform.position;
+    drag_start_pos_ = reg[self].transform().position;
 }
 
-void UIWindow::collectRender(Nova::SpatialMeshBuffer* mesh_buf,
-                             std::vector<Splash::SpatialRenderCommand>& out_commands) {
-    if (!visible) return;
-    syncChromeToTheme();
-    Splash::SpatialNode::collectRender(mesh_buf, out_commands);
+void UIWindow::collectRender(Splash::Registry& reg, Splash::NodeId,
+                             Nova::SpatialMeshBuffer*,
+                             std::vector<Splash::SpatialRenderCommand>&) {
+    // The window itself draws nothing: its chrome panels do, and this is where
+    // their material is refreshed from the live theme once per frame.
+    syncChromeToTheme(reg);
 }
 
 } // namespace Clouds::UI

@@ -1,4 +1,6 @@
-#include "core.h"
+// VkExtent2D, and nothing more. This used to reach for the deprecated core.h,
+// which pulled the whole NovaCoreLegacy declaration in for one Vulkan typedef.
+#include <vulkan/vulkan.h>
 #include <string>
 namespace Nova {
 struct Config {

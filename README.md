@@ -11,6 +11,11 @@ This library addresses the complexity of GPU programming, making it accessible f
  - [ ] Shader Abstraction
 
 # Example
-You can find a Makefile (that may require some modifications to your system). You may be required to install the required dependencies to run this library. Currently we are running Vulkan with SDL, but there may be opportunity in the future to grow support for DX and Metal. You can rune `make` to create the executable example, and `./compute` to run the example.
+You can find a Makefile (that may require some modifications to your system). You may be required to install the required dependencies to run this library. Currently we are running Vulkan with SDL, but there may be opportunity in the future to grow support for DX and Metal. You can run `make` to build, and `./wavecube_compute` to run the compute driver.
 
-You can also find an example implementation in the `main.cpp` and `NovaExample.*` wrapper implementation.
+`Nova/wavecube_compute.cpp` is the worked example of driving `Nova::App`. The
+older `Example/` tree (`main.cpp`, `NovaExample.*`) was removed in B6: it was
+never in the CMake build, its own Makefile still pointed at `../Core/`, and it
+was written against the pre-namespace API (global `Nova` and `NovaConfig`, now
+`Nova::App` and `Nova::Config`), so it had not been buildable for some time. It
+is recoverable at commit 0f40d65.

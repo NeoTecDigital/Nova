@@ -5,10 +5,6 @@
 #include "./nova_graphics.h"
 #include "./config.h"
 
-// Backward compatibility: still include old core.h for legacy code
-// TODO: Remove this once all code migrated to new architecture
-#include "./core.h"
-
 #include <string>
 #include <future>
 namespace Nova {

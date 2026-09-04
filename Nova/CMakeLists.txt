@@ -10,7 +10,6 @@
 set(NOVA_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/core_base.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/core_device_select.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/core.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/nova_compute.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/nova_graphics.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/nova_swapchain.cpp"
@@ -18,18 +17,13 @@ set(NOVA_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/nova_dmabuf.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/nova_dmabuf_query.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/nova_dmabuf_import.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/modules/device.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/modules/management.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/modules/presentation.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/modules/render.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/modules/atomic/atomic.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/modules/pipeline/pipeline.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/modules/pipeline/scene.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/modules/camera/camera.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/modules/camera/perspective.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/components/genesis.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/components/vma_impl.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/components/logger.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/components/obj_loader.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/pipeline/texture_bridge.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/pipeline/spatial_pipeline.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/pipeline/mesh_buffer.cpp"
@@ -40,15 +34,19 @@ add_dependencies(Nova nova_shaders)
 
 target_compile_options(Nova PRIVATE ${NOVA_FIRST_PARTY_WARNINGS})
 
-# management.cpp is the VMA_IMPLEMENTATION carrier: it instantiates all 19,786
-# lines of AMD's VulkanMemoryAllocator. obj_loader.cpp instantiates fastgltf.
+# vma_impl.cpp is the VMA_IMPLEMENTATION carrier: it instantiates all 19,786
+# lines of AMD's VulkanMemoryAllocator and holds nothing else, so a target that
+# needs GPU allocation extracts that and only that. The carrier used to be
+# modules/management.cpp, whose other 172 members were NovaCoreLegacy; see the
+# comment at the head of components/vma_impl.cpp for what that cost.
+#
+# NOVA_FASTGLTF_CARRIER_SUPPRESSIONS has no consumer here any more:
+# components/obj_loader.cpp was the only fastgltf carrier, and it went with
+# NovaCoreLegacy, whose type its whole API took. The vendored fastgltf tree
+# under components/extern/ is untouched - it is simply no longer compiled by us.
 set_source_files_properties(
-    "${CMAKE_CURRENT_SOURCE_DIR}/modules/management.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/components/vma_impl.cpp"
     PROPERTIES COMPILE_OPTIONS "${NOVA_VMA_CARRIER_SUPPRESSIONS}"
-)
-set_source_files_properties(
-    "${CMAKE_CURRENT_SOURCE_DIR}/components/obj_loader.cpp"
-    PROPERTIES COMPILE_OPTIONS "${NOVA_FASTGLTF_CARRIER_SUPPRESSIONS}"
 )
 
 # The repository root is the ONLY first-party search root. Every quoted include
@@ -112,14 +110,13 @@ target_compile_definitions(Nova PUBLIC
 # SDL-calling by nature; the dependency direction is strictly NovaSDL -> Nova,
 # never back, which is what keeps the two static archives acyclic on the link line.
 #
-# ONE residual SDL reference remains inside libNova.a: core.cpp.o, the deprecated
-# NovaCoreLegacy, calls SDL_Vulkan_GetInstanceExtensions. It is NOT moved because
-# NovaCoreLegacy's methods are spread across five translation units and splitting
-# the class across two archives would reintroduce exactly the ordering problem
-# this arrangement removes. Nothing reachable from `vazio` pulls that member, so
-# it costs nothing today; a target that does start using NovaCoreLegacy fails
-# loudly at link time and must link NovaSDL. Enforced by the `nova_link_hygiene`
-# test at the bottom of this file.
+# libNova.a now carries NO SDL reference at all. The last one was core.cpp.o -
+# the deprecated NovaCoreLegacy calling SDL_Vulkan_GetInstanceExtensions - and B6
+# deleted the class outright rather than splitting it across two archives: it was
+# spread over six translation units, reached by no live call site, and landed in
+# `vazio` only as collateral of modules/management.cpp being the VMA carrier.
+# Recoverable at 0f40d65 should a use for it ever appear. The absence is asserted
+# by the `nova_link_hygiene` test at the bottom of the root CMakeLists.
 # ==========================================
 add_library(NovaSDL STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/nova_sdl.cpp"

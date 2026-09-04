@@ -457,9 +457,10 @@ target_link_libraries(vazio PRIVATE
 # WaveCube compute driver
 #
 # Previously built only by the root Makefile, which carried a divergent copy of
-# NOVA_SOURCES. That divergence is how atomic.cpp and pipeline/scene.cpp were
-# lost from the CMake build. The Makefile now delegates here; this is the single
-# definition of the Nova source set.
+# NOVA_SOURCES. That divergence is how modules/atomic/atomic.cpp and
+# modules/pipeline/scene.cpp were lost from the CMake build - scene.cpp has since
+# gone with NovaCoreLegacy in B6, atomic.cpp has not. The Makefile now delegates
+# here; this is the single definition of the Nova source set.
 # ==========================================
 # Links NovaSDL, not Nova: Nova/wavecube_compute.cpp drives `class Nova`, whose
 # translation unit calls SDL_Init/SDL_CreateWindow unconditionally. Compute-only
@@ -719,17 +720,35 @@ set_tests_properties(disconnect_cycle PROPERTIES
 #     a zero-VUID result: a layer that failed to load is also silent.
 # --------------------------------------------------------------------------
 
-# Link hygiene: the boot binary must never acquire an SDL runtime dependency.
-# Still named for the binary it guards - `vazio` - which the vazio-dev rename
-# did not touch; $<TARGET_FILE:vazio> resolves to the same staged-boot entry it
-# always did. Two constructions now have to hold for this to pass, and this test
-# is what notices if either stops: Nova carries no SDL link edge in any scope
-# (see the NovaSDL rationale above that target), and the one SDL-calling member
-# of libClouds.a is never referenced from vazio_main.cpp (see the Clouds
-# library). A test that only ever passed by construction is worth keeping
-# precisely because the construction can be broken by a one-line link change.
+# Link hygiene: TWO invariants about what the boot binary is allowed to contain.
+# Still named for the binary it guards - `vazio` - which the vazio-dev rename did
+# not touch; $<TARGET_FILE:vazio> resolves to the same staged-boot entry it
+# always did.
+#
+# (1) No SDL runtime dependency. Two constructions have to hold for this, and
+#     this test is what notices if either stops: Nova carries no SDL link edge in
+#     any scope (see the NovaSDL rationale in Nova/CMakeLists.txt), and the one
+#     SDL-calling member of libClouds.a is never referenced from vazio_main.cpp
+#     (see the Clouds library).
+#
+# (2) No NovaCoreLegacy. This half is new, and it is here because the comment
+#     next to (1) used to IMPLY it while the binary quietly carried 188 legacy
+#     symbols. Nothing referenced them: modules/management.cpp was the
+#     VMA_IMPLEMENTATION carrier, so allocating memory extracted that object and
+#     the 172 CoreLegacy members sharing its TU, whose two unresolved calls
+#     (getBufferInfo, createBeginInfo) then extracted modules/presentation.cpp
+#     and 16 more. B6 moved the #define to Nova/components/vma_impl.cpp - which
+#     took the count to zero - and then deleted the class. The count is asserted
+#     rather than described, because "no live code calls it" was true the whole
+#     time the symbols were in the binary. Matching on the mangled text needs no
+#     demangler: `CoreLegacy` appears literally in every mangling of a member of
+#     Nova::CoreLegacy, so grep over raw `nm` output cannot under-count.
+#
+# A test that only ever passed by construction is worth keeping precisely
+# because the construction can be broken by a one-line link change - or, as (2)
+# records, by a #define in the wrong translation unit.
 add_test(NAME nova_link_hygiene
-    COMMAND sh -c "! ldd $<TARGET_FILE:vazio> | grep -q libSDL2")
+    COMMAND sh -c "! ldd $<TARGET_FILE:vazio> | grep -q libSDL2 && [ $(nm $<TARGET_FILE:vazio> | grep -c CoreLegacy) -eq 0 ]")
 
 # ==========================================
 # Layer purity

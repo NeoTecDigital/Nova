@@ -8,9 +8,16 @@
 # carries undefined ImGui_*/SDL_* symbols; a target that pulls it must supply
 # them (link NovaSDL and compile the ImGui vendor blob) and fails loudly at link
 # time otherwise, while a target that never references the overlay - `vazio`,
-# test_scene_input - never pulls the member and never acquires SDL. Same
-# construction as the NovaCoreLegacy member inside libNova.a, and it is what
+# test_scene_input - never pulls the member and never acquires SDL. That is what
 # keeps `ldd vazio` SDL-free by construction rather than by luck.
+#
+# This used to cite the NovaCoreLegacy member of libNova.a as the same
+# construction. It was not one: legacy was never referenced either, yet 188 of
+# its symbols were in `vazio` anyway, because the object that carried them also
+# carried #define VMA_IMPLEMENTATION. B6 removed the class; the reason the
+# analogy is gone is that it was the counter-example. Unreferenced only keeps a
+# member out if nothing ELSE in its translation unit is referenced - which is
+# why ImGuiEngineOverlay.cpp holds the overlay and nothing else.
 add_library(Clouds STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/apps/SpatialFilesystem.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/apps/ImGuiEngineOverlay.cpp"
